@@ -15,9 +15,13 @@ func _handle_input(player: KinematicBody2D, delta: float) -> void:
 #	if (Input.is_action_just_pressed("jump") and (player.is_on_floor() or coyote_timer.time_left > 0 )):
 	._handle_input(player, delta)
 #	player.direction.x = Input.get_action_strength("move_right") - Input.get_action_strength("move_left")
-	if Input.is_action_just_pressed("jump") and player.is_on_floor():
+	if Input.is_action_just_pressed("jump") and player.floor_detector.is_colliding():
 		print('jump !')
 		player._states.current_state = player._states.jumping
+		player._states.current_state._enter(player)
+		
+	if Input.is_action_just_pressed("hook"):
+		player._states.current_state = player._states.hooking
 		player._states.current_state._enter(player)
 
 # Called when the node enters the scene tree for the first time.
