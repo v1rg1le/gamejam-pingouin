@@ -5,6 +5,7 @@ onready var idling: IdleState = $"IdleState"
 onready var running: RunningState = $"RunningState"
 onready var jumping: JumpingState = $"JumpingState"
 onready var staggered: StaggeredState = $"StaggeredState"
+onready var hooking: HookingState = $"HookingState"
 
 onready var super_state_label: Label = $"SuperState"
 onready var sub_state_label: Label = $"SubState"

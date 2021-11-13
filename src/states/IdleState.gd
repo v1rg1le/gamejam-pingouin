@@ -12,12 +12,11 @@ func _handle_input(player: KinematicBody2D, delta: float) -> void:
 		player._states.current_state = player._states.running
 		player._states.current_state._enter(player)
 
-func _update(player: KinematicBody2D) -> void:
+func _update(_player: KinematicBody2D) -> void:
 	pass
 
 func enter(player: KinematicBody2D) -> void:
 	player.animated_sprite.animation = "idle"
-	pass
 
 # Called when the node enters the scene tree for the first time.
 func _ready():

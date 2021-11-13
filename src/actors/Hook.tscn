@@ -1,0 +1,8 @@
+[gd_scene format=2]
+
+[node name="Hook" type="DampedSpringJoint2D"]
+node_a = NodePath("../Player")
+disable_collision = false
+length = 57.0
+stiffness = 64.0
+damping = 16.0

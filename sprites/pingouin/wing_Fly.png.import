@@ -2,15 +2,15 @@
 
 importer="texture"
 type="StreamTexture"
-path="res://.import/Ninja-Chinstrap.png-197783fea094ee8cbaede692ad3a818d.stex"
+path="res://.import/wing_Fly.png-2232a3456e8a66ee8cc2a1d29f7f8028.stex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://sprites/pingouin/Ninja-Chinstrap.png"
-dest_files=[ "res://.import/Ninja-Chinstrap.png-197783fea094ee8cbaede692ad3a818d.stex" ]
+source_file="res://sprites/pingouin/wing_Fly.png"
+dest_files=[ "res://.import/wing_Fly.png-2232a3456e8a66ee8cc2a1d29f7f8028.stex" ]
 
 [params]
 
