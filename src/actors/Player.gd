@@ -51,3 +51,12 @@ func handle_input(delta: float) -> void:
 
 func update() -> void:
 	_states.current_state.update()
+
+func _get_aim_direction() -> Vector2:
+	match Settings.controls:
+		Settings.GAMEPAD:
+			return Vector2(
+				Input.get_action_strength("aim_right") - Input.get_action_strength("aim_left"),
+				Input.get_action_strength("aim_down") - Input.get_action_strength("aim_up")).normalized()
+		Settings.KBD_MOUSE, _:
+			return (get_global_mouse_position() - global_position).normalized()
