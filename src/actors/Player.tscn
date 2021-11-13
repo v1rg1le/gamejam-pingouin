@@ -10,7 +10,7 @@
 
 [sub_resource type="CapsuleShape2D" id=4]
 
-[sub_resource type="SpriteFrames" id=1]
+[sub_resource type="SpriteFrames" id=2]
 animations = [ {
 "frames": [ ExtResource( 6 ) ],
 "loop": true,
@@ -24,17 +24,17 @@ animations = [ {
 }, {
 "frames": [ ExtResource( 7 ) ],
 "loop": true,
+"name": "hooking",
+"speed": 5.0
+}, {
+"frames": [ ExtResource( 7 ) ],
+"loop": true,
 "name": "spin",
 "speed": 10.0
 }, {
 "frames": [ ExtResource( 6 ) ],
 "loop": true,
 "name": "run",
-"speed": 5.0
-}, {
-"frames": [ ExtResource( 7 ) ],
-"loop": true,
-"name": "hooking",
 "speed": 5.0
 } ]
 
@@ -57,7 +57,7 @@ texture = ExtResource( 1 )
 
 [node name="AnimatedSprite" type="AnimatedSprite" parent="."]
 position = Vector2( -1, -25 )
-frames = SubResource( 1 )
+frames = SubResource( 2 )
 animation = "hooking"
 playing = true
 
@@ -90,5 +90,13 @@ collide_with_areas = true
 
 [node name="Chain" parent="." instance=ExtResource( 5 )]
 z_index = -24
+
+[node name="FloorNormal" type="RayCast2D" parent="."]
+modulate = Color( 0, 0.0392157, 1, 1 )
+position = Vector2( 0, 0.500565 )
+
+[node name="HookTangent" type="RayCast2D" parent="."]
+cast_to = Vector2( 100, 0 )
+collide_with_bodies = false
 
 [connection signal="area_entered" from="EnemyDetector" to="." method="_on_EnemyDetector_area_entered"]

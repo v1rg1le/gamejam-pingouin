@@ -14,8 +14,8 @@ func enter(_player: KinematicBody2D) -> void:
 func _enter(player: KinematicBody2D) -> void:
 	player._states.super_state_label.text = self.super_state_name
 	player._states.sub_state_label.text = self.sub_state_name
-	player._states.super_state_label.visible = false
-	player._states.sub_state_label.visible = false
+#	player._states.super_state_label.visible = false
+#	player._states.sub_state_label.visible = false
 	enter(player)
 
 # Called when the node enters the scene tree for the first time.

@@ -15,8 +15,6 @@ onready var current_state: PlayerState = idling
 
 # Called when the node enters the scene tree for the first time.
 func _ready():
-	print("STATE MACHINE _READY")
-	
 #	current_state = idling
 	pass
 

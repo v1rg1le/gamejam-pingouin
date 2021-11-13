@@ -1,7 +1,7 @@
 extends Actor
 
 export var stomp_impulse: = 500.0
-var is_facing_left: bool = false
+var facing: int = 1
 var _states: StateMachine
 onready var animated_sprite = $"AnimatedSprite"
 var snap: Vector2 = Vector2.UP
@@ -12,6 +12,7 @@ var chain_velocity := Vector2(0,0)
 
 #onready var hook = $Hook
 onready var raycast_hook = $HookDetector
+onready var hook_tangent = $HookTangent
 #onready var line_hook = get_node("/root/LevelTest/LineHook")
 
 
@@ -28,10 +29,12 @@ func _on_EnemyDetector_area_entered(_area):
 
 func _physics_process(delta: float) -> void:
 	direction = Vector2(0,0)
+	var temp_sign
 	
 	if Input.get_action_strength("move_right") - Input.get_action_strength("move_left") != 0:
-		is_facing_left = Input.get_action_strength("move_right") - Input.get_action_strength("move_left") < 0
-	animated_sprite.flip_h = is_facing_left
+		temp_sign = sign(Input.get_action_strength("move_right") - Input.get_action_strength("move_left"))
+		facing = temp_sign 
+	animated_sprite.flip_h = facing != 1
 
 	handle_input(delta)
 	
