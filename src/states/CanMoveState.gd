@@ -8,10 +8,11 @@ func _handle_input(player: KinematicBody2D, delta: float) -> void:
 	var input_speed = Input.get_action_strength("move_right") - Input.get_action_strength("move_left")
 	player.direction.x = input_speed
 
-	var out_velocity = player._velocity
+#	var out_velocity = player._velocity
 
-	out_velocity.x = lerp(out_velocity.x, player.max_speed.x * input_speed, _get_h_weight(player, input_speed)) #_get_h_weight(player, input_speed))
-	player._velocity = out_velocity
+	player._velocity.x = lerp(player._velocity.x, player.max_speed.x * input_speed, _get_h_weight(player, input_speed)) #_get_h_weight(player, input_speed))
+#	out_velocity.x = lerp(out_velocity.x, player.max_speed.x * input_speed, _get_h_weight(player, input_speed)) #_get_h_weight(player, input_speed))
+#	player._velocity = out_velocity
 
 func _get_h_weight(player: KinematicBody2D, input_speed) -> float:
 #	if player.is_on_floor():
