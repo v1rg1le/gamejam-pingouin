@@ -41,6 +41,7 @@ func _handle_input(player: KinematicBody2D, delta: float) -> void:
 
 func enter(player: KinematicBody2D) -> void:
 	player.snap = Vector2.ZERO
+	player.anim_player.play("jumping")
 
 func _ready():
 	pass
