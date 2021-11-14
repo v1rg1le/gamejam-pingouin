@@ -1,8 +1,8 @@
 extends CanMoveState
 class_name HookingState
 
-var super_state_name = "HOOKING"
 var sub_state_name = "HOOKING"
+var super_state_name = "HOOKING"
 
 const CHAIN_PULL = 25
 var pull_factor = 1
@@ -12,19 +12,14 @@ func _handle_input(player: KinematicBody2D, delta: float) -> void:
 
 	if !Input.is_action_pressed("hook"):
 		player.chain.release()
-#		if player.floor_detector.is_colliding():
-		player._states.current_state = player._states.running
-		player._states.current_state._enter(player)
-#		else:
-#			player._states.current_state = player._states.jumping  # mettre falling
-#			print("mettre falling sous etat de jumping ")
-#			player._states.current_state._enter(player)
-
-	if Input.is_action_pressed("pull") and player.chain.hooked:
-		pull_factor = 3
+		player._states.current = player._states.in_air
+		player._states.current._enter(player)
 
 # Hook physics
 	if player.chain.hooked:
+		if Input.is_action_pressed("pull"):
+			pull_factor = 3
+		
 		var direction_chain = to_local(player.chain.tip).normalized() # * CHAIN_PULL
 		var friction = 1.65
 		var normale = -direction_chain.tangent()
@@ -47,12 +42,11 @@ func _handle_input(player: KinematicBody2D, delta: float) -> void:
 			player.chain_velocity.x *= 0.6
 		player._velocity += player.chain_velocity
 
-	#	elif !player.chain.hooked:  # check distance de la chain quand tirer dans le vide
 	else:  # check distance de la chain quand tirer dans le vide
 		if player.chain.distance >= player.chain.distance_max:
 			player.chain.release()
-			player._states.current_state = player._states.running
-			player._states.current_state._enter(player)
+			player._states.current = player._states.sliding
+			player._states.current._enter(player)
 
 
 func _update(_player: KinematicBody2D) -> void:
