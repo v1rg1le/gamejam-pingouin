@@ -1,15 +1,17 @@
-[gd_scene load_steps=11 format=2]
+[gd_scene load_steps=13 format=2]
 
 [ext_resource path="res://src/states/StateMachine.gd" type="Script" id=1]
 [ext_resource path="res://src/states/SlidingState.gd" type="Script" id=2]
 [ext_resource path="res://src/states/StaggeredState.gd" type="Script" id=3]
 [ext_resource path="res://src/states/JumpingState.gd" type="Script" id=4]
 [ext_resource path="res://src/states/IdleState.gd" type="Script" id=5]
-[ext_resource path="res://src/states/HookingState.gd" type="Script" id=6]
+[ext_resource path="res://src/states/HookingInAirState.gd" type="Script" id=6]
 [ext_resource path="res://src/states/InAirState.gd" type="Script" id=7]
 [ext_resource path="res://src/states/OnGroundState.gd" type="Script" id=8]
 [ext_resource path="res://src/states/RunningState.gd" type="Script" id=9]
 [ext_resource path="res://src/states/TrixState.gd" type="Script" id=10]
+[ext_resource path="res://src/states/PumpState.gd" type="Script" id=11]
+[ext_resource path="res://src/states/HookingOnGroundState.gd" type="Script" id=12]
 
 [node name="StateMachine" type="Node2D"]
 script = ExtResource( 1 )
@@ -86,3 +88,12 @@ script = ExtResource( 10 )
 
 [node name="StaggeredState" type="Node2D" parent="."]
 script = ExtResource( 3 )
+
+[node name="PumpState" type="Node2D" parent="."]
+script = ExtResource( 11 )
+
+[node name="HookingOnGroundState" type="Node2D" parent="."]
+script = ExtResource( 12 )
+
+[node name="HookingInAirState" type="Node2D" parent="."]
+script = ExtResource( 6 )

@@ -1,9 +1,6 @@
 extends InAirState
 class_name TrixState
 
-var sub_state_name = "TRIXING"
-#var super_state_name = "IN AIR"
-
 func _handle_input(player: KinematicBody2D, delta: float) -> void:
 	._handle_input(player, delta)
 #	print("trix")

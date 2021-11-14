@@ -1,9 +1,6 @@
 extends OnGroundState
 class_name IdleState
 
-#var state_name = "IDLE"
-#var sub_state_name = "IDLE"
-
 func _handle_input(player: KinematicBody2D, delta: float) -> void:
 #	If input not handled
 #	Call parent method
