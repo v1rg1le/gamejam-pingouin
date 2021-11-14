@@ -12,6 +12,7 @@ var tip := Vector2(0,0)			# The global position the tip should be in
 								# moves.
 
 const distance_max = 1200  # distance max quand tirer dans le vide
+const distance_max_stretch = 2000 # distance max du grapin une fois accroche
 const SPEED = 50	# The speed with which the chain moves
 
 var distance = 0  # pour checker distance max
@@ -52,5 +53,6 @@ func _physics_process(_delta: float) -> void:
 			flying = false	# Not flying anymore
 	tip = $Tip.global_position	# set `tip` as starting position for next frame
 	
-	if !hooked:
-		distance = tip.distance_to(get_parent().global_position)
+	distance = tip.distance_to(get_parent().global_position)
+	if hooked and distance > distance_max_stretch:
+		release()

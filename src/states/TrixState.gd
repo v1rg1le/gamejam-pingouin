@@ -4,7 +4,7 @@ class_name TrixState
 #var sub_state_name = "TRIXING"
 #var super_state_name = "IN AIR"
 
-func _handle_input(player: KinematicBody2D, delta: float) -> void:
+func _handle_input(player: KinematicBody2D, _delta: float) -> void:
 #	._handle_input(player, delta)
 #	print("trix")
 	
@@ -23,7 +23,7 @@ func _update(_player: KinematicBody2D) -> void:
 	pass
 
 func enter(player: KinematicBody2D) -> void:
-	player.animated_sprite.animation = "trix"
+	player.animated_sprite.animation = "spin"
 #	lancer le trix
 	print('entering trix')
 
