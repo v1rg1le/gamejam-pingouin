@@ -30,6 +30,9 @@ anchor_bottom = 1.0
 texture = ExtResource( 1 )
 expand = true
 stretch_mode = 6
+__meta__ = {
+"_edit_use_anchors_": false
+}
 
 [node name="TextureRect3" type="TextureRect" parent="."]
 visible = false
@@ -66,4 +69,5 @@ stretch_mode = 5
 __meta__ = {
 "_edit_use_anchors_": false
 }
+
 [connection signal="button_up" from="TextureButton" to="." method="_on_TextureButton_button_up"]

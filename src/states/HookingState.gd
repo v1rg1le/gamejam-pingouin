@@ -18,7 +18,7 @@ func _handle_input(player: KinematicBody2D, delta: float) -> void:
 # Hook physics
 	if player.chain.hooked:
 		if Input.is_action_pressed("pull"):
-			pull_factor = 3
+			pull_factor = 2
 		
 		var direction_chain = to_local(player.chain.tip).normalized() # * CHAIN_PULL
 		var friction = 1.65
@@ -42,7 +42,7 @@ func _handle_input(player: KinematicBody2D, delta: float) -> void:
 			player.chain_velocity.x *= 0.6
 		player._velocity += player.chain_velocity
 
-	else:  # check distance de la chain quand tirer dans le vide
+	elif !player.chain.hooked:  # check distance de la chain quand tirer dans le vide
 		if player.chain.distance >= player.chain.distance_max:
 			player.chain.release()
 			player._states.current = player._states.sliding
