@@ -14,16 +14,29 @@ func _handle_input(player: KinematicBody2D, delta: float) -> void:
 	var floor_normal = player.get_floor_normal()
 	if floor_normal != Vector2.ZERO:
 		player.rotation = lerp(player.rotation, -floor_normal.angle_to(Vector2.UP), .2)
+	
+	if player.floor_detector.is_colliding() == false:
+		player._states.go_to_state(player, "in_air")
+#		player._states.current = player._states.in_air
+#		player._states.current._enter(player)
+		return
+
+	if Input.is_action_just_released("hook"):
+		print('unhook on ground')
+		player._states.hooking.exit(player)
 
 	if Input.is_action_just_pressed("jump") and player.floor_detector.is_colliding():
 		print('to jump !')
-		player._states.current = player._states.jumping
-		player._states.current._enter(player)
+		player._states.go_to_state(player, "jumping")
+#		player._states.current = player._states.jumping
+#		player._states.current._enter(player)
 
 	if Input.is_action_just_pressed("hook"):
 		print('to hook')
-		player._states.current = player._states.hooking
-		player._states.current._enter(player)
+		player._states.go_to_state(player, "hooking")
+#		player._states.current = player._states.hooking
+#		player._states.current._enter(player)
+		return
 
 	if Input.is_action_pressed("pump") and player.floor_detector.is_colliding():
 #		print("pump !")	
@@ -33,26 +46,25 @@ func _handle_input(player: KinematicBody2D, delta: float) -> void:
 		player._velocity = Vector2( clamp(player._velocity.x, -player.max_speed.x * coef, player.max_speed.x * coef),
 									clamp(player._velocity.y, -player.max_speed.y * coef, player.max_speed.y * coef) )
 
-	if player.floor_detector.is_colliding() == false:
-		player._states.current = player._states.in_air
-		player._states.current._enter(player)
-		return
 
 #	Si le joueur est presque arrêté, on l'aide
 	if abs(player._velocity.x) <= velocity_min:
 		if player._states.current.sub_state_name != "IDLE":
-			player._states.current = player._states.idling
-			player._states.current._enter(player)
+			player._states.go_to_state(player, "idling")
+#			player._states.current = player._states.idling
+#			player._states.current._enter(player)
 		player._velocity.x = lerp(player._velocity.x, 0, 0.9)
 	elif abs(player._velocity.x) <= max_running_velocity:
 		if player._states.current.sub_state_name != "RUNNING":
-			player._states.current = player._states.running
-			player._states.current._enter(player)
+			player._states.go_to_state(player, "running")
+#			player._states.current = player._states.running
+#			player._states.current._enter(player)
 #	Si le joueur est en train de slider
 	elif player._states.current.sub_state_name != "SLIDING":
 		print("to sliding")
-		player._states.current = player._states.sliding
-		player._states.current._enter(player)
+		player._states.go_to_state(player, "sliding")
+#		player._states.current = player._states.sliding
+#		player._states.current._enter(player)
 
 func _ready():
 	pass

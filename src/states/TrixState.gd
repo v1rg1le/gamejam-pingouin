@@ -1,11 +1,11 @@
 extends InAirState
 class_name TrixState
 
-#var sub_state_name = "TRIXING"
+var sub_state_name = "TRIXING"
 #var super_state_name = "IN AIR"
 
-func _handle_input(player: KinematicBody2D, _delta: float) -> void:
-#	._handle_input(player, delta)
+func _handle_input(player: KinematicBody2D, delta: float) -> void:
+	._handle_input(player, delta)
 #	print("trix")
 	
 #	if trix est fini
@@ -16,8 +16,9 @@ func _handle_input(player: KinematicBody2D, _delta: float) -> void:
 
 	if player.floor_detector.is_colliding():
 		print('to staggered')
-		player._states.current = player._states.staggered
-		player._states.current._enter(player)
+		player._states.go_to_state(player, "staggered")
+#		player._states.current = player._states.staggered
+#		player._states.current._enter(player)
 
 func _update(_player: KinematicBody2D) -> void:
 	pass

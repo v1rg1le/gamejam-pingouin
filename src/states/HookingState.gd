@@ -1,19 +1,22 @@
-extends CanMoveState
+extends InAirState
 class_name HookingState
 
 var sub_state_name = "HOOKING"
-var super_state_name = "HOOKING"
+#var super_state_name = "HOOKING"
 
-const CHAIN_PULL = 20
+const CHAIN_PULL = 15
 var pull_factor = 1
 
 func _handle_input(player: KinematicBody2D, delta: float) -> void:
 	._handle_input(player, delta)
+	player.snap = Vector2.ZERO
 
 	if !Input.is_action_pressed("hook"):
-		player.chain.release()
-		player._states.current = player._states.in_air
-		player._states.current._enter(player)
+		print('to air')
+#		exit(player)
+#		player._states.current = player._states.in_air
+#		player._states.current._enter(player)
+		player._states.go_to_state(player, "in_air")
 
 # Hook physics
 	if player.chain.hooked:
@@ -23,7 +26,7 @@ func _handle_input(player: KinematicBody2D, delta: float) -> void:
 		var direction_chain = to_local(player.chain.tip).normalized() # * CHAIN_PULL
 		var friction = 1.65
 		var normale = -direction_chain.tangent()
-		
+
 		if player.chain_velocity.y > 0:
 			friction = 0.55
 		else:
@@ -42,11 +45,12 @@ func _handle_input(player: KinematicBody2D, delta: float) -> void:
 			player.chain_velocity.x *= 0.6
 		player._velocity += player.chain_velocity
 
-	elif !player.chain.hooked:  # check distance de la chain quand tirer dans le vide
+	elif !player.chain.hooked:  # check distance de la chain quand tire dans le vide
 		if player.chain.distance >= player.chain.distance_max:
 			player.chain.release()
-			player._states.current = player._states.sliding
-			player._states.current._enter(player)
+			player._states.go_to_state(player, "sliding")
+			# player._states.current = player._states.sliding
+			# player._states.current._enter(player)
 
 
 func _update(_player: KinematicBody2D) -> void:
@@ -55,27 +59,21 @@ func _update(_player: KinematicBody2D) -> void:
 #		createLine(player.global_position, player.hang.global_position, player.line_hook) #Dessin
 #		print("draw 2d update")
 
+func exit(player: KinematicBody2D) -> void:
+	player.chain.release()
+
 func enter(player: KinematicBody2D) -> void:
+	player.snap = Vector2.ZERO
 	pull_factor = 1  # par default
 	player.chain_velocity = Vector2.ZERO
-#			if event.pressed:
-			# We clicked the mouse -> shoot()
 	var angle_aimed = player._get_aim_direction() 
 #	valeur par default
 	if angle_aimed == Vector2.ZERO:
 		angle_aimed = Vector2(500*player.facing,-500)
 
 	player.chain.shoot(angle_aimed) #(get_global_mouse_position() - global_position).normalized())  #event.position - get_viewport().size * 0.5)
-#		else:
-			# We released the mouse -> release()
-#			$Chain.player.chain.release()
-#	print("chain shoot")
 	
 	player.animated_sprite.animation = "hooking"
-#	print("hooking enter")
-#	player.direction.y = -1.0
-#	player.snap = Vector2.ZERO
-#	player._velocity.y = player.max_speed.y * player.direction.y
 
 # Called when the node enters the scene tree for the first time.
 func _ready():
