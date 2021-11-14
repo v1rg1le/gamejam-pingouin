@@ -1,4 +1,4 @@
-[gd_scene load_steps=173 format=2]
+[gd_scene load_steps=177 format=2]
 
 [ext_resource path="res://addons/rmsmartshape/materials/shape_material.gd" type="Script" id=1]
 [ext_resource path="res://addons/rmsmartshape/shapes/shape_closed.gd" type="Script" id=2]
@@ -14,7 +14,11 @@
 [ext_resource path="res://addons/rmsmartshape/shapes/shape_anchor.gd" type="Script" id=12]
 [ext_resource path="res://icon.png" type="Texture" id=13]
 [ext_resource path="res://src/actors/Player.tscn" type="PackedScene" id=14]
+[ext_resource path="res://src/levels/decoration/PanelWarning.tscn" type="PackedScene" id=15]
 [ext_resource path="res://src/levels/parts/StaticBody2DFish.tscn" type="PackedScene" id=16]
+[ext_resource path="res://src/levels/decoration/IceMedium1.tscn" type="PackedScene" id=17]
+[ext_resource path="res://src/levels/decoration/IceMedium2.tscn" type="PackedScene" id=18]
+[ext_resource path="res://src/levels/decoration/IceSmall.tscn" type="PackedScene" id=19]
 
 [sub_resource type="Resource" id=1]
 script = ExtResource( 5 )
@@ -1369,3 +1373,18 @@ position = Vector2( 2109.05, -760.301 )
 
 [node name="CollisionShape2D" type="CollisionShape2D" parent="StaticBody2D9"]
 shape = SubResource( 157 )
+
+[node name="PanelWarning" parent="." instance=ExtResource( 15 )]
+position = Vector2( 3100.16, -716.165 )
+z_index = 60
+
+[node name="IceSmall" parent="." instance=ExtResource( 19 )]
+position = Vector2( 1263.89, -65.1028 )
+rotation = 0.389208
+
+[node name="IceMedium2" parent="." instance=ExtResource( 18 )]
+position = Vector2( 1172.04, -81.8521 )
+
+[node name="IceMedium1" parent="." instance=ExtResource( 17 )]
+position = Vector2( 1052.87, -62.8578 )
+rotation = -0.258309

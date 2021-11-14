@@ -19,7 +19,8 @@ func _handle_input(player: KinematicBody2D, delta: float) -> void:
 
 func enter(player: KinematicBody2D) -> void:
 	print('entering staggered')
-	player.animated_sprite.animation = "staggered"
+#	player.animated_sprite.animation = "staggered"
+	player.anim_player.play("staggered")
 	timer.start()
 
 func _ready():

@@ -13,33 +13,36 @@
 [node name="ParallaxBackground" type="ParallaxBackground" parent="."]
 
 [node name="ParallaxLayer" type="ParallaxLayer" parent="ParallaxBackground"]
-motion_scale = Vector2( 0.9, 0.9 )
+position = Vector2( 567.352, 1224.97 )
+motion_scale = Vector2( 0.9, 1 )
 
 [node name="Sprite" type="Sprite" parent="ParallaxBackground/ParallaxLayer"]
 position = Vector2( -2272.37, -1876.37 )
-scale = Vector2( 10, 10 )
-z_index = -126
+scale = Vector2( 5, 5 )
+z_index = -123
 texture = ExtResource( 19 )
 region_enabled = true
 region_rect = Rect2( -2664.13, -36, 7000, 212.532 )
 
 [node name="ParallaxLayer2" type="ParallaxLayer" parent="ParallaxBackground"]
-motion_scale = Vector2( 0.8, 0.8 )
+position = Vector2( 567.352, 1224.97 )
+motion_scale = Vector2( 0.8, 1 )
 
 [node name="Sprite" type="Sprite" parent="ParallaxBackground/ParallaxLayer2"]
-position = Vector2( -1825.98, -627.717 )
-scale = Vector2( 10, 10 )
+position = Vector2( -2373.74, -1177.51 )
+scale = Vector2( 5, 5 )
 z_index = -120
 texture = ExtResource( 18 )
 region_enabled = true
 region_rect = Rect2( -164.895, 80.638, 7000, 221.683 )
 
 [node name="ParallaxLayer3" type="ParallaxLayer" parent="ParallaxBackground"]
-motion_scale = Vector2( 0.7, 0.7 )
+position = Vector2( 567.352, 1224.97 )
+motion_scale = Vector2( 0.7, 1 )
 
 [node name="Sprite" type="Sprite" parent="ParallaxBackground/ParallaxLayer3"]
-position = Vector2( -1782.18, -949.276 )
-scale = Vector2( 10, 10 )
+position = Vector2( -1744.08, -1512.51 )
+scale = Vector2( 5, 5 )
 z_index = -126
 texture = ExtResource( 17 )
 region_enabled = true

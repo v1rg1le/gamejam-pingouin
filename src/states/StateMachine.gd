@@ -18,9 +18,9 @@ onready var label3: Label = $"Label3"
 
 onready var current: PlayerState = on_ground
 
-# Called when the node enters the scene tree for the first time.
+onready var player = get_parent()
+
 func _ready():
-#	current_state = idling
 	pass
 
 # Called every frame. 'delta' is the elapsed time since the previous frame.
@@ -31,3 +31,9 @@ func go_to_state(_player: KinematicBody2D, state_name: String) -> void:
 	current._exit(_player)
 	current = get(state_name)
 	current._enter(_player)
+
+func _on_AnimationPlayer_animation_finished(anim_name):
+#	if anim_name == "trick":
+	if "trick" in anim_name:
+		player._states.current = player._states.in_air
+		player._states.current._enter(player)

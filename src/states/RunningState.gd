@@ -9,9 +9,9 @@ func _handle_input(player: KinematicBody2D, delta: float) -> void:
 func _update(_player: KinematicBody2D) -> void:
 	pass
 
-func enter(player: KinematicBody2D) -> void:
-#	._enter(player)
-	player.animated_sprite.animation = "run"
+func _enter(player: KinematicBody2D) -> void:
+#	player.animated_sprite.animation = "run"
+	player.anim_player.play("run")
 
 func _ready():
 	sub_state_name = "RUNNING"

@@ -69,5 +69,4 @@ stretch_mode = 5
 __meta__ = {
 "_edit_use_anchors_": false
 }
-
 [connection signal="button_up" from="TextureButton" to="." method="_on_TextureButton_button_up"]

@@ -1,4 +1,4 @@
-extends Actor
+extends KinematicBody2D
 
 export var stomp_impulse: = 500.0
 var facing: int = 1
@@ -6,16 +6,28 @@ var _states: StateMachine
 onready var animated_sprite = $"AnimatedSprite"
 var snap: Vector2 = Vector2.DOWN
 onready var floor_detector: RayCast2D = $"FloorDetector"
+#onready var rotator: = $"Rotator"
+
 
 onready var chain: = $Chain
 var chain_velocity := Vector2(0,0)
 
+# from Actor
 const SUPER_MAX_SPEED = Vector2(3000, 3000)
+export var max_speed: = Vector2(700, 600)  # Vector2(1000, 600) // 500 ?
+export var max_speed_chain: = Vector2(14, 20) # Vector2(50, 60)  # Vector2(1000, 600)
+export var gravity: float = 800.0
 
-onready var raycast_hook = $HookDetector
+var _velocity: Vector2 = Vector2.ZERO
+
+# from OnGroundState
+export var accel_factor_pump = 1.3
+export var velocity_max_idle = 100  # velocity min for running state
+export var max_running_velocity = 500  # velocity max for running state
+
 onready var hook_tangent = $HookTangent
-#onready var line_hook = get_node("/root/LevelTest/LineHook")
 
+onready var anim_player = $AnimationPlayer
 
 var hang #Permet de garder en mémoire le node auquel le joueur est accroché avec le grappin
 
@@ -46,6 +58,9 @@ func _physics_process(delta: float) -> void:
 	
 #	_velocity = Vector2( clamp(_velocity.x, 0, max_speed.x),
 #					clamp(_velocity.y, 0, max_speed.y) )
+	
+	_velocity.x = clamp(_velocity.x, -SUPER_MAX_SPEED.x, SUPER_MAX_SPEED.x)
+	_velocity.y = clamp(_velocity.y, -SUPER_MAX_SPEED.y, SUPER_MAX_SPEED.y)
 	
 	_velocity = move_and_slide_with_snap(_velocity, Vector2.DOWN, Vector2.UP)
 #	_velocity = move_and_slide_with_snap(_velocity, snap, Vector2.UP)

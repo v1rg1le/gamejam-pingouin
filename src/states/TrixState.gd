@@ -24,7 +24,17 @@ func _update(_player: KinematicBody2D) -> void:
 	pass
 
 func enter(player: KinematicBody2D) -> void:
-	player.animated_sprite.animation = "spin"
+#	player.animated_sprite.animation = "spin"
+	var animations = ["trick_spin", "trick_boule", "trick_etoile_ninja", "trick_carpe"]
+	randomize()
+#	player.anim_player.play("trick_spin")
+#	player.anim_player.play("trick_boule")
+#	player.anim_player.play("trick_etoile_ninja")
+#	player.anim_player.play("trick_carpe")
+
+	player.anim_player.play(animations[randi() % animations.size()])
+#	print(animations[randi() % animations.size()])
+
 #	lancer le trix
 	print('entering trix')
 
@@ -32,6 +42,6 @@ func enter(player: KinematicBody2D) -> void:
 func _ready():
 	sub_state_name = "TRIXING"
 
-# Called every frame. 'delta' is the elapsed time since the previous frame.
-#func _process(delta):
-#	pass
+func exit():
+	pass
+#	player.AnimatedSprite.rotation_degree = 0

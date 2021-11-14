@@ -26,7 +26,8 @@ func _update(_player: KinematicBody2D) -> void:
 	pass
 
 func enter(player: KinematicBody2D) -> void:
-	player.animated_sprite.animation = "fly"
+#	player.anim_player.play("jumping")
+#	player.animated_sprite.animation = "fly"
 	player.direction.y = -1.0
 	player.snap = Vector2.ZERO
 	player._velocity.y = player.max_speed.y * player.direction.y
