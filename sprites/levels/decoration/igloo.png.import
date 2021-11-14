@@ -2,15 +2,15 @@
 
 importer="texture"
 type="StreamTexture"
-path="res://.import/link.png-62fb8865447c4386e903a73d01174eb4.stex"
+path="res://.import/igloo.png-1c7d04284e8a3fbe5a9dd8724b46cc44.stex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://sprites/actors/chain/link.png"
-dest_files=[ "res://.import/link.png-62fb8865447c4386e903a73d01174eb4.stex" ]
+source_file="res://sprites/levels/decoration/igloo.png"
+dest_files=[ "res://.import/igloo.png-1c7d04284e8a3fbe5a9dd8724b46cc44.stex" ]
 
 [params]
 

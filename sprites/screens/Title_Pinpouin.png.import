@@ -2,15 +2,15 @@
 
 importer="texture"
 type="StreamTexture"
-path="res://.import/link.png-62fb8865447c4386e903a73d01174eb4.stex"
+path="res://.import/Title_Pinpouin.png-14b19f988ffbbc70a410eb677cdad524.stex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://sprites/actors/chain/link.png"
-dest_files=[ "res://.import/link.png-62fb8865447c4386e903a73d01174eb4.stex" ]
+source_file="res://sprites/screens/Title_Pinpouin.png"
+dest_files=[ "res://.import/Title_Pinpouin.png-14b19f988ffbbc70a410eb677cdad524.stex" ]
 
 [params]
 

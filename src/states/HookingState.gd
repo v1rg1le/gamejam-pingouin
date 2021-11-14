@@ -4,7 +4,7 @@ class_name HookingState
 var sub_state_name = "HOOKING"
 var super_state_name = "HOOKING"
 
-const CHAIN_PULL = 25
+const CHAIN_PULL = 20
 var pull_factor = 1
 
 func _handle_input(player: KinematicBody2D, delta: float) -> void:
@@ -60,7 +60,12 @@ func enter(player: KinematicBody2D) -> void:
 	player.chain_velocity = Vector2.ZERO
 #			if event.pressed:
 			# We clicked the mouse -> shoot()
-	player.chain.shoot((get_global_mouse_position() - global_position).normalized())  #event.position - get_viewport().size * 0.5)
+	var angle_aimed = player._get_aim_direction() 
+#	valeur par default
+	if angle_aimed == Vector2.ZERO:
+		angle_aimed = Vector2(500*player.facing,-500)
+
+	player.chain.shoot(angle_aimed) #(get_global_mouse_position() - global_position).normalized())  #event.position - get_viewport().size * 0.5)
 #		else:
 			# We released the mouse -> release()
 #			$Chain.player.chain.release()

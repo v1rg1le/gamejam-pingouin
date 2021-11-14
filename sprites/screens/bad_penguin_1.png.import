@@ -2,15 +2,15 @@
 
 importer="texture"
 type="StreamTexture"
-path="res://.import/link.png-62fb8865447c4386e903a73d01174eb4.stex"
+path="res://.import/bad_penguin_1.png-f807f21aaeece2120e196bb992ea9379.stex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://sprites/actors/chain/link.png"
-dest_files=[ "res://.import/link.png-62fb8865447c4386e903a73d01174eb4.stex" ]
+source_file="res://sprites/screens/bad_penguin_1.png"
+dest_files=[ "res://.import/bad_penguin_1.png-f807f21aaeece2120e196bb992ea9379.stex" ]
 
 [params]
 

@@ -2,15 +2,15 @@
 
 importer="texture"
 type="StreamTexture"
-path="res://.import/link.png-62fb8865447c4386e903a73d01174eb4.stex"
+path="res://.import/Speed_arrow2.png-90b0623d9f900463d704be34394b5e27.stex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://sprites/actors/chain/link.png"
-dest_files=[ "res://.import/link.png-62fb8865447c4386e903a73d01174eb4.stex" ]
+source_file="res://sprites/actors/boost/Speed_arrow2.png"
+dest_files=[ "res://.import/Speed_arrow2.png-90b0623d9f900463d704be34394b5e27.stex" ]
 
 [params]
 

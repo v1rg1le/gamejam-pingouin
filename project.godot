@@ -255,7 +255,7 @@ _global_script_class_icons={
 [application]
 
 config/name="Pinpouin"
-run/main_scene="res://src/levels/LevelTest.tscn"
+run/main_scene="res://src/levels/LevelTest2.tscn"
 config/icon="res://icon.png"
 
 [autoload]
@@ -271,6 +271,12 @@ settings/fps/force_fps=60
 window/size/height=720
 window/size/test_width=1024
 window/size/test_height=720
+window/stretch/mode="2d"
+window/stretch/aspect="keep_width"
+
+[editor_plugins]
+
+enabled=PoolStringArray( "gut", "rmsmartshape" )
 
 [gdnative]
 
@@ -366,6 +372,16 @@ trix={
 2d_physics/layer_1="player"
 2d_physics/layer_2="world"
 
+[layer_names]
+
+2d_render/layer_1="player"
+2d_physics/layer_1="player"
+2d_render/layer_2="ground"
+2d_physics/layer_2="ground"
+2d_render/layer_3="object"
+2d_physics/layer_3="object"
+
 [rendering]
 
+environment/default_clear_color=Color( 0.4, 0.486275, 0.584314, 1 )
 environment/default_environment="res://default_env.tres"
