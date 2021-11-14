@@ -54,7 +54,7 @@ animations = [ {
 "speed": 5.0
 } ]
 
-[sub_resource type="Animation" id=3]
+[sub_resource type="Animation" id=6]
 resource_name = "hooking"
 
 [sub_resource type="Animation" id=4]
@@ -86,9 +86,12 @@ animation = "pump"
 [node name="Camera2D" type="Camera2D" parent="."]
 position = Vector2( 0, -67 )
 current = true
-limit_smoothed = true
 smoothing_enabled = true
-offset_v = -0.75
+offset_v = -1.0
+drag_margin_left = 0.3
+drag_margin_top = 0.3
+drag_margin_right = 0.3
+drag_margin_bottom = 0.3
 
 [node name="StateMachine" parent="." instance=ExtResource( 2 )]
 
@@ -112,6 +115,6 @@ cast_to = Vector2( 100, 0 )
 collide_with_bodies = false
 
 [node name="AnimationPlayer" type="AnimationPlayer" parent="."]
-anims/hooking = SubResource( 3 )
+anims/hooking = SubResource( 6 )
 anims/idle = SubResource( 4 )
 anims/spin = SubResource( 5 )

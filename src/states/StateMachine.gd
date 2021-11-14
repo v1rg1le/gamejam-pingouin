@@ -26,3 +26,8 @@ func _ready():
 # Called every frame. 'delta' is the elapsed time since the previous frame.
 #func _process(delta):
 #	pass
+
+func go_to_state(_player: KinematicBody2D, state_name: String) -> void:
+	current._exit(_player)
+	current = get(state_name)
+	current._enter(_player)
