@@ -17,8 +17,8 @@ func _handle_input(player: KinematicBody2D, delta: float) -> void:
 #	player.direction.x = Input.get_action_strength("move_right") - Input.get_action_strength("move_left")
 	if Input.is_action_just_pressed("jump"): # and player.floor_detector.is_colliding():
 		print('wall jump !')
-#		player._states.current_state = player._states.jumping
-#		player._states.current_state._enter(player)
+#		player._states.current = player._states.jumping
+#		player._states.current._enter(player)
 
 # Called when the node enters the scene tree for the first time.
 func _ready():

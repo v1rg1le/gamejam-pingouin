@@ -1,7 +1,6 @@
 extends Node2D
 class_name PlayerState
 
-
 func _handle_input(_player: KinematicBody2D, _delta: float) -> void:
 	pass
 
@@ -13,7 +12,10 @@ func enter(_player: KinematicBody2D) -> void:
 
 func _enter(player: KinematicBody2D) -> void:
 	player._states.super_state_label.text = self.super_state_name
-	player._states.sub_state_label.text = self.sub_state_name
+	var sub_text = ""
+	if "sub_state_name" in self:
+		sub_text = self.sub_state_name
+	player._states.sub_state_label.text = sub_text
 #	player._states.super_state_label.visible = false
 #	player._states.sub_state_label.visible = false
 	enter(player)

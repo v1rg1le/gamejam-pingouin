@@ -4,13 +4,12 @@ export var stomp_impulse: = 500.0
 var facing: int = 1
 var _states: StateMachine
 onready var animated_sprite = $"AnimatedSprite"
-var snap: Vector2 = Vector2.UP
+var snap: Vector2 = Vector2.DOWN
 onready var floor_detector: RayCast2D = $"FloorDetector"
 
-onready var chain = $Chain
+onready var chain: = $Chain
 var chain_velocity := Vector2(0,0)
 
-#onready var hook = $Hook
 onready var raycast_hook = $HookDetector
 onready var hook_tangent = $HookTangent
 #onready var line_hook = get_node("/root/LevelTest/LineHook")
@@ -22,24 +21,29 @@ var direction: Vector2
 
 func _ready():
 	_states = $"StateMachine"
-	_states.current_state._enter(self)
+	_states.current._enter(self)
 
 func _on_EnemyDetector_area_entered(_area):
 	_velocity = calculate_stomp_velocity(_velocity, stomp_impulse)
 
 func _physics_process(delta: float) -> void:
-	direction = Vector2(0,0)
-	var temp_sign
 	
-	if Input.get_action_strength("move_right") - Input.get_action_strength("move_left") != 0:
-		temp_sign = sign(Input.get_action_strength("move_right") - Input.get_action_strength("move_left"))
-		facing = temp_sign 
+	if abs(_velocity.x) > 10:
+		facing = _velocity.x > 0
 	animated_sprite.flip_h = facing != 1
 
 	handle_input(delta)
 	
+#	snap = (floor_detector.position + floor_detector.cast_to)
+#	$TestSnap.cast_to = (floor_detector.position + floor_detector.cast_to) #DEBUG
+	
 	_velocity.y += gravity * delta
-	_velocity = move_and_slide_with_snap(_velocity, FLOOR_NORMAL, snap)
+	
+#	_velocity = Vector2( clamp(_velocity.x, 0, max_speed.x),
+#					clamp(_velocity.y, 0, max_speed.y) )
+	
+	_velocity = move_and_slide_with_snap(_velocity, Vector2.DOWN, Vector2.UP)
+#	_velocity = move_and_slide_with_snap(_velocity, snap, Vector2.UP)
 
 func calculate_stomp_velocity(linear_velocity: Vector2, impulse: float) -> Vector2:
 	var out = linear_velocity
@@ -47,10 +51,10 @@ func calculate_stomp_velocity(linear_velocity: Vector2, impulse: float) -> Vecto
 	return out
 
 func handle_input(delta: float) -> void:
-	_states.current_state._handle_input(self, delta)
+	_states.current._handle_input(self, delta)
 
 func update() -> void:
-	_states.current_state.update()
+	_states.current.update()
 
 func _get_aim_direction() -> Vector2:
 	match Settings.controls:
