@@ -15,6 +15,16 @@ _global_script_classes=[ {
 "path": "res://src/states/CanMoveState.gd"
 }, {
 "base": "InAirState",
+"class": "HookingInAirState",
+"language": "GDScript",
+"path": "res://src/states/HookingInAirState.gd"
+}, {
+"base": "OnGroundState",
+"class": "HookingOnGroundState",
+"language": "GDScript",
+"path": "res://src/states/HookingOnGroundState.gd"
+}, {
+"base": "InAirState",
 "class": "HookingState",
 "language": "GDScript",
 "path": "res://src/states/HookingState.gd"
@@ -43,6 +53,11 @@ _global_script_classes=[ {
 "class": "PlayerState",
 "language": "GDScript",
 "path": "res://src/states/PlayerState.gd"
+}, {
+"base": "OnGroundState",
+"class": "PumpState",
+"language": "GDScript",
+"path": "res://src/states/PumpState.gd"
 }, {
 "base": "Resource",
 "class": "RMS2D_Material",
@@ -201,12 +216,15 @@ _global_script_classes=[ {
 } ]
 _global_script_class_icons={
 "CanMoveState": "",
+"HookingInAirState": "",
+"HookingOnGroundState": "",
 "HookingState": "",
 "IdleState": "",
 "InAirState": "",
 "JumpingState": "",
 "OnGroundState": "",
 "PlayerState": "",
+"PumpState": "",
 "RMS2D_Material": "",
 "RMS2D_VertexProperties": "",
 "RMS2D_VertexPropertiesArray": "",

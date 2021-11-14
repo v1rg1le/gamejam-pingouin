@@ -9,6 +9,8 @@ onready var floor_detector: RayCast2D = $"FloorDetector"
 #onready var rotator: = $"Rotator"
 
 
+export var pump_accel_factor = 1.3
+
 onready var chain: = $Chain
 var chain_velocity := Vector2(0,0)
 

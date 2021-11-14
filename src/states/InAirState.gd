@@ -1,7 +1,7 @@
 extends CanMoveState
 class_name InAirState
 
-#var sub_state_name = "IN AIR"
+var sub_state_name = ""
 var super_state_name = "IN AIR"
 
 export var rotation_speed = 8
