@@ -5,6 +5,8 @@ const width_point = 10
 export(int) var map_width = UNIT_SIZE*400
 export(int) var map_height = UNIT_SIZE*5 #ATTENTION PAS TROP HAUT SINON CA PLANTE
 
+export(int) var polygon_large = 6400
+
 export(float) var coeff_pente = 0.5
 
 onready var n_point = 0
@@ -42,7 +44,7 @@ func generate_curve() -> PoolVector2Array:
 	curve = PoolVector2Array (
 		[
 			Vector2(debut,
-		map_height*self.simplex_noise.get_noise_2d(debut,0) + coeff_pente*debut + 6400), #+coeff_pente*debut effet tobogan
+		map_height*self.simplex_noise.get_noise_2d(debut,0) + coeff_pente*debut + polygon_large), #+coeff_pente*debut effet tobogan
 		]
 	)
 #	print("Curve Init")
@@ -103,10 +105,11 @@ func generate_curve() -> PoolVector2Array:
 func get_coef_pente(n_point):
 #	pass
 #	print(n_point)
-	var pente = [-0.3,0,0.3,0.4]
+	var pente = [-0.3,0,-0.4,0.4,0.3,0.4]
+#	var pente = [-0.3,0,0.3,0.4]
 	# pourcentage davancement
 #	var percent = 400 - n_point /400
-	var percent = floor(n_point / (1200/2))+1
+	var percent = floor(n_point / (1200/(pente.size()-2)))+1
 #	print(percent)
 #	print("")
 	return pente[percent]

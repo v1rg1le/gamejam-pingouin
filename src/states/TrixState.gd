@@ -23,7 +23,7 @@ func _update(_player: KinematicBody2D) -> void:
 	pass
 
 func enter(player: KinematicBody2D) -> void:
-	player.animated_sprite.animation = "trix"
+	player.animated_sprite.animation = "spin"
 #	lancer le trix
 	print('entering trix')
 

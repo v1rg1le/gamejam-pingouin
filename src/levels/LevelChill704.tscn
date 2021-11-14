@@ -75,6 +75,7 @@ position = Vector2( 14062.7, -1217.11 )
 scale = Vector2( -1, -1 )
 collision_layer = 2
 map_width = 76800
+polygon_large = 640
 coeff_pente = 0.0
 world_seed = "ANTAAAALEO"
 noise_period = 1050

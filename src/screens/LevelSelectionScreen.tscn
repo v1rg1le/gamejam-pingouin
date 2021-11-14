@@ -192,6 +192,7 @@ texture_normal = ExtResource( 5 )
 texture_pressed = ExtResource( 8 )
 expand = true
 stretch_mode = 5
+next_scene_path = "res://src/levels/LevelChill917.tscn"
 
 [node name="TextureChangeSceneButton4" parent="TextureRect/HBoxContainer/VBoxContainer2/VBoxContainer5" instance=ExtResource( 2 )]
 anchor_left = 0.0
