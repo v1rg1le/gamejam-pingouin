@@ -1,0 +1,99 @@
+[gd_scene load_steps=13 format=2]
+
+[ext_resource path="res://src/states/StateMachine.gd" type="Script" id=1]
+[ext_resource path="res://src/states/SlidingState.gd" type="Script" id=2]
+[ext_resource path="res://src/states/StaggeredState.gd" type="Script" id=3]
+[ext_resource path="res://src/states/JumpingState.gd" type="Script" id=4]
+[ext_resource path="res://src/states/IdleState.gd" type="Script" id=5]
+[ext_resource path="res://src/states/HookingInAirState.gd" type="Script" id=6]
+[ext_resource path="res://src/states/InAirState.gd" type="Script" id=7]
+[ext_resource path="res://src/states/OnGroundState.gd" type="Script" id=8]
+[ext_resource path="res://src/states/RunningState.gd" type="Script" id=9]
+[ext_resource path="res://src/states/TrixState.gd" type="Script" id=10]
+[ext_resource path="res://src/states/PumpState.gd" type="Script" id=11]
+[ext_resource path="res://src/states/HookingOnGroundState.gd" type="Script" id=12]
+
+[node name="StateMachine" type="Node2D"]
+script = ExtResource( 1 )
+
+[node name="SuperState" type="Label" parent="."]
+margin_left = -25.0
+margin_top = -53.0
+margin_right = 44.0
+margin_bottom = -39.0
+grow_horizontal = 2
+rect_scale = Vector2( 0.75, 0.75 )
+text = "ESTRAGON"
+align = 1
+valign = 1
+uppercase = true
+__meta__ = {
+"_edit_use_anchors_": false
+}
+
+[node name="SubState" type="Label" parent="."]
+margin_left = -25.0
+margin_top = -45.0
+margin_right = 44.0
+margin_bottom = -31.0
+grow_horizontal = 2
+rect_scale = Vector2( 0.75, 0.75 )
+text = "ESTRAGON"
+align = 1
+valign = 1
+uppercase = true
+__meta__ = {
+"_edit_use_anchors_": false
+}
+
+[node name="Label3" type="Label" parent="."]
+visible = false
+margin_left = -25.0
+margin_top = -37.0
+margin_right = 44.0
+margin_bottom = -23.0
+grow_horizontal = 2
+rect_scale = Vector2( 0.75, 0.75 )
+text = "ESTRAGON"
+align = 1
+valign = 1
+uppercase = true
+__meta__ = {
+"_edit_use_anchors_": false
+}
+
+[node name="OnGroundState" type="Node2D" parent="."]
+script = ExtResource( 8 )
+
+[node name="IdleState" type="Node2D" parent="."]
+script = ExtResource( 5 )
+
+[node name="RunningState" type="Node2D" parent="."]
+script = ExtResource( 9 )
+
+[node name="SlidingState" type="Node2D" parent="."]
+script = ExtResource( 2 )
+
+[node name="InAirState" type="Node2D" parent="."]
+script = ExtResource( 7 )
+
+[node name="JumpingState" type="Node2D" parent="."]
+script = ExtResource( 4 )
+
+[node name="HookingState" type="Node2D" parent="."]
+script = ExtResource( 6 )
+
+[node name="TrixState" type="Node2D" parent="."]
+script = ExtResource( 10 )
+
+[node name="StaggeredState" type="Node2D" parent="."]
+script = ExtResource( 3 )
+
+[node name="PumpState" type="Node2D" parent="."]
+script = ExtResource( 11 )
+
+[node name="HookingOnGroundState" type="Node2D" parent="."]
+script = ExtResource( 12 )
+
+[node name="HookingInAirState" type="Node2D" parent="."]
+script = ExtResource( 6 )

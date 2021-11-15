@@ -1,7 +1,9 @@
-# Godot default exclusions
-
 .import/
 *.translation
 export_presets.cfg
 .mono/
-.vscode
+bin/win64/release/libgitapi*
+bin/x11/release/libgitapi.so
+git_api*
+export/*
+.vscode/*

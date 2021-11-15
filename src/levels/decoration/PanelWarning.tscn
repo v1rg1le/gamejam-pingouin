@@ -1,0 +1,11 @@
+[gd_scene load_steps=2 format=2]
+
+[ext_resource path="res://sprites/levels/decoration/warning.png" type="Texture" id=1]
+
+[node name="PanelWarning" type="Node2D"]
+
+[node name="Sprite" type="Sprite" parent="."]
+position = Vector2( 0.0285339, 0.0500336 )
+z_index = 60
+texture = ExtResource( 1 )
+offset = Vector2( 0, -30 )

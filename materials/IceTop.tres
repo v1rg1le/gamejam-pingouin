@@ -1,0 +1,38 @@
+[gd_resource type="Resource" load_steps=7 format=2]
+
+[ext_resource path="res://addons/rmsmartshape/materials/edge_material_metadata.gd" type="Script" id=1]
+[ext_resource path="res://sprites/levels/LevelTest/tile_ice_up_2.png" type="Texture" id=2]
+[ext_resource path="res://addons/rmsmartshape/materials/edge_material.gd" type="Script" id=3]
+[ext_resource path="res://addons/rmsmartshape/normal_range.gd" type="Script" id=4]
+
+[sub_resource type="Resource" id=1]
+script = ExtResource( 3 )
+textures = [ ExtResource( 2 ), null ]
+texture_normals = [  ]
+textures_corner_outer = [  ]
+textures_corner_inner = [  ]
+texture_normals_corner_outer = [  ]
+texture_normals_corner_inner = [  ]
+textures_taper_left = [  ]
+textures_taper_right = [  ]
+texture_normals_taper_left = [  ]
+texture_normals_taper_right = [  ]
+use_corner_texture = true
+use_taper_texture = true
+fit_mode = 0
+
+[sub_resource type="Resource" id=2]
+script = ExtResource( 4 )
+begin = 0.0
+distance = 240.0
+edgeRendering = Vector2( 0, 0 )
+
+[resource]
+script = ExtResource( 1 )
+edge_material = SubResource( 1 )
+normal_range = SubResource( 2 )
+weld = true
+render = true
+z_index = 32
+z_as_relative = true
+offset = 0.0
