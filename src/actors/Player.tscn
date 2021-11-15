@@ -389,14 +389,24 @@ animations = [ {
 "name": "hooking",
 "speed": 5.0
 }, {
+"frames": [ ExtResource( 12 ), ExtResource( 8 ), ExtResource( 11 ), ExtResource( 10 ) ],
+"loop": true,
+"name": "spin",
+"speed": 4.0
+}, {
+"frames": [ ExtResource( 22 ) ],
+"loop": true,
+"name": "trick_boule",
+"speed": 5.0
+}, {
+"frames": [ ExtResource( 17 ), ExtResource( 19 ), ExtResource( 18 ) ],
+"loop": true,
+"name": "stuck",
+"speed": 5.0
+}, {
 "frames": [ ExtResource( 21 ) ],
 "loop": true,
 "name": "trick_etoile_ninja",
-"speed": 5.0
-}, {
-"frames": [ ExtResource( 7 ) ],
-"loop": true,
-"name": "fly",
 "speed": 5.0
 }, {
 "frames": [ ExtResource( 20 ) ],
@@ -404,19 +414,9 @@ animations = [ {
 "name": "trick_carpe",
 "speed": 5.0
 }, {
-"frames": [ ExtResource( 12 ), ExtResource( 8 ), ExtResource( 11 ), ExtResource( 10 ) ],
+"frames": [ ExtResource( 7 ) ],
 "loop": true,
-"name": "spin",
-"speed": 4.0
-}, {
-"frames": [ ExtResource( 17 ), ExtResource( 19 ), ExtResource( 18 ) ],
-"loop": true,
-"name": "stuck",
-"speed": 5.0
-}, {
-"frames": [ ExtResource( 22 ) ],
-"loop": true,
-"name": "trick_boule",
+"name": "fly",
 "speed": 5.0
 } ]
 
@@ -441,10 +441,6 @@ drag_margin_bottom = 0.3
 [node name="Chain" parent="." instance=ExtResource( 5 )]
 z_index = -24
 
-[node name="HookTangent" type="RayCast2D" parent="."]
-cast_to = Vector2( 100, 0 )
-collide_with_bodies = false
-
 [node name="AnimationPlayer" type="AnimationPlayer" parent="."]
 anims/hooking = SubResource( 2 )
 anims/idle = SubResource( 3 )
@@ -466,9 +462,22 @@ frames = SubResource( 13 )
 animation = "trick_boule"
 offset = Vector2( 0, -15 )
 
-[node name="FloorDetector" type="RayCast2D" parent="."]
-position = Vector2( 0, 10 )
+[node name="GroundDetectorRight" type="RayCast2D" parent="."]
+visible = false
+modulate = Color( 1, 0, 0, 1 )
+position = Vector2( 15, 0 )
+z_index = 500
 enabled = true
-cast_to = Vector2( 0, 10 )
+cast_to = Vector2( 0, 30 )
 collision_mask = 2
+
+[node name="GroundDetectorLeft" type="RayCast2D" parent="."]
+visible = false
+modulate = Color( 1, 0, 0, 1 )
+position = Vector2( -15, 0 )
+z_index = 500
+enabled = true
+cast_to = Vector2( 0, 30 )
+collision_mask = 2
+
 [connection signal="animation_finished" from="AnimationPlayer" to="StateMachine" method="_on_AnimationPlayer_animation_finished"]

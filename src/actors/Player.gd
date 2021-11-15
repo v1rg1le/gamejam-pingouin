@@ -4,10 +4,9 @@ export var stomp_impulse: = 500.0
 var facing: int = 1
 var _states: StateMachine
 onready var animated_sprite = $"AnimatedSprite"
-var snap: Vector2 = Vector2.DOWN
-onready var floor_detector: RayCast2D = $"FloorDetector"
+#var snap: Vector2 = Vector2.DOWN
+#onready var floor_detector: RayCast2D = $"FloorDetector"
 #onready var rotator: = $"Rotator"
-
 
 export var pump_accel_factor = 1.3
 
@@ -27,11 +26,13 @@ export var accel_factor_pump = 1.3
 export var velocity_max_idle = 100  # velocity min for running state
 export var max_running_velocity = 500  # velocity max for running state
 
-onready var hook_tangent = $HookTangent
+var is_on_ground: bool = false
+var is_almost_on_ground: bool = false
+onready var ground_detector_right: = $GroundDetectorRight
+onready var ground_detector_left: = $GroundDetectorLeft
+#onready var test_raycast = $TestRaycast
 
 onready var anim_player = $AnimationPlayer
-
-var hang #Permet de garder en mémoire le node auquel le joueur est accroché avec le grappin
 
 var direction: Vector2
 
@@ -41,31 +42,33 @@ export var running_speed = 500
 func _ready():
 	_states = $"StateMachine"
 	_states.current._enter(self)
-#	print(global_position)
 
 func _on_EnemyDetector_area_entered(_area):
 	_velocity = calculate_stomp_velocity(_velocity, stomp_impulse)
 
 func _physics_process(delta: float) -> void:
-	
+	is_on_ground = ground_detector_right.is_colliding() and ground_detector_left.is_colliding()
+	is_almost_on_ground = \
+		(ground_detector_right.is_colliding() and !ground_detector_left.is_colliding()) or \
+		(!ground_detector_right.is_colliding() and ground_detector_left.is_colliding())
+
+	handle_input(delta)
+
 	if abs(_velocity.x) > 10:
 		facing = 1 if _velocity.x > 0 else -1
 	animated_sprite.flip_h = facing != 1
 
-	handle_input(delta)
-
 #	snap = (floor_detector.position + floor_detector.cast_to)
-#	$TestSnap.cast_to = (floor_detector.position + floor_detector.cast_to) #DEBUG
 	
 	_velocity.y += gravity * delta
-	
 #	_velocity = Vector2( clamp(_velocity.x, 0, max_speed.x),
 #					clamp(_velocity.y, 0, max_speed.y) )
 	
 	_velocity.x = clamp(_velocity.x, -SUPER_MAX_SPEED.x, SUPER_MAX_SPEED.x)
 	_velocity.y = clamp(_velocity.y, -SUPER_MAX_SPEED.y, SUPER_MAX_SPEED.y)
 	
-	_velocity = move_and_slide_with_snap(_velocity, Vector2.DOWN, Vector2.UP)
+	_velocity = move_and_slide(_velocity)
+#	_velocity = move_and_slide_with_snap(_velocity, Vector2.DOWN, Vector2.UP)
 #	_velocity = move_and_slide_with_snap(_velocity, snap, Vector2.UP)
 
 func _process(_delta): # camera follows player velocity

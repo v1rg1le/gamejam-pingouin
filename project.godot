@@ -24,11 +24,6 @@ _global_script_classes=[ {
 "language": "GDScript",
 "path": "res://src/states/HookingOnGroundState.gd"
 }, {
-"base": "InAirState",
-"class": "HookingState",
-"language": "GDScript",
-"path": "res://src/states/HookingState.gd"
-}, {
 "base": "OnGroundState",
 "class": "IdleState",
 "language": "GDScript",
@@ -218,7 +213,6 @@ _global_script_class_icons={
 "CanMoveState": "",
 "HookingInAirState": "",
 "HookingOnGroundState": "",
-"HookingState": "",
 "IdleState": "",
 "InAirState": "",
 "JumpingState": "",
