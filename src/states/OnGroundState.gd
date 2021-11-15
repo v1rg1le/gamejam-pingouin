@@ -44,22 +44,22 @@ func _handle_input(player: KinematicBody2D, delta: float) -> void:
 
 	#	Si le joueur est presque arrêté, on l'aide
 		if abs(player._velocity.x) <= player.velocity_max_idle:
-			to_idle_countdown -= 1
-			if to_idle_countdown <= 0:
-				if player._states.current.sub_state_name != "IDLE":
-					player._states.go_to_state(player, "idling")
-				player._velocity.x = lerp(player._velocity.x, 0, 0.9)
+#			to_idle_countdown -= 1
+#			if to_idle_countdown <= 0:
+			if player._states.current.sub_state_name != "IDLE":
+				player._states.go_to_state(player, "idling")
+			player._velocity.x = lerp(player._velocity.x, 0, 0.9)
 		elif abs(player._velocity.x) <= player.max_running_velocity:
 			if player._states.current.sub_state_name != "RUNNING":
 				print("to running")
 				player._states.go_to_state(player, "running")
-			to_idle_countdown = 10
+#			to_idle_countdown = 10
 	#	Si le joueur est en train de slider
 		elif player._states.current.sub_state_name != "SLIDING" && player._states.current.sub_state_name != "PUMPING":
 			print("to sliding")
 			player._states.go_to_state(player, "sliding")
-			player.anim_player.play("run")
-			to_idle_countdown = 10
+#			player.anim_player.play("run")
+#			to_idle_countdown = 10
 
 # Called every frame. 'delta' is the elapsed time since the previous frame.
 #func _process(delta):
