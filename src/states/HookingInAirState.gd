@@ -1,28 +1,26 @@
 extends InAirState
-class_name HookingState
+class_name HookingInAirState
 
-#var sub_state_name = "HOOKING"
-#var super_state_name = "HOOKING"
-
-const CHAIN_PULL = 40
+const CHAIN_PULL = 15
 var pull_factor = 1
 
 func _handle_input(player: KinematicBody2D, delta: float) -> void:
+	if player.floor_detector.is_colliding() == true:
+		player._states.current = player._states.hooking_on_ground
+		return
+	
 	._handle_input(player, delta)
 	player.snap = Vector2.ZERO
 
 	if !Input.is_action_pressed("hook"):
 		print('to air')
-#		exit(player)
-		player._states.current = player._states.in_air
-		player._states.current._enter(player)
-#		player._states.go_to_state(player, "in_air")
+		player._states.go_to_state(player, "in_air")
 
 # Hook physics
 	if player.chain.hooked:
 		if Input.is_action_pressed("pull"):
 			pull_factor = 2
-		
+
 		var direction_chain = to_local(player.chain.tip).normalized() # * CHAIN_PULL
 		var friction = 1.65
 		var normale = -direction_chain.tangent()
@@ -35,34 +33,20 @@ func _handle_input(player: KinematicBody2D, delta: float) -> void:
 
 			player.hook_tangent.cast_to = normale*100 # DEBUG
 #			player.chain_velocity = normale * CHAIN_PULL
-			print("debug")
-			if sign(player.chain_velocity.x) != sign(player.direction.x):
-				friction = 0.6
 
-#		var angle_traction = (normale + direction_chain/3) * CHAIN_PULL
-		var angle_traction = (normale + direction_chain).normalized() * CHAIN_PULL
+		var angle_traction = (normale + direction_chain) * CHAIN_PULL
+		player.chain_velocity = angle_traction
 
-		var chain_motion = angle_traction * friction * pull_factor
-		chain_motion.x = clamp(chain_motion.x, -player.max_speed_chain.x, player.max_speed_chain.x)
-		chain_motion.y = clamp(chain_motion.y, -player.max_speed_chain.y, player.max_speed_chain.y)
-#		player.max_speed_chain
-#		print(chain_motion)
-		print(player._velocity)
-		
-		player.chain_velocity = chain_motion  # angle_traction * friction * pull_factor
-#		player.chain_velocity = angle_traction
-#		player.chain_velocity *= friction * pull_factor
+		player.chain_velocity *= friction * pull_factor
 
-#		if sign(player.chain_velocity.x) != sign(player.direction.x):
-#			player.chain_velocity.x *= 0.6
-		player._velocity += chain_motion  # player.chain_velocity
+		if sign(player.chain_velocity.x) != sign(player.direction.x):
+			player.chain_velocity.x *= 0.6
+		player._velocity += player.chain_velocity
 
 	elif !player.chain.hooked:  # check distance de la chain quand tire dans le vide
 		if player.chain.distance >= player.chain.distance_max:
 			player.chain.release()
 			player._states.go_to_state(player, "sliding")
-			# player._states.current = player._states.sliding
-			# player._states.current._enter(player)
 
 
 func _update(_player: KinematicBody2D) -> void:
@@ -87,9 +71,8 @@ func enter(player: KinematicBody2D) -> void:
 	
 	player.animated_sprite.animation = "hooking"
 
-# Called when the node enters the scene tree for the first time.
 func _ready():
-	pass # Replace with function body.
+	sub_state_name = "HOOKING"
 
 # Called every frame. 'delta' is the elapsed time since the previous frame.
 #func _process(delta):

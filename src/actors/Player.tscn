@@ -1,4 +1,4 @@
-[gd_scene load_steps=35 format=2]
+[gd_scene load_steps=34 format=2]
 
 [ext_resource path="res://src/states/StateMachine.tscn" type="PackedScene" id=2]
 [ext_resource path="res://src/actors/Player.gd" type="Script" id=3]
@@ -24,97 +24,7 @@
 
 [sub_resource type="CapsuleShape2D" id=1]
 
-[sub_resource type="Animation" id=3]
-resource_name = "hooking"
-
-[sub_resource type="Animation" id=4]
-resource_name = "idle"
-
-[sub_resource type="Animation" id=7]
-resource_name = "jumping"
-length = 0.2
-tracks/0/type = "value"
-tracks/0/path = NodePath("AnimatedSprite:frame")
-tracks/0/interp = 1
-tracks/0/loop_wrap = true
-tracks/0/imported = false
-tracks/0/enabled = true
-tracks/0/keys = {
-"times": PoolRealArray( 0 ),
-"transitions": PoolRealArray( 1 ),
-"update": 1,
-"values": [ 0 ]
-}
-tracks/1/type = "value"
-tracks/1/path = NodePath("AnimatedSprite:animation")
-tracks/1/interp = 1
-tracks/1/loop_wrap = true
-tracks/1/imported = false
-tracks/1/enabled = true
-tracks/1/keys = {
-"times": PoolRealArray( 0 ),
-"transitions": PoolRealArray( 1 ),
-"update": 1,
-"values": [ "fly" ]
-}
-
-[sub_resource type="Animation" id=9]
-resource_name = "pump"
-length = 0.2
-tracks/0/type = "value"
-tracks/0/path = NodePath("AnimatedSprite:frame")
-tracks/0/interp = 1
-tracks/0/loop_wrap = true
-tracks/0/imported = false
-tracks/0/enabled = true
-tracks/0/keys = {
-"times": PoolRealArray( 0 ),
-"transitions": PoolRealArray( 1 ),
-"update": 1,
-"values": [ 0 ]
-}
-tracks/1/type = "value"
-tracks/1/path = NodePath("AnimatedSprite:animation")
-tracks/1/interp = 1
-tracks/1/loop_wrap = true
-tracks/1/imported = false
-tracks/1/enabled = true
-tracks/1/keys = {
-"times": PoolRealArray( 0 ),
-"transitions": PoolRealArray( 1 ),
-"update": 1,
-"values": [ "pump" ]
-}
-
-[sub_resource type="Animation" id=8]
-resource_name = "run"
-length = 0.2
-tracks/0/type = "value"
-tracks/0/path = NodePath("AnimatedSprite:frame")
-tracks/0/interp = 1
-tracks/0/loop_wrap = true
-tracks/0/imported = false
-tracks/0/enabled = true
-tracks/0/keys = {
-"times": PoolRealArray( 0, 0.2 ),
-"transitions": PoolRealArray( 1, 1 ),
-"update": 1,
-"values": [ 0, 0 ]
-}
-tracks/1/type = "value"
-tracks/1/path = NodePath("AnimatedSprite:animation")
-tracks/1/interp = 1
-tracks/1/loop_wrap = true
-tracks/1/imported = false
-tracks/1/enabled = true
-tracks/1/keys = {
-"times": PoolRealArray( 0, 0.2 ),
-"transitions": PoolRealArray( 1, 1 ),
-"update": 1,
-"values": [ "idle", "run" ]
-}
-
-[sub_resource type="Animation" id=6]
+[sub_resource type="Animation" id=2]
 resource_name = "staggered"
 length = 2.0
 step = 0.05
@@ -143,7 +53,94 @@ tracks/1/keys = {
 "values": [ "staggered" ]
 }
 
-[sub_resource type="Animation" id=10]
+[sub_resource type="Animation" id=3]
+resource_name = "idle"
+
+[sub_resource type="Animation" id=4]
+resource_name = "jumping"
+length = 0.2
+tracks/0/type = "value"
+tracks/0/path = NodePath("AnimatedSprite:frame")
+tracks/0/interp = 1
+tracks/0/loop_wrap = true
+tracks/0/imported = false
+tracks/0/enabled = true
+tracks/0/keys = {
+"times": PoolRealArray( 0 ),
+"transitions": PoolRealArray( 1 ),
+"update": 1,
+"values": [ 0 ]
+}
+tracks/1/type = "value"
+tracks/1/path = NodePath("AnimatedSprite:animation")
+tracks/1/interp = 1
+tracks/1/loop_wrap = true
+tracks/1/imported = false
+tracks/1/enabled = true
+tracks/1/keys = {
+"times": PoolRealArray( 0 ),
+"transitions": PoolRealArray( 1 ),
+"update": 1,
+"values": [ "fly" ]
+}
+
+[sub_resource type="Animation" id=5]
+resource_name = "pump"
+length = 0.2
+tracks/0/type = "value"
+tracks/0/path = NodePath("AnimatedSprite:frame")
+tracks/0/interp = 1
+tracks/0/loop_wrap = true
+tracks/0/imported = false
+tracks/0/enabled = true
+tracks/0/keys = {
+"times": PoolRealArray( 0 ),
+"transitions": PoolRealArray( 1 ),
+"update": 1,
+"values": [ 0 ]
+}
+tracks/1/type = "value"
+tracks/1/path = NodePath("AnimatedSprite:animation")
+tracks/1/interp = 1
+tracks/1/loop_wrap = true
+tracks/1/imported = false
+tracks/1/enabled = true
+tracks/1/keys = {
+"times": PoolRealArray( 0 ),
+"transitions": PoolRealArray( 1 ),
+"update": 1,
+"values": [ "pump" ]
+}
+
+[sub_resource type="Animation" id=6]
+resource_name = "run"
+length = 0.2
+tracks/0/type = "value"
+tracks/0/path = NodePath("AnimatedSprite:frame")
+tracks/0/interp = 1
+tracks/0/loop_wrap = true
+tracks/0/imported = false
+tracks/0/enabled = true
+tracks/0/keys = {
+"times": PoolRealArray( 0, 0.2 ),
+"transitions": PoolRealArray( 1, 1 ),
+"update": 1,
+"values": [ 0, 0 ]
+}
+tracks/1/type = "value"
+tracks/1/path = NodePath("AnimatedSprite:animation")
+tracks/1/interp = 1
+tracks/1/loop_wrap = true
+tracks/1/imported = false
+tracks/1/enabled = true
+tracks/1/keys = {
+"times": PoolRealArray( 0, 0.2 ),
+"transitions": PoolRealArray( 1, 1 ),
+"update": 1,
+"values": [ "idle", "run" ]
+}
+
+[sub_resource type="Animation" id=7]
 resource_name = "stuck"
 length = 2.0
 step = 0.05
@@ -172,7 +169,7 @@ tracks/1/keys = {
 "values": [ "stuck" ]
 }
 
-[sub_resource type="Animation" id=11]
+[sub_resource type="Animation" id=8]
 resource_name = "trick_boule"
 length = 0.4
 tracks/0/type = "value"
@@ -200,7 +197,7 @@ tracks/1/keys = {
 "values": [ "trick_boule" ]
 }
 
-[sub_resource type="Animation" id=12]
+[sub_resource type="Animation" id=9]
 resource_name = "trick_carpe"
 length = 0.8
 tracks/0/type = "value"
@@ -228,7 +225,7 @@ tracks/1/keys = {
 "values": [ "trick_carpe" ]
 }
 
-[sub_resource type="Animation" id=13]
+[sub_resource type="Animation" id=10]
 resource_name = "trick_etoile_ninja"
 length = 0.6
 step = 0.05
@@ -269,8 +266,7 @@ tracks/2/keys = {
 "values": [ 0.0, 360.0 ]
 }
 
-[sub_resource type="Animation" id=5]
-resource_name = "trick_spin"
+[sub_resource type="Animation" id=11]
 length = 0.6
 step = 0.05
 tracks/0/type = "value"
@@ -298,7 +294,7 @@ tracks/1/keys = {
 "values": [ "spin" ]
 }
 
-[sub_resource type="SpriteFrames" id=2]
+[sub_resource type="SpriteFrames" id=12]
 animations = [ {
 "frames": [ ExtResource( 6 ) ],
 "loop": true,
@@ -310,24 +306,14 @@ animations = [ {
 "name": "idle",
 "speed": 5.0
 }, {
-"frames": [ ExtResource( 21 ) ],
-"loop": true,
-"name": "trick_etoile_ninja",
-"speed": 5.0
-}, {
 "frames": [ ExtResource( 7 ) ],
 "loop": true,
 "name": "hooking",
 "speed": 5.0
 }, {
-"frames": [ ExtResource( 16 ), ExtResource( 9 ), ExtResource( 15 ), ExtResource( 14 ) ],
+"frames": [ ExtResource( 21 ) ],
 "loop": true,
-"name": "staggered",
-"speed": 5.0
-}, {
-"frames": [ ExtResource( 17 ), ExtResource( 19 ), ExtResource( 18 ) ],
-"loop": true,
-"name": "stuck",
+"name": "trick_etoile_ninja",
 "speed": 5.0
 }, {
 "frames": [ ExtResource( 22 ) ],
@@ -335,19 +321,14 @@ animations = [ {
 "name": "trick_boule",
 "speed": 5.0
 }, {
-"frames": [ ExtResource( 12 ), ExtResource( 8 ), ExtResource( 11 ), ExtResource( 10 ) ],
-"loop": true,
-"name": "spin",
-"speed": 4.0
-}, {
-"frames": [ ExtResource( 6 ) ],
-"loop": true,
-"name": "run",
-"speed": 5.0
-}, {
 "frames": [ ExtResource( 7 ) ],
 "loop": true,
 "name": "fly",
+"speed": 5.0
+}, {
+"frames": [ ExtResource( 20 ) ],
+"loop": true,
+"name": "trick_carpe",
 "speed": 5.0
 }, {
 "frames": [ ExtResource( 13 ) ],
@@ -355,9 +336,24 @@ animations = [ {
 "name": "pump",
 "speed": 5.0
 }, {
-"frames": [ ExtResource( 20 ) ],
+"frames": [ ExtResource( 12 ), ExtResource( 8 ), ExtResource( 11 ), ExtResource( 10 ) ],
 "loop": true,
-"name": "trick_carpe",
+"name": "spin",
+"speed": 4.0
+}, {
+"frames": [ ExtResource( 16 ), ExtResource( 9 ), ExtResource( 15 ), ExtResource( 14 ) ],
+"loop": true,
+"name": "staggered",
+"speed": 5.0
+}, {
+"frames": [ ExtResource( 6 ) ],
+"loop": true,
+"name": "run",
+"speed": 5.0
+}, {
+"frames": [ ExtResource( 17 ), ExtResource( 19 ), ExtResource( 18 ) ],
+"loop": true,
+"name": "stuck",
 "speed": 5.0
 } ]
 
@@ -372,6 +368,7 @@ shape = SubResource( 1 )
 
 [node name="Camera2D" type="Camera2D" parent="."]
 current = true
+limit_smoothed = true
 smoothing_enabled = true
 offset_v = -1.0
 drag_margin_left = 0.3
@@ -389,24 +386,24 @@ cast_to = Vector2( 100, 0 )
 collide_with_bodies = false
 
 [node name="AnimationPlayer" type="AnimationPlayer" parent="."]
-anims/hooking = SubResource( 6 )
-anims/idle = SubResource( 4 )
-anims/jumping = SubResource( 7 )
-anims/pump = SubResource( 9 )
-anims/run = SubResource( 8 )
-anims/staggered = SubResource( 6 )
-anims/stuck = SubResource( 10 )
-anims/trick_boule = SubResource( 11 )
-anims/trick_carpe = SubResource( 12 )
-anims/trick_etoile_ninja = SubResource( 13 )
-anims/trick_spin = SubResource( 5 )
+anims/hooking = SubResource( 2 )
+anims/idle = SubResource( 3 )
+anims/jumping = SubResource( 4 )
+anims/pump = SubResource( 5 )
+anims/run = SubResource( 6 )
+anims/staggered = SubResource( 2 )
+anims/stuck = SubResource( 7 )
+anims/trick_boule = SubResource( 8 )
+anims/trick_carpe = SubResource( 9 )
+anims/trick_etoile_ninja = SubResource( 10 )
+anims/trick_spin = SubResource( 11 )
 
 [node name="AnimatedSprite" type="AnimatedSprite" parent="."]
 position = Vector2( -0.0216179, 0.0381699 )
 rotation = 1.74846e-07
 z_index = 100
-frames = SubResource( 2 )
-animation = "run"
+frames = SubResource( 12 )
+animation = "spin"
 offset = Vector2( 0, -15 )
 
 [node name="FloorDetector" type="RayCast2D" parent="."]
@@ -414,4 +411,5 @@ position = Vector2( 0, 10 )
 enabled = true
 cast_to = Vector2( 0, 10 )
 collision_mask = 2
+
 [connection signal="animation_finished" from="AnimationPlayer" to="StateMachine" method="_on_AnimationPlayer_animation_finished"]

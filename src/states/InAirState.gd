@@ -1,7 +1,7 @@
 extends CanMoveState
 class_name InAirState
 
-#var sub_state_name = "IN AIR"
+var sub_state_name = ""
 var super_state_name = "IN AIR"
 
 export var rotation_speed = 8
@@ -10,29 +10,29 @@ func _handle_input(player: KinematicBody2D, delta: float) -> void:
 	._handle_input(player, delta)
 
 	var input_speed = Input.get_action_strength("rotate_horaire") - Input.get_action_strength("rotate_trigo")
-	player.rotation += rotation_speed * input_speed * delta
+#	player.rotation += rotation_speed * input_speed * delta
+	print(player.rotation + rotation_speed * input_speed * delta)
+	if input_speed == 0:
+		player.rotation = lerp(player.rotation, 0, .02)
+	else:
+		player.rotation = lerp(player.rotation, player.rotation + rotation_speed * input_speed * delta, .8)
+	
 
-	if Input.is_action_just_pressed("trix"):
+	if Input.is_action_just_pressed("trix") && player._states.current.sub_state_name != "TRIXING":
 		print('to trix')
 		player._states.go_to_state(player, "trixing")
-#		player._states.current = player._states.trixing
-#		player._states.current._enter(player)
 
 	if player.floor_detector.is_colliding():
 		print('to ground')
 		player._states.go_to_state(player, "on_ground")
-#		player._states.current = player._states.on_ground
-#		player._states.current._enter(player)
 
 	if Input.is_action_just_pressed("hook"):
-		print('to hook')
-		player._states.go_to_state(player, "hooking")
-#		player._states.current = player._states.hooking
-#		player._states.current._enter(player)
+		print('to hook in air')
+		player._states.go_to_state(player, "hooking_in_air")
 
 	if Input.is_action_just_released("hook"):
 		print('unhook in air')
-		player._states.hooking.exit(player)
+		player._states.hooking_in_air.exit(player)
 
 	# pump léger sur l'axe y en l'air
 	if Input.is_action_just_pressed("pump") and player._velocity.y > 0:  # player going down

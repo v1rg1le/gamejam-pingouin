@@ -12,14 +12,11 @@ func _handle_input(player: KinematicBody2D, delta: float) -> void:
 	if timer.is_stopped():
 		print("timer fini")
 		player._states.go_to_state(player, "idling")
-#		player._states.current = player._states.idling
-#		player._states.current._enter(player)
 	else:
 		player._velocity = Vector2.ZERO
 
 func enter(player: KinematicBody2D) -> void:
 	print('entering staggered')
-#	player.animated_sprite.animation = "staggered"
 	player.anim_player.play("staggered")
 	timer.start()
 
