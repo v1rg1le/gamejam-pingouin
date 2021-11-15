@@ -14,10 +14,13 @@ func _handle_input(player: KinematicBody2D, delta: float) -> void:
 	var input_speed = Input.get_action_strength("rotate_horaire") - Input.get_action_strength("rotate_trigo")
 #	player.rotation += rotation_speed * input_speed * delta
 #	print(player.rotation + rotation_speed * input_speed * delta)
-	if input_speed == 0:
-		player.rotation = lerp(player.rotation, 0, .02)
-	else:
+
+	if !input_speed == 0:
 		player.rotation = lerp(player.rotation, player.rotation + rotation_speed * input_speed * delta, .8)
+	if !player.rotation == 0 and input_speed == 0:  # input_speed == 0:
+		# si pas dans les etats hook
+		if player._states.current.sub_state_name != "HOOKING":
+			player.rotation = lerp(player.rotation, 0, 0.02)  # aide trop a replaquer ? 0.04
 
 	var floor_normale = Vector2.UP
 	if player.is_almost_on_ground:

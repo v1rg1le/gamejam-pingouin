@@ -12,9 +12,13 @@ export var pump_accel_factor = 1.3
 
 onready var chain: = $Chain
 var chain_velocity := Vector2(0,0)
+onready var chain_length = 0
+export(bool) var chain_fixed = false
 
 # from Actor
 const SUPER_MAX_SPEED = Vector2(3000, 3000)
+const MAX_SPEED_HOOKED = Vector2(1000,1000)
+const MIN_SPEED_HOOKED = Vector2(200,200)
 export var max_speed: = Vector2(700, 600)  # Vector2(1000, 600) // 500 ?
 export var max_speed_chain: = Vector2(14, 20) # Vector2(50, 60)  # Vector2(1000, 600)
 export var gravity: float = 800.0
@@ -66,6 +70,7 @@ func _physics_process(delta: float) -> void:
 	
 	_velocity.x = clamp(_velocity.x, -SUPER_MAX_SPEED.x, SUPER_MAX_SPEED.x)
 	_velocity.y = clamp(_velocity.y, -SUPER_MAX_SPEED.y, SUPER_MAX_SPEED.y)
+	# HookinInAirState clamp la _velocity avec player.MAX_SPEED_HOOKED
 	
 	_velocity = move_and_slide(_velocity)
 #	_velocity = move_and_slide_with_snap(_velocity, Vector2.DOWN, Vector2.UP)
@@ -124,3 +129,7 @@ func _get_aim_direction() -> Vector2:
 				Input.get_action_strength("aim_down") - Input.get_action_strength("aim_up")).normalized()
 		Settings.KBD_MOUSE, _:
 			return (get_global_mouse_position() - global_position).normalized()
+
+
+func _on_Chain_chain_hooked(current_length):
+	chain_length = current_length

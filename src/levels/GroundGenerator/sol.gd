@@ -8,7 +8,7 @@ export(int) var map_height = UNIT_SIZE*5 #ATTENTION PAS TROP HAUT SINON CA PLANT
 var boost_res = preload("res://src/levels/boost/BoostArea.tscn")  # .instance()
 var decoration_res = preload("res://sprites/levels/decoration/Igloo.tscn") # 
 var warning_res = preload("res://sprites/levels/decoration/Warning.tscn")
-var end_res = preload("res://sprites/levels/decoration/Warning.tscn")
+var end_res = preload("res://src/levels/Arche.tscn")
 
 export(int) var polygon_large = 6400
 
@@ -21,6 +21,7 @@ export(bool) var is_boost = false
 export var boost_treshold = 0.4
 export(bool) var is_igloo = false
 export var igloo_treshold = 0.01 #ATTENTION -igloo_treshold<...<igloo_treshold
+export(bool) var is_final_map = false
 
 export(String) var world_seed = "LEO"
 export(int) var noise_octaves = 1
@@ -81,9 +82,9 @@ func generate_curve() -> PoolVector2Array:
 #	print(curve)
 
 	#random
-	self.simplex_noise.seed = randi()
-##	static
-#	self.simplex_noise.seed = self.world_seed.hash()
+#	self.simplex_noise.seed = randi()
+#	static
+	self.simplex_noise.seed = self.world_seed.hash()
 	self.simplex_noise.octaves = self.noise_octaves
 	self.simplex_noise.period = self.noise_period
 	self.simplex_noise.persistence = self.noise_persistence
@@ -111,6 +112,10 @@ func generate_curve() -> PoolVector2Array:
 		 + coeff_pente*x) #+coeff_pente*x effet tobogan
 #		print(point)
 		curve.append(point)
+		
+	curve.append(
+		Vector2(fin,
+		map_height*self.simplex_noise.get_noise_2d(fin,0) + coeff_pente*fin + polygon_large)) 
 		
 	# DEUX FOR POUR FAIRE LES INSTANCES L'UN APRES L'AUTRE
 	
@@ -153,16 +158,15 @@ func generate_curve() -> PoolVector2Array:
 ##		INSTANCE WARNING FIN
 
 ##		INSTANCE END
-	var end = map_width*0.99
-	add_end(
-		Vector2(end,
-			map_height* self.simplex_noise.get_noise_2d(end,0)
-			 + coeff_pente*end)
-	)
+	if is_final_map:
+		var end = map_width*0.99
+		add_end(
+			Vector2(end,
+				map_height* self.simplex_noise.get_noise_2d(end,0)
+				 + coeff_pente*end)
+		)
 ##		INSTANCE END FIN
-	curve.append(
-		Vector2(fin,
-		map_height*self.simplex_noise.get_noise_2d(fin,0) + coeff_pente*fin + 6400)) #+ coeff_pente*fin effet tobogan
+	#+ coeff_pente*fin effet tobogan
 #	print("Curve à la fin")
 #	print(curve)
 		
@@ -199,3 +203,4 @@ func add_end(position :Vector2):#, rotation_degrees): #point_a:Vector2,point_b:V
 	end.global_position = position
 	add_child(end)
 #	return deco
+
