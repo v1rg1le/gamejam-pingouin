@@ -13,10 +13,6 @@ func _handle_input(player: KinematicBody2D, delta: float) -> void:
 	if floor_normal != Vector2.ZERO:
 		player.rotation = lerp(player.rotation, -floor_normal.angle_to(Vector2.UP), .2)
 
-	if player.floor_detector.is_colliding() == false:
-		player._states.go_to_state(player, "in_air")
-		return
-
 	if Input.is_action_just_released("hook"):
 		print('unhook on ground')
 		player._states.hooking_on_ground.exit(player)
