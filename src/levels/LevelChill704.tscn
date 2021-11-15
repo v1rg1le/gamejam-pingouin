@@ -1,9 +1,8 @@
-[gd_scene load_steps=8 format=2]
+[gd_scene load_steps=7 format=2]
 
 [ext_resource path="res://src/levels/GroundGenerator/sol.tscn" type="PackedScene" id=1]
 [ext_resource path="res://src/levels/parts/StaticBody2DFish.tscn" type="PackedScene" id=2]
 [ext_resource path="res://src/actors/Player.tscn" type="PackedScene" id=14]
-[ext_resource path="res://src/levels/boost/BoostArea.tscn" type="PackedScene" id=16]
 [ext_resource path="res://sprites/levels/Background_glacier.png" type="Texture" id=17]
 [ext_resource path="res://sprites/levels/Background_mountains.png" type="Texture" id=18]
 [ext_resource path="res://sprites/levels/Background_clouds.png" type="Texture" id=19]
@@ -51,18 +50,6 @@ region_rect = Rect2( -3.104, 26.159, 7000, 298.478 )
 [node name="Player" parent="." instance=ExtResource( 14 )]
 position = Vector2( 604.431, -266.931 )
 collision_mask = 7
-
-[node name="Objects" type="Node2D" parent="."]
-
-[node name="BoostArea" parent="Objects" instance=ExtResource( 16 )]
-position = Vector2( -2167.29, -1731.42 )
-rotation = -0.146349
-accel_mode = false
-
-[node name="BoostArea2" parent="Objects" instance=ExtResource( 16 )]
-position = Vector2( 2569.49, -482.808 )
-rotation = 0.443243
-accel_mode = false
 
 [node name="Plateforms" type="Node2D" parent="."]
 
