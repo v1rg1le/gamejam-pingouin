@@ -1,0 +1,55 @@
+[gd_scene load_steps=7 format=2]
+
+[ext_resource path="res://src/levels/GroundGenerator/GroundGenerator.gd" type="Script" id=1]
+[ext_resource path="res://src/levels/GroundGenerator/GroundGenerator.tscn" type="PackedScene" id=2]
+[ext_resource path="res://src/actors/Player.tscn" type="PackedScene" id=14]
+[ext_resource path="res://sprites/levels/Background_glacier.png" type="Texture" id=17]
+[ext_resource path="res://sprites/levels/Background_mountains.png" type="Texture" id=18]
+[ext_resource path="res://sprites/levels/Background_clouds.png" type="Texture" id=19]
+
+[node name="LevelRandom" type="Node2D"]
+
+[node name="ParallaxBackground" type="ParallaxBackground" parent="."]
+
+[node name="ParallaxLayer" type="ParallaxLayer" parent="ParallaxBackground"]
+position = Vector2( 567.352, 1224.97 )
+motion_scale = Vector2( 0.9, 1 )
+
+[node name="Sprite" type="Sprite" parent="ParallaxBackground/ParallaxLayer"]
+position = Vector2( -2272.37, -1876.37 )
+scale = Vector2( 10, 5 )
+z_index = -123
+texture = ExtResource( 19 )
+region_enabled = true
+region_rect = Rect2( -2664.13, -18.825, 7000, 198.507 )
+
+[node name="ParallaxLayer2" type="ParallaxLayer" parent="ParallaxBackground"]
+position = Vector2( 567.352, 1224.97 )
+motion_scale = Vector2( 0.8, 1 )
+
+[node name="Sprite" type="Sprite" parent="ParallaxBackground/ParallaxLayer2"]
+position = Vector2( -2373.74, -1177.51 )
+scale = Vector2( 10, 5 )
+z_index = -120
+texture = ExtResource( 18 )
+region_enabled = true
+region_rect = Rect2( -164.895, 80.638, 7000, 221.683 )
+
+[node name="ParallaxLayer3" type="ParallaxLayer" parent="ParallaxBackground"]
+position = Vector2( 567.352, 1224.97 )
+motion_scale = Vector2( 0.7, 1 )
+
+[node name="Sprite" type="Sprite" parent="ParallaxBackground/ParallaxLayer3"]
+position = Vector2( -1744.08, -1512.51 )
+scale = Vector2( 10, 5 )
+z_index = -126
+texture = ExtResource( 17 )
+region_enabled = true
+region_rect = Rect2( -3.104, 26.159, 7000, 298.478 )
+
+[node name="Player" parent="." instance=ExtResource( 14 )]
+position = Vector2( 956.829, -165.483 )
+collision_mask = 7
+
+[node name="GroundGenerator" parent="." instance=ExtResource( 2 )]
+script = ExtResource( 1 )
