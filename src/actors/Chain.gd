@@ -15,10 +15,15 @@ onready var tip_collision_shape = $Tip/CollisionShape2D
 const distance_max = 1200  # distance max quand tirer dans le vide
 const distance_max_stretch = 2000 # distance max du grapin une fois accroche
 const SPEED = 50	# The speed with which the chain moves
+const max_length = 300  # utiliser pour le mode corde fixe
 
 var distance = 0  # pour checker distance max
 var flying = false	# Whether the chain is moving through the air
 var hooked = false	# Whether the chain has connected to a wall
+var current_length = 0
+
+
+signal chain_hooked(current_length)
 
 # shoot() shoots the chain in a given direction
 func shoot(dir: Vector2) -> void:
@@ -50,13 +55,16 @@ func _process(_delta: float) -> void:
 # Every physics frame we update the tip position
 func _physics_process(_delta: float) -> void:
 	$Tip.global_position = tip	# The player might have moved and thus updated the position of the tip -> reset it
+	distance = tip.distance_to(get_parent().global_position)
+
 	if flying:
 		# `if move_and_collide()` always moves, but returns true if we did collide
 		if $Tip.move_and_collide(direction * SPEED):
 			hooked = true	# Got something!
 			flying = false	# Not flying anymore
+			current_length = distance
+			emit_signal("chain_hooked", current_length)
 	tip = $Tip.global_position	# set `tip` as starting position for next frame
 	
-	distance = tip.distance_to(get_parent().global_position)
 	if hooked and distance > distance_max_stretch:
 		release()
