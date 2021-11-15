@@ -1,6 +1,6 @@
 extends Area2D
 
-export var impulse_factor = 150  # Vector2(300, 0) # 300
+export var impulse_factor = 64  # Vector2(300, 0) # 300
 export var accel_factor = Vector2(1.2, 0) #acceleration >1 decelaration 0<...<1
 export var impulse_dir = Vector2(1,0)
 export var impulse_mode = false
