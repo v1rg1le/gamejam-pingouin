@@ -9,11 +9,6 @@
 config_version=4
 
 _global_script_classes=[ {
-"base": "KinematicBody2D",
-"class": "Actor",
-"language": "GDScript",
-"path": "res://src/actors/Actor.gd"
-}, {
 "base": "PlayerState",
 "class": "CanMoveState",
 "language": "GDScript",
@@ -220,7 +215,6 @@ _global_script_classes=[ {
 "path": "res://src/states/TrixState.gd"
 } ]
 _global_script_class_icons={
-"Actor": "",
 "CanMoveState": "",
 "HookingInAirState": "",
 "HookingOnGroundState": "",
@@ -375,7 +369,7 @@ rotate_horaire={
 }
 trix={
 "deadzone": 0.5,
-"events": [ Object(InputEventKey,"resource_local_to_scene":false,"resource_name":"","device":0,"alt":false,"shift":false,"control":false,"meta":false,"command":false,"pressed":false,"scancode":16777221,"unicode":0,"echo":false,"script":null)
+"events": [ Object(InputEventKey,"resource_local_to_scene":false,"resource_name":"","device":0,"alt":false,"shift":false,"control":false,"meta":false,"command":false,"pressed":false,"scancode":16777237,"unicode":0,"echo":false,"script":null)
  ]
 }
 

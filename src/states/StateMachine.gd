@@ -9,16 +9,17 @@ onready var sliding: SlidingState = $"SlidingState"
 onready var jumping: JumpingState = $"JumpingState"
 onready var running: RunningState = $"RunningState"
 onready var staggered: StaggeredState = $"StaggeredState"
-onready var hooking_air_state: HookingInAirState = $"HookingInAirState"
-onready var hooking_on_ground: HookingOnGroundState = $"HookingOnGroundState"
 onready var trixing: TrixState = $"TrixState"
 onready var pumping: PumpState = $"PumpState"
+
+onready var hooking_in_air: HookingInAirState = $"HookingInAirState"
+onready var hooking_on_ground: HookingOnGroundState = $"HookingOnGroundState"
 
 onready var super_state_label: Label = $"SuperState"
 onready var sub_state_label: Label = $"SubState"
 onready var label3: Label = $"Label3"
 
-onready var current: PlayerState = on_ground
+onready var current: PlayerState = idling
 
 onready var player = get_parent()
 
@@ -36,6 +37,7 @@ func go_to_state(_player: KinematicBody2D, state_name: String) -> void:
 
 func _on_AnimationPlayer_animation_finished(anim_name):
 #	if anim_name == "trick":
+#	var player = get_parent()
 	if "trick" in anim_name:
 		player._states.current = player._states.in_air
 		player._states.current._enter(player)

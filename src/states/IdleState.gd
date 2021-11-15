@@ -12,9 +12,6 @@ func _handle_input(player: KinematicBody2D, delta: float) -> void:
 		player._states.current = player._states.running
 		player._states.current._enter(player)
 
-func _update(_player: KinematicBody2D) -> void:
-	pass
-
 func enter(player: KinematicBody2D) -> void:
 	player.animated_sprite.animation = "idle"
 
