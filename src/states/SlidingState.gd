@@ -8,7 +8,7 @@ func _update(_player: KinematicBody2D) -> void:
 	pass
 
 func enter(player: KinematicBody2D) -> void:
-	player.animated_sprite.animation = "slide"
+	player.anim_player.play("sliding")
 
 func _ready():
 	sub_state_name = "SLIDING"

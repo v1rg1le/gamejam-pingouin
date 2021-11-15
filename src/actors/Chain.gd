@@ -10,6 +10,7 @@ var tip := Vector2(0,0)			# The global position the tip should be in
 								# connected to the player and thus all .position
 								# properties would get messed with when the player
 								# moves.
+onready var tip_collision_shape = $Tip/CollisionShape2D
 
 const distance_max = 1200  # distance max quand tirer dans le vide
 const distance_max_stretch = 2000 # distance max du grapin une fois accroche
@@ -23,13 +24,16 @@ var hooked = false	# Whether the chain has connected to a wall
 func shoot(dir: Vector2) -> void:
 	direction = dir.normalized()	# Normalize the direction and save it
 	flying = true					# Keep track of our current scan
-	tip = self.global_position + Vector2(50,50) * direction  # reset the tip position to the player's position
+	tip = self.global_position + Vector2(50, 50) * direction  # reset the tip position to the player's position
 	# un peu a cote sinon collision shape chain entre en contact avec le joueur
+	tip_collision_shape.set_deferred("disabled", false)  # reactive la collision shape si jamais
+	
 
 # release() the chain
 func release() -> void:
 	flying = false	# Not flying anymore	
 	hooked = false	# Not attached anymore
+	tip_collision_shape.set_deferred("disabled", true)
 
 # Every graphics frame we update the visuals
 func _process(_delta: float) -> void:

@@ -14,7 +14,7 @@ func _handle_input(player: KinematicBody2D, delta: float) -> void:
 	)
 
 func enter(player: KinematicBody2D) -> void:
-	player.animated_sprite.animation = "pump"
+	player.anim_player.play("sliding")
 
 func _ready():
 	sub_state_name = "PUMPING"
