@@ -8,6 +8,7 @@ export(int) var map_height = UNIT_SIZE*5 #ATTENTION PAS TROP HAUT SINON CA PLANT
 var boost_res = preload("res://src/levels/boost/BoostArea.tscn")  # .instance()
 var decoration_res = preload("res://sprites/levels/decoration/Igloo.tscn") # 
 var warning_res = preload("res://sprites/levels/decoration/Warning.tscn")
+var end_res = preload("res://sprites/levels/decoration/Warning.tscn")
 
 export(int) var polygon_large = 6400
 
@@ -151,6 +152,14 @@ func generate_curve() -> PoolVector2Array:
 	)
 ##		INSTANCE WARNING FIN
 
+##		INSTANCE END
+	var end = map_width*0.99
+	add_end(
+		Vector2(end,
+			map_height* self.simplex_noise.get_noise_2d(end,0)
+			 + coeff_pente*end)
+	)
+##		INSTANCE END FIN
 	curve.append(
 		Vector2(fin,
 		map_height*self.simplex_noise.get_noise_2d(fin,0) + coeff_pente*fin + 6400)) #+ coeff_pente*fin effet tobogan
@@ -181,4 +190,12 @@ func add_warning(position :Vector2):#, rotation_degrees): #point_a:Vector2,point
 #	var normal = Vector2(dvec.y, -dvec.x)
 	warning.global_position = position
 	add_child(warning)
+#	return deco
+
+func add_end(position :Vector2):#, rotation_degrees): #point_a:Vector2,point_b:Vector2):
+	var end = end_res.instance()
+#	var dvec = (point_b - point_a).normalized()
+#	var normal = Vector2(dvec.y, -dvec.x)
+	end.global_position = position
+	add_child(end)
 #	return deco

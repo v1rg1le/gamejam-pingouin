@@ -69,7 +69,6 @@ accel_mode = false
 [node name="sol" parent="Plateforms" instance=ExtResource( 1 )]
 collision_layer = 2
 map_width = 76800
-coeff_pente = 0.0
 world_seed = "6vdsf655s6dvsd5"
 noise_period = 1050
 
@@ -79,7 +78,6 @@ scale = Vector2( -1, -1 )
 collision_layer = 2
 map_width = 76800
 polygon_large = 640
-coeff_pente = 0.0
 world_seed = "ANTAAAALEO"
 noise_period = 1050
 
