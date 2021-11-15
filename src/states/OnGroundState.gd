@@ -32,7 +32,7 @@ func _handle_input(player: KinematicBody2D, delta: float) -> void:
 			player._states.go_to_state(player, "in_air")
 			return
 
-		if Input.is_action_pressed("pump") and player.floor_detector.is_colliding() and player._states.current.sub_state_name != "PUMPING":
+		if Input.is_action_just_pressed("pump") and player.floor_detector.is_colliding() and player._states.current.sub_state_name != "PUMPING":
 			print("pump !")
 			player._states.go_to_state(player, "pumping")
 			return

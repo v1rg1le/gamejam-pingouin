@@ -70,6 +70,8 @@ func _physics_process(delta: float) -> void:
 func _process(_delta): # camera follows player velocity
 	var x = _velocity.x / 2
 	var y = _velocity.y / 3
+	x = clamp(x, -20, 20)
+	y = clamp(y, -20, 20)
 	camera.offset = lerp(camera.offset, Vector2(x,y), 0.1)
 
 #	NE MARCHE PAS TRES BIEN
