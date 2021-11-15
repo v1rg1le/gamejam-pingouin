@@ -46,7 +46,7 @@ func _on_EnemyDetector_area_entered(_area):
 func _physics_process(delta: float) -> void:
 	
 	if abs(_velocity.x) > 10:
-		facing = _velocity.x > 0
+		facing = 1 if _velocity.x > 0 else -1
 	animated_sprite.flip_h = facing != 1
 
 	handle_input(delta)
@@ -65,7 +65,7 @@ func _physics_process(delta: float) -> void:
 	_velocity = move_and_slide_with_snap(_velocity, Vector2.DOWN, Vector2.UP)
 #	_velocity = move_and_slide_with_snap(_velocity, snap, Vector2.UP)
 
-func _process(delta): # camera follows player velocity
+func _process(_delta): # camera follows player velocity
 	var x = _velocity.x / 2
 	var y = _velocity.y / 3
 	camera.offset = lerp(camera.offset, Vector2(x,y), 0.1)

@@ -19,13 +19,11 @@ func _update(_player: KinematicBody2D) -> void:
 	pass
 
 func enter(player: KinematicBody2D) -> void:
-	player.animated_sprite.animation = "idle"
+#	player.animated_sprite.animation = "idle"
+#	player.anim_player.play("idle")
+	player.anim_player.queue("idle")
 
 # Called when the node enters the scene tree for the first time.
 func _ready():
 	sub_state_name = "IDLE"
 	._ready()
-
-# Called every frame. 'delta' is the elapsed time since the previous frame.
-#func _process(delta):
-#	pass

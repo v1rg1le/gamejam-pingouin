@@ -11,7 +11,7 @@ func _update(_player: KinematicBody2D) -> void:
 
 func _enter(player: KinematicBody2D) -> void:
 #	player.animated_sprite.animation = "run"
-	player.anim_player.play("run")
+	player.anim_player.play("running")
 
 func _ready():
 	sub_state_name = "RUNNING"

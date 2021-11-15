@@ -45,7 +45,11 @@ func _handle_input(player: KinematicBody2D, delta: float) -> void:
 		player._velocity = lerp(player._velocity, player.accel_factor_pump * player._velocity, 0.04)  #0.2
 		player._velocity = Vector2( clamp(player._velocity.x, -player.max_speed.x * coef, player.max_speed.x * coef),
 									clamp(player._velocity.y, -player.max_speed.y * coef, player.max_speed.y * coef) )
-
+	
+	if Input.is_action_just_released("pump"):
+		player.anim_player.play("sliding")
+	
+	
 
 #	Si le joueur est presque arrêté, on l'aide
 	if abs(player._velocity.x) <= player.velocity_max_idle:
@@ -63,7 +67,7 @@ func _handle_input(player: KinematicBody2D, delta: float) -> void:
 	elif player._states.current.sub_state_name != "SLIDING":
 		print("to sliding")
 		player._states.go_to_state(player, "sliding")
-		player.anim_player.play("run")
+#		player.anim_player.play("run")
 
 func _ready():
 	pass
