@@ -43,6 +43,7 @@ export var running_speed = 500
 func _ready():
 	_states = $"StateMachine"
 	_states.current._enter(self)
+#	print(global_position)
 
 func _on_EnemyDetector_area_entered(_area):
 	_velocity = calculate_stomp_velocity(_velocity, stomp_impulse)

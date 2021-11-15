@@ -1,13 +1,13 @@
 [gd_scene load_steps=7 format=2]
 
-[ext_resource path="res://src/levels/GroundGenerator/sol.tscn" type="PackedScene" id=1]
-[ext_resource path="res://src/levels/parts/StaticBody2DFish.tscn" type="PackedScene" id=2]
+[ext_resource path="res://src/levels/GroundGenerator/GroundGenerator.gd" type="Script" id=1]
+[ext_resource path="res://src/levels/GroundGenerator/GroundGenerator.tscn" type="PackedScene" id=2]
 [ext_resource path="res://src/actors/Player.tscn" type="PackedScene" id=14]
 [ext_resource path="res://sprites/levels/Background_glacier.png" type="Texture" id=17]
 [ext_resource path="res://sprites/levels/Background_mountains.png" type="Texture" id=18]
 [ext_resource path="res://sprites/levels/Background_clouds.png" type="Texture" id=19]
 
-[node name="LevelChill704" type="Node2D"]
+[node name="LevelRandom" type="Node2D"]
 
 [node name="ParallaxBackground" type="ParallaxBackground" parent="."]
 
@@ -48,37 +48,9 @@ region_enabled = true
 region_rect = Rect2( -3.104, 26.159, 7000, 298.478 )
 
 [node name="Player" parent="." instance=ExtResource( 14 )]
-position = Vector2( 604.431, -266.931 )
+position = Vector2( 152.932, -505.205 )
 collision_mask = 7
+stomp_impulse = 64.0
 
-[node name="Plateforms" type="Node2D" parent="."]
-
-[node name="sol" parent="Plateforms" instance=ExtResource( 1 )]
-collision_layer = 2
-map_width = 76800
-world_seed = "6vdsf655s6dvsd5"
-noise_period = 1050
-
-[node name="sol2" parent="Plateforms" instance=ExtResource( 1 )]
-position = Vector2( 14062.7, -1217.11 )
-scale = Vector2( -1, -1 )
-collision_layer = 2
-map_width = 76800
-polygon_large = 640
-world_seed = "ANTAAAALEO"
-noise_period = 1050
-
-[node name="StaticBody2D" parent="Plateforms" instance=ExtResource( 2 )]
-position = Vector2( 6951.85, -720.814 )
-
-[node name="StaticBody2D2" parent="Plateforms" instance=ExtResource( 2 )]
-position = Vector2( 8431.85, -656.814 )
-
-[node name="StaticBody2D3" parent="Plateforms" instance=ExtResource( 2 )]
-position = Vector2( 12199.8, -896.814 )
-
-[node name="StaticBody2D4" parent="Plateforms" instance=ExtResource( 2 )]
-position = Vector2( 13295.8, -640.814 )
-
-[node name="StaticBody2D5" parent="Plateforms" instance=ExtResource( 2 )]
-position = Vector2( 5039.85, -752.814 )
+[node name="GroundGenerator" parent="." instance=ExtResource( 2 )]
+script = ExtResource( 1 )
