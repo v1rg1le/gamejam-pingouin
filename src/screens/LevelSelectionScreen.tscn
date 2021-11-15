@@ -11,8 +11,8 @@
 [ext_resource path="res://sprites/screens/buttons/fond_menu_2_white.png" type="Texture" id=9]
 [ext_resource path="res://sprites/screens/buttons/fond_menu_2_black.png" type="Texture" id=10]
 [ext_resource path="res://sprites/screens/buttons/fond_menu_4_white.png" type="Texture" id=11]
-[ext_resource path="res://sprites/screens/buttons/fond_menu_chill_white.png" type="Texture" id=12]
-[ext_resource path="res://sprites/screens/buttons/fond_menu_chill_black.png" type="Texture" id=13]
+[ext_resource path="res://sprites/screens/buttons/fond_menu_chill_2.png" type="Texture" id=12]
+[ext_resource path="res://sprites/screens/buttons/fond_menu_chill_1.png" type="Texture" id=13]
 [ext_resource path="res://src/ui/TextureChangeSceneButton.gd" type="Script" id=14]
 [ext_resource path="res://src/screens/LevelSelectionScreen.gd" type="Script" id=15]
 
