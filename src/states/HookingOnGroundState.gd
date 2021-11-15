@@ -5,15 +5,16 @@ const CHAIN_PULL = 15
 var pull_factor = 1
 
 func _handle_input(player: KinematicBody2D, delta: float) -> void:
+	if player.floor_detector.is_colliding() == false:
+		player._states.current = player._states.hooking_in_air
+		return
+	
 	._handle_input(player, delta)
 	player.snap = Vector2.ZERO
 
 	if !Input.is_action_pressed("hook"):
-		print('to air')
-#		exit(player)
-		player._states.current = player._states.in_air
-		player._states.current._enter(player)
-#		player._states.go_to_state(player, "in_air")
+		print('to ground')
+		player._states.go_to_state(player, "on_ground")
 
 # Hook physics
 	if player.chain.hooked:
@@ -46,8 +47,6 @@ func _handle_input(player: KinematicBody2D, delta: float) -> void:
 		if player.chain.distance >= player.chain.distance_max:
 			player.chain.release()
 			player._states.go_to_state(player, "sliding")
-			# player._states.current = player._states.sliding
-			# player._states.current._enter(player)
 
 
 func _update(_player: KinematicBody2D) -> void:
@@ -72,7 +71,6 @@ func enter(player: KinematicBody2D) -> void:
 	
 	player.animated_sprite.animation = "hooking"
 
-# Called when the node enters the scene tree for the first time.
 func _ready():
 	sub_state_name = "HOOKING"
 

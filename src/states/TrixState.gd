@@ -39,6 +39,4 @@ func enter(player: KinematicBody2D) -> void:
 func _ready():
 	sub_state_name = "TRIXING"
 
-#func exit(_player: KinematicBody2D) -> void:
-#	pass
 #	player.AnimatedSprite.rotation_degree = 0

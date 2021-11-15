@@ -26,10 +26,6 @@ func _enter(_player: KinematicBody2D) -> void:
 #	_player._states.sub_state_label.visible = false
 	enter(_player)
 
-# Called when the node enters the scene tree for the first time.
-func _ready():
-	pass
-
 #func go_to_state(_player: KinematicBody2D, state_name: String) -> void:
 #	_player._states.current._exit()
 #	_player._states.current = _player._states[state_name]
