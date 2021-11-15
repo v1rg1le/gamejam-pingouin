@@ -48,8 +48,9 @@ region_enabled = true
 region_rect = Rect2( -3.104, 26.159, 7000, 298.478 )
 
 [node name="Player" parent="." instance=ExtResource( 14 )]
-position = Vector2( 956.829, -165.483 )
+position = Vector2( 152.932, -505.205 )
 collision_mask = 7
+stomp_impulse = 64.0
 
 [node name="GroundGenerator" parent="." instance=ExtResource( 2 )]
 script = ExtResource( 1 )
