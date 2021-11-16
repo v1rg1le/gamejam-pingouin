@@ -12,7 +12,7 @@ func _handle_input(player: KinematicBody2D, delta: float) -> void:
 		player._states.current = player._states.running
 		player._states.current._enter(player)
 
-func enter(player: KinematicBody2D) -> void:
+func enter(player: KinematicBody2D, _previous_state: PlayerState) -> void:
 #	player.animated_sprite.animation = "idle"
 #	player.anim_player.play("idle")
 	player.anim_player.queue("idle")

@@ -80,7 +80,7 @@ script = ExtResource( 14 )
 __meta__ = {
 "_edit_use_anchors_": false
 }
-next_scene_path = "res://src/levels/LevelChill704.tscn"
+next_scene_path = "res://src/levels/LevelRandom.tscn"
 
 [node name="TextureChangeSceneButton2" type="TextureButton" parent="TextureRect/HBoxContainer/VBoxContainer4/VBoxContainer2"]
 margin_top = 104.0
@@ -96,7 +96,7 @@ script = ExtResource( 14 )
 __meta__ = {
 "_edit_use_anchors_": false
 }
-next_scene_path = "res://src/levels/LevelChill704.tscn"
+next_scene_path = "res://src/levels/LevelRandom358.tscn"
 
 [node name="TextureChangeSceneButton3" type="TextureButton" parent="TextureRect/HBoxContainer/VBoxContainer4/VBoxContainer2"]
 margin_top = 208.0
@@ -112,7 +112,6 @@ script = ExtResource( 14 )
 __meta__ = {
 "_edit_use_anchors_": false
 }
-next_scene_path = "res://src/levels/LevelChill704.tscn"
 
 [node name="TextureChangeSceneButton4" type="TextureButton" parent="TextureRect/HBoxContainer/VBoxContainer4/VBoxContainer2"]
 margin_top = 312.0
@@ -128,7 +127,6 @@ script = ExtResource( 14 )
 __meta__ = {
 "_edit_use_anchors_": false
 }
-next_scene_path = "res://src/levels/LevelChill704.tscn"
 
 [node name="VBoxContainer3" type="VBoxContainer" parent="TextureRect/HBoxContainer/VBoxContainer4"]
 margin_top = 570.0
@@ -173,7 +171,6 @@ texture_normal = ExtResource( 4 )
 texture_pressed = ExtResource( 3 )
 expand = true
 stretch_mode = 5
-next_scene_path = "res://src/levels/LevelTest.tscn"
 
 [node name="TextureRect" type="TextureRect" parent="TextureRect/HBoxContainer/VBoxContainer2/VBoxContainer5/TextureChangeSceneButton"]
 show_behind_parent = true
@@ -206,7 +203,6 @@ texture_normal = ExtResource( 10 )
 texture_pressed = ExtResource( 9 )
 expand = true
 stretch_mode = 5
-next_scene_path = "res://src/levels/LevelTest2.tscn"
 
 [node name="TextureChangeSceneButton3" parent="TextureRect/HBoxContainer/VBoxContainer2/VBoxContainer5" instance=ExtResource( 2 )]
 anchor_left = 0.0
@@ -221,7 +217,6 @@ texture_normal = ExtResource( 5 )
 texture_pressed = ExtResource( 8 )
 expand = true
 stretch_mode = 5
-next_scene_path = "res://src/levels/LevelChill917.tscn"
 
 [node name="TextureChangeSceneButton4" parent="TextureRect/HBoxContainer/VBoxContainer2/VBoxContainer5" instance=ExtResource( 2 )]
 anchor_left = 0.0
@@ -236,7 +231,6 @@ texture_normal = ExtResource( 7 )
 texture_pressed = ExtResource( 11 )
 expand = true
 stretch_mode = 5
-next_scene_path = ""
 
 [node name="VBoxContainer6" type="VBoxContainer" parent="TextureRect/HBoxContainer/VBoxContainer2"]
 margin_top = 570.0
@@ -253,6 +247,7 @@ margin_bottom = 720.0
 size_flags_horizontal = 7
 size_flags_vertical = 7
 alignment = 1
+
 [connection signal="button_up" from="TextureRect/HBoxContainer/VBoxContainer4/VBoxContainer2/TextureChangeSceneButton" to="TextureRect/HBoxContainer/VBoxContainer4/VBoxContainer2/TextureChangeSceneButton" method="_on_PlayButton_button_up"]
 [connection signal="button_up" from="TextureRect/HBoxContainer/VBoxContainer4/VBoxContainer2/TextureChangeSceneButton2" to="TextureRect/HBoxContainer/VBoxContainer4/VBoxContainer2/TextureChangeSceneButton2" method="_on_PlayButton_button_up"]
 [connection signal="button_up" from="TextureRect/HBoxContainer/VBoxContainer4/VBoxContainer2/TextureChangeSceneButton3" to="TextureRect/HBoxContainer/VBoxContainer4/VBoxContainer2/TextureChangeSceneButton3" method="_on_PlayButton_button_up"]

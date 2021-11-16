@@ -24,11 +24,6 @@ _global_script_classes=[ {
 "language": "GDScript",
 "path": "res://src/states/HookingOnGroundState.gd"
 }, {
-"base": "InAirState",
-"class": "HookingState",
-"language": "GDScript",
-"path": "res://src/states/HookingState.gd"
-}, {
 "base": "OnGroundState",
 "class": "IdleState",
 "language": "GDScript",
@@ -218,7 +213,6 @@ _global_script_class_icons={
 "CanMoveState": "",
 "HookingInAirState": "",
 "HookingOnGroundState": "",
-"HookingState": "",
 "IdleState": "",
 "InAirState": "",
 "JumpingState": "",
@@ -261,7 +255,7 @@ _global_script_class_icons={
 [application]
 
 config/name="Pinpouin"
-run/main_scene="res://src/levels/LevelChill704.tscn"
+run/main_scene="res://src/levels/LevelRandom.tscn"
 config/icon="res://icon.png"
 
 [autoload]
