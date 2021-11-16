@@ -33,7 +33,9 @@ func _ready():
 		var is_final_map = (i == number_map -1)
 		print(is_final_map)
 		if i == 0:
-			add_player(next_pos + UNIT_SIZE*Vector2(3,-5))
+			# send spawn position to LevelRandom
+			get_parent()._set_spawn_position(next_pos + UNIT_SIZE*Vector2(3,-5))
+#			add_player(next_pos + UNIT_SIZE*Vector2(3,-5))
 			next_pos = add_sol(next_pos,false)
 		else:
 			next_pos = add_sol(
@@ -55,7 +57,7 @@ func add_sol(position :Vector2,is_final_map:bool):
 	sol.noise_lacunarity = noise_lacunarity
 	
 	sol.is_boost = is_boost
-	sol.boost_treshold = boost_treshold	
+	sol.boost_treshold = boost_treshold
 	sol.is_igloo = is_igloo
 	sol.igloo_treshold = igloo_treshold
 	sol.is_final_map = is_final_map
@@ -68,10 +70,11 @@ func add_sol(position :Vector2,is_final_map:bool):
 	next_pos = Vector2(0,0)
 #	print(next_pos)
 	return next_pos
-	
+
 func add_player(position :Vector2):#, rotation_degrees): #point_a:Vector2,point_b:Vector2):
 	var player = player_res.instance()
 #	var dvec = (point_b - point_a).normalized()
 #	var normal = Vector2(dvec.y, -dvec.x)
 	player.global_position = position
-	add_child(player)
+#	add_child(player)  # faire un script sur LevelRandom.gd pour instancier joueur
+	get_parent().call_deferred("add_child", player)  # faire un script sur LevelRandom.gd pour instancier joueur

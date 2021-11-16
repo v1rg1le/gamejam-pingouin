@@ -35,6 +35,7 @@ var is_almost_on_ground: bool = false
 onready var ground_detector_right: = $GroundDetectorRight
 onready var ground_detector_left: = $GroundDetectorLeft
 #onready var test_raycast = $TestRaycast
+onready var coyote_timer  # initalise dans ready pour get nom de scene actuelle : = get_node("/root/LevelChill704/Player/StateMachine/CoyoteTimer")
 
 onready var anim_player = $AnimationPlayer
 
@@ -46,6 +47,7 @@ export var running_speed = 500
 func _ready():
 	_states = $"StateMachine"
 	_states.current._enter(self)
+	coyote_timer = get_node("/root/%s/Player/StateMachine/CoyoteTimer" % get_tree().current_scene.name)
 
 func _on_EnemyDetector_area_entered(_area):
 	_velocity = calculate_stomp_velocity(_velocity, stomp_impulse)
@@ -63,8 +65,11 @@ func _physics_process(delta: float) -> void:
 	animated_sprite.flip_h = facing != 1
 
 #	snap = (floor_detector.position + floor_detector.cast_to)
-	
+#	print('--')
+#	print(_velocity.y)
 	_velocity.y += gravity * delta
+#	print(gravity * delta)
+#	print(_velocity.y)
 #	_velocity = Vector2( clamp(_velocity.x, 0, max_speed.x),
 #					clamp(_velocity.y, 0, max_speed.y) )
 	

@@ -367,6 +367,11 @@ animations = [ {
 "name": "idle",
 "speed": 5.0
 }, {
+"frames": [ ExtResource( 23 ), ExtResource( 1 ) ],
+"loop": true,
+"name": "running",
+"speed": 5.0
+}, {
 "frames": [ ExtResource( 13 ) ],
 "loop": true,
 "name": "pumping",
@@ -377,20 +382,15 @@ animations = [ {
 "name": "staggered",
 "speed": 5.0
 }, {
-"frames": [ ExtResource( 23 ), ExtResource( 1 ) ],
-"loop": true,
-"name": "running",
-"speed": 5.0
-}, {
 "frames": [ ExtResource( 12 ) ],
 "loop": true,
 "name": "hooking",
 "speed": 5.0
 }, {
-"frames": [ ExtResource( 12 ), ExtResource( 8 ), ExtResource( 11 ), ExtResource( 10 ) ],
+"frames": [ ExtResource( 7 ) ],
 "loop": true,
-"name": "spin",
-"speed": 4.0
+"name": "fly",
+"speed": 5.0
 }, {
 "frames": [ ExtResource( 22 ) ],
 "loop": true,
@@ -402,23 +402,24 @@ animations = [ {
 "name": "stuck",
 "speed": 5.0
 }, {
-"frames": [ ExtResource( 21 ) ],
-"loop": true,
-"name": "trick_etoile_ninja",
-"speed": 5.0
-}, {
 "frames": [ ExtResource( 20 ) ],
 "loop": true,
 "name": "trick_carpe",
 "speed": 5.0
 }, {
-"frames": [ ExtResource( 7 ) ],
+"frames": [ ExtResource( 12 ), ExtResource( 8 ), ExtResource( 11 ), ExtResource( 10 ) ],
 "loop": true,
-"name": "fly",
+"name": "spin",
+"speed": 4.0
+}, {
+"frames": [ ExtResource( 21 ) ],
+"loop": true,
+"name": "trick_etoile_ninja",
 "speed": 5.0
 } ]
 
 [node name="Player" type="KinematicBody2D"]
+z_index = 100
 collision_mask = 6
 script = ExtResource( 3 )
 

@@ -5,7 +5,7 @@ const CHAIN_PULL = 15
 var pull_factor = 1
 
 func _handle_input(player: KinematicBody2D, delta: float) -> void:
-	if player.is_on_ground:
+	if !player.is_on_ground:
 		player._states.current = player._states.hooking_in_air
 		return
 
@@ -42,7 +42,7 @@ func _handle_input(player: KinematicBody2D, delta: float) -> void:
 			player.chain_velocity.x *= 0.6
 		player._velocity += player.chain_velocity
 
-	elif !player.chain.hooked:  # check distance de la chain quand tire dans le vide
+	else:  # check distance de la chain quand tire dans le vide
 		if player.chain.distance >= player.chain.distance_max:
 			player.chain.release()
 			player._states.go_to_state(player, "sliding")
@@ -50,7 +50,7 @@ func _handle_input(player: KinematicBody2D, delta: float) -> void:
 func exit(player: KinematicBody2D) -> void:
 	player.chain.release()
 
-func enter(player: KinematicBody2D) -> void:
+func enter(player: KinematicBody2D, _previous_state: PlayerState) -> void:
 #	player.snap = Vector2.ZERO
 	pull_factor = 1  # par default
 	player.chain_velocity = Vector2.ZERO

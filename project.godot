@@ -255,7 +255,7 @@ _global_script_class_icons={
 [application]
 
 config/name="Pinpouin"
-run/main_scene="res://src/levels/LevelChill704.tscn"
+run/main_scene="res://src/levels/LevelRandom.tscn"
 config/icon="res://icon.png"
 
 [autoload]

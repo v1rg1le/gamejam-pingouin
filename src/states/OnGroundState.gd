@@ -71,6 +71,10 @@ func _handle_input(player: KinematicBody2D, delta: float) -> void:
 			print("to sliding")
 			player._states.go_to_state(player, "sliding")
 
+func enter(player: KinematicBody2D, _previous_state: PlayerState) -> void:
+	if !player.coyote_timer.is_stopped():  # reinitalise le coyote timer seulement lors du retour au sol
+		player.coyote_timer.stop()
+
 # Called every frame. 'delta' is the elapsed time since the previous frame.
 #func _process(delta):
 #	pass

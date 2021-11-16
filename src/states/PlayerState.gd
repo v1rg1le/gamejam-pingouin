@@ -7,7 +7,7 @@ func _handle_input(_player: KinematicBody2D, _delta: float) -> void:
 func _update(_player: KinematicBody2D) -> void:
 	pass
 
-func enter(_player: KinematicBody2D) -> void:
+func enter(_player: KinematicBody2D, _previous_state: PlayerState) -> void:
 	pass
 
 func exit(_player: KinematicBody2D) -> void:
@@ -24,7 +24,7 @@ func _enter(_player: KinematicBody2D) -> void:
 	_player._states.sub_state_label.text = sub_text
 #	_player._states.super_state_label.visible = false
 #	_player._states.sub_state_label.visible = false
-	enter(_player)
+	enter(_player, self)
 
 #func go_to_state(_player: KinematicBody2D, state_name: String) -> void:
 #	_player._states.current._exit()
