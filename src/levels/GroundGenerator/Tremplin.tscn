@@ -1,6 +1,6 @@
 [gd_scene load_steps=4 format=2]
 
-[ext_resource path="res://src/levels/GroundGenerator/HalfPipe.gd" type="Script" id=1]
+[ext_resource path="res://src/levels/GroundGenerator/Tremplin.gd" type="Script" id=1]
 [ext_resource path="res://sprites/levels/LevelTest/tile_ice_up_1.png" type="Texture" id=2]
 
 [sub_resource type="Curve2D" id=1]
@@ -9,7 +9,7 @@ _data = {
 "points": PoolVector2Array( 0, 0, 0, 0, 2740.83, 3272.55, 0, 0, 0, 0, 7.0752, 3272.55, 0, 0, 0, 0, -2160.7, 3304.58, 0, 0, 0, 0, -2053.92, 453.365, -1046.13, 426.536, 1046.13, -426.536, 2516.57, 165.04, -794.703, -166.124, 794.703, 166.124, 4428.07, 720.333, -897.97, 570.211, 897.97, -570.211, 7422.35, 142.449, -1547.25, -551.628, 1547.25, 551.628, 10923.4, 637.159, -1054.82, -712.719, 1054.82, 712.719, 15516.5, 184.304, -685.397, 221.746, 685.397, -221.746, 18725.5, 412.518, -362.857, -50.3968, 362.857, 50.3968, 19673, -444.229, -1510.29, 119.865, 1510.29, -119.865, 23348.2, 723.069, -790.225, 331.04, 790.225, -331.04, 25206.7, -693.18, 0, 0, 0, 0, 27692.7, -996.615, 0, 0, 0, 0, 27602.2, 4569.73, 0, 0, 0, 0, 2740.83, 3272.55 )
 }
 
-[node name="HalfPipe" type="StaticBody2D"]
+[node name="Tremplin" type="StaticBody2D"]
 collision_layer = 2
 script = ExtResource( 1 )
 

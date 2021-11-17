@@ -109,6 +109,7 @@ func calculate_stomp_velocity(linear_velocity: Vector2, impulse: float) -> Vecto
 
 func handle_input(delta: float) -> void:
 	_states.current._handle_input(self, delta)
+#	print(self.global_position)
 
 func update() -> void:
 	_states.current.update()
