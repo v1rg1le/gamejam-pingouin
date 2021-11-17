@@ -1,4 +1,4 @@
-[gd_scene load_steps=178 format=2]
+[gd_scene load_steps=179 format=2]
 
 [ext_resource path="res://addons/rmsmartshape/materials/shape_material.gd" type="Script" id=1]
 [ext_resource path="res://addons/rmsmartshape/shapes/shape_closed.gd" type="Script" id=2]
@@ -20,6 +20,7 @@
 [ext_resource path="res://src/levels/decoration/IceMedium2.tscn" type="PackedScene" id=18]
 [ext_resource path="res://src/levels/decoration/IceSmall.tscn" type="PackedScene" id=19]
 [ext_resource path="res://src/levels/Arche.tscn" type="PackedScene" id=20]
+[ext_resource path="res://src/levels/GroundGenerator/Tremplin.tscn" type="PackedScene" id=21]
 
 [sub_resource type="Resource" id=158]
 script = ExtResource( 5 )
@@ -1153,8 +1154,6 @@ collision_layer = 2
 [node name="SS2D_Shape_Closed2" type="Node2D" parent="StaticBody2D2"]
 rotation = 0.523599
 script = ExtResource( 2 )
-editor_debug = false
-curve_bake_interval = 20.0
 _points = SubResource( 176 )
 material_overrides = {
 
@@ -1185,8 +1184,6 @@ collision_layer = 2
 [node name="SS2D_Shape_Closed3" type="Node2D" parent="StaticBody2D3"]
 rotation = 0.523599
 script = ExtResource( 2 )
-editor_debug = false
-curve_bake_interval = 20.0
 _points = SubResource( 207 )
 material_overrides = {
 
@@ -1210,8 +1207,6 @@ collision_layer = 2
 
 [node name="Node2D" type="Node2D" parent="StaticBody2D4"]
 script = ExtResource( 2 )
-editor_debug = false
-curve_bake_interval = 20.0
 _points = SubResource( 224 )
 material_overrides = {
 
@@ -1235,8 +1230,6 @@ collision_layer = 2
 
 [node name="Node2D2" type="Node2D" parent="StaticBody2D5"]
 script = ExtResource( 2 )
-editor_debug = false
-curve_bake_interval = 20.0
 _points = SubResource( 247 )
 material_overrides = {
 
@@ -1260,8 +1253,6 @@ collision_layer = 2
 
 [node name="Node2D3" type="Node2D" parent="StaticBody2D6"]
 script = ExtResource( 2 )
-editor_debug = false
-curve_bake_interval = 20.0
 _points = SubResource( 266 )
 material_overrides = {
 
@@ -1372,7 +1363,7 @@ position = Vector2( 0, -40 )
 texture = ExtResource( 13 )
 
 [node name="Player" parent="." instance=ExtResource( 14 )]
-position = Vector2( 1500.2, -517.018 )
+position = Vector2( 296.921, -508.038 )
 collision_mask = 7
 
 [node name="StaticBody2D9" type="StaticBody2D" parent="."]
@@ -1398,3 +1389,6 @@ rotation = -0.258309
 
 [node name="Arche" parent="." instance=ExtResource( 20 )]
 position = Vector2( 1925.99, -135.403 )
+
+[node name="Tremplin" parent="." instance=ExtResource( 21 )]
+position = Vector2( 2347.3, 859.146 )

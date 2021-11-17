@@ -69,7 +69,8 @@ func enter(player: KinematicBody2D, previous_state: PlayerState) -> void:
 	player.anim_player.play("jumping")
 
 func _ready():
-	coyote_timer = get_node("/root/%s/Player/StateMachine/CoyoteTimer" % get_tree().current_scene.name)
+#	coyote_timer = get_node("/root/%s/Player/StateMachine/CoyoteTimer" % get_tree().current_scene.name)
+	coyote_timer = get_parent().get_node("CoyoteTimer")
 #	coyote_timer = Timer.new()
 #	add_child(coyote_timer)
 	coyote_timer.one_shot = true  # false pour que coyote_timer fonctionne bien

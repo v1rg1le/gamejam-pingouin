@@ -47,7 +47,8 @@ export var running_speed = 500
 func _ready():
 	_states = $"StateMachine"
 	_states.current._enter(self)
-	coyote_timer = get_node("/root/%s/Player/StateMachine/CoyoteTimer" % get_tree().current_scene.name)
+#	coyote_timer = get_node("/root/%s/Player/StateMachine/CoyoteTimer" % get_tree().current_scene.name)
+	coyote_timer = $"StateMachine/CoyoteTimer"
 
 func _on_EnemyDetector_area_entered(_area):
 	_velocity = calculate_stomp_velocity(_velocity, stomp_impulse)
