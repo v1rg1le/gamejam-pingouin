@@ -42,8 +42,11 @@ func _ready():
 		print(is_final_map)
 		if i == 0:
 			add_player(next_pos + UNIT_SIZE*Vector2(3,-5)
-			+Vector2(-slope_length-ramp_length-gap,-tan(deg2rad(32))*slope_length) 
+			  +Vector2(-slope_length-ramp_length-gap,-tan(deg2rad(32))*slope_length)
 			)
+			# send spawn position to LevelRandom
+#			get_parent()._set_spawn_position(next_pos + UNIT_SIZE*Vector2(3,-5))
+#			add_player(next_pos + UNIT_SIZE*Vector2(3,-5))
 			next_pos = add_sol(next_pos,false)
 		else:
 			next_pos = add_sol(
@@ -68,7 +71,7 @@ func add_sol(position :Vector2,is_final_map:bool):
 	
 	sol.world_seed = world_seed
 	sol.is_boost = is_boost
-	sol.boost_treshold = boost_treshold	
+	sol.boost_treshold = boost_treshold
 	sol.is_igloo = is_igloo
 	sol.igloo_treshold = igloo_treshold
 	sol.is_final_map = is_final_map
@@ -81,7 +84,7 @@ func add_sol(position :Vector2,is_final_map:bool):
 	next_pos = Vector2(0,0)
 #	print(next_pos)
 	return next_pos
-	
+
 func add_player(position :Vector2):#, rotation_degrees): #point_a:Vector2,point_b:Vector2):
 	var player = player_res.instance()
 #	var dvec = (point_b - point_a).normalized()
@@ -103,3 +106,5 @@ func add_tremplin(position :Vector2):#, rotation_degrees): #point_a:Vector2,poin
 	tremplin.global_position = position
 	add_child(tremplin)
 
+#	add_child(player)  # faire un script sur LevelRandom.gd pour instancier joueur
+#	get_parent().call_deferred("add_child", player)  # faire un script sur LevelRandom.gd pour instancier joueur
