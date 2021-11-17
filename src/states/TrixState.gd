@@ -11,7 +11,7 @@ func _handle_input(player: KinematicBody2D, delta: float) -> void:
 #		player._states.current._enter(player)
 #		return
 
-	if player.floor_detector.is_colliding():
+	if player.is_on_ground:
 		print('to staggered')
 		player._states.go_to_state(player, "staggered")
 #		player._states.current = player._states.staggered
@@ -20,7 +20,7 @@ func _handle_input(player: KinematicBody2D, delta: float) -> void:
 func _update(_player: KinematicBody2D) -> void:
 	pass
 
-func enter(player: KinematicBody2D) -> void:
+func enter(player: KinematicBody2D, _previous_state: PlayerState) -> void:
 #	player.animated_sprite.animation = "spin"
 	var animations = ["trick_spin", "trick_boule", "trick_etoile_ninja", "trick_carpe"]
 	randomize()

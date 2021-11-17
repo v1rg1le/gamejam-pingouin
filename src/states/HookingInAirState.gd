@@ -9,12 +9,12 @@ var stretch_factor_default = 15000
 var stretch_factor = stretch_factor_default
 
 func _handle_input(player: KinematicBody2D, delta: float) -> void:
-	if player.floor_detector.is_colliding() == true:
+	if player.is_on_ground:
 		player._states.current = player._states.hooking_on_ground
 		return
-	
+
 	._handle_input(player, delta)
-	player.snap = Vector2.ZERO
+#	player.snap = Vector2.ZERO
 
 	if !Input.is_action_pressed("hook"):
 		print('to air')
@@ -56,7 +56,7 @@ func pull_original(player: KinematicBody2D):
 		normale = -normale  #angle_to(Vector2(sign(player._velocity.x),0))  # avec la normale a droite, a multiplier * direction_player
 
 #		print(normale, "   ", direction_chain)
-	player.hook_tangent.cast_to = normale*100 # DEBUG
+#	player.hook_tangent.cast_to = normale*100 # DEBUG
 #		var angle_traction = (normale) * CHAIN_PULL
 	var angle_traction = (normale + direction_chain) * CHAIN_PULL
 	player.chain_velocity = angle_traction
@@ -110,14 +110,11 @@ func swing(player: KinematicBody2D, delta):
 	# vitesse lineaire pour faire le stretch 
 	player._velocity += (player.chain.tip - global_position).normalized() * stretch_factor * delta
 
-func _update(_player: KinematicBody2D) -> void:
-	pass
-
 func exit(player: KinematicBody2D) -> void:
 	player.chain.release()
 
-func enter(player: KinematicBody2D) -> void:
-	player.snap = Vector2.ZERO
+func enter(player: KinematicBody2D, _previous_state: PlayerState) -> void:
+#	player.snap = Vector2.ZERO
 	pull_factor = 1  # par default
 	player.chain_velocity = Vector2.ZERO
 	

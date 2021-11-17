@@ -13,7 +13,7 @@ func _handle_input(player: KinematicBody2D, delta: float) -> void:
 		clamp(player._velocity.y, -player.max_speed.y * coef, player.max_speed.y * coef)
 	)
 
-func enter(player: KinematicBody2D) -> void:
+func enter(player: KinematicBody2D, _previous_state: PlayerState) -> void:
 	player.anim_player.play("pumping")
 
 func _ready():

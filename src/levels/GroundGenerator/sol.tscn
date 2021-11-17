@@ -1,7 +1,7 @@
 [gd_scene load_steps=4 format=2]
 
 [ext_resource path="res://src/levels/GroundGenerator/sol.gd" type="Script" id=1]
-[ext_resource path="res://sprites/levels/LevelTest/tile_ice_up_1.png" type="Texture" id=2]
+[ext_resource path="res://sprites/levels/tiles/tile_ice_up_long1.png" type="Texture" id=2]
 
 [sub_resource type="Curve2D" id=1]
 bake_interval = 100.0
@@ -11,7 +11,7 @@ _data = {
 
 [node name="sol" type="StaticBody2D"]
 script = ExtResource( 1 )
-map_height = 1600
+map_height = 450
 
 [node name="Polygon2D" type="Polygon2D" parent="."]
 color = Color( 0.694118, 0.862745, 0.956863, 1 )
@@ -23,8 +23,9 @@ polygon = PoolVector2Array( -438.378, 283.176, -51.3656, 1725.75, 628.267, 1708.
 curve = SubResource( 1 )
 
 [node name="Line2D" type="Line2D" parent="."]
+position = Vector2( 0, 28 )
 points = PoolVector2Array( 306.637, 2734.61, 2769.26, 2266.05, 3545.49, 2129.99, 4347.5, 2034.2, 4946.52, 2129.99, 5843.27, 2534.88, 6639.85, 2815.39, 7238.96, 2968.09, 8195.4, 3071, 8776.68, 3188.33, 9320.5, 3354.16, 9841.52, 3546.71, 10245.5, 3693.96, 12824.5, 4189.46, 14141.2, 4209.23, 15316.4, 3765.68, 16757.3, 2952.01, 17638.7, 2731.64, 18961, 2935.06, 20740.6, 3440.36 )
-width = 32.0
+width = 64.0
 default_color = Color( 1, 1, 1, 1 )
 texture = ExtResource( 2 )
 texture_mode = 1
