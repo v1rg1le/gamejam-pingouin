@@ -1,7 +1,6 @@
 extends StaticBody2D
 
 const UNIT_SIZE = 64
-const width_point = 10
 export(int) var map_height = UNIT_SIZE*5 #ATTENTION PAS TROP HAUT SINON CA PLANTE
 
 var boost_res = preload("res://src/levels/boost/BoostArea.tscn")  # .instance()
@@ -25,7 +24,7 @@ export(float) var height = UNIT_SIZE*7
 export(float) var deck_length = UNIT_SIZE*8
 export(float) var flat_bottom_length = UNIT_SIZE*7
 export(float) var length = UNIT_SIZE*10
-export(float) var deck_length_start = UNIT_SIZE
+export(float) var deck_length_start = UNIT_SIZE*2
 
 #HALF PIPE 1
 #var map_width = 2*deck_length+2*length+flat_bottom_length
@@ -52,10 +51,7 @@ func _ready() -> void:
 	print("b=")
 	print(b)
 	randomize()
-#	var curve = $Path2D.curve
 	var curve = generate_curve()
-#	var polygon = curve.get_baked_points()
-#	print(polygon.size())
 
 	$CollisionPolygon2D.polygon = curve
 	$Polygon2D.polygon = curve
@@ -110,17 +106,17 @@ func _ready() -> void:
 
 func f(x,rayon):
 	var y
-	if x<deck_length:
-		y=height+deck_length_start #FIRST DECK
-	elif x>=deck_length && x<deck_length+height: #deck_length<...<deck_length+length FIRST RAMP
-		y = -sqrt(pow(height,2)-pow(x-deck_length-height,2))+height 
-	elif x>=deck_length+height && x<deck_length+height+flat_bottom_length:
-		y=0
-	elif x>=deck_length+height+flat_bottom_length && x<deck_length+2*height+flat_bottom_length:
+	if x < deck_length:
+		y = height + deck_length_start #FIRST DECK
+	elif x >= deck_length && x < deck_length + height: #deck_length<...<deck_length+length FIRST RAMP
+		y = -sqrt(pow(height,2) - pow(x-deck_length - height,2)) + height 
+	elif x >= deck_length + height && x < deck_length + height + flat_bottom_length:
+		y = 0
+	elif x >= deck_length + height + flat_bottom_length && x < deck_length + 2 * height + flat_bottom_length:
 		var offset = flat_bottom_length
-		y = -sqrt(pow(height,2)-pow(x-(deck_length+height+flat_bottom_length),2))+height  #-sqrt(pow(height,2)-pow(x-deck_length-height-offset,2)) 
+		y = -sqrt(pow(height,2) - pow(x - (deck_length + height + flat_bottom_length),2)) + height  #-sqrt(pow(height,2)-pow(x-deck_length-height-offset,2)) 
 	else:
-		y=height+deck_length_start
+		y = height + deck_length_start
 	return y 
 	
 	
@@ -133,14 +129,11 @@ func generate_curve() -> PoolVector2Array:
 	
 
 # INITIALISE LE POOLVECTOR2ARRY ET CREER LA BASE A GAUCHE
-	curve = PoolVector2Array (
-		[
-			Vector2(debut, polygon_large), #+coeff_pente*debut effet tobogan
-		]
-	)
+	curve = PoolVector2Array ( [
+		Vector2(debut, polygon_large), #+coeff_pente*debut effet tobogan
+	] )
 
-	for x in range(debut ,fin,UNIT_SIZE/32):
-
+	for x in range(debut, fin, UNIT_SIZE / 4):
 		var point
 
 #HALF PIPE 1
@@ -148,10 +141,13 @@ func generate_curve() -> PoolVector2Array:
 #HALF PIPE 2
 		point=Vector2(x,-f(x,height)) 
 		curve.append(point)
-	
-		
-	curve.append(Vector2(fin-UNIT_SIZE/32,polygon_large))
-	
+
+	curve.append(Vector2(fin - UNIT_SIZE / 4, polygon_large))
+	var p = range(debut, fin - UNIT_SIZE / 4, map_width / 16)
+	p.invert()
+	print(p)
+	for x in p:
+		curve.append(Vector2(x, polygon_large))
 	return curve
 		
 	# DEUX FOR POUR FAIRE LES INSTANCES L'UN APRES L'AUTRE
@@ -274,7 +270,6 @@ func add_boost(position :Vector2):
 	boost.global_position = position 
 	add_child(boost)
 
-
 func add_decoration(position :Vector2):#, rotation_degrees): #point_a:Vector2,point_b:Vector2):
 	var deco = decoration_res.instance()
 #	var dvec = (point_b - point_a).normalized()
@@ -298,4 +293,3 @@ func add_end(position :Vector2):#, rotation_degrees): #point_a:Vector2,point_b:V
 	end.global_position = position
 	add_child(end)
 #	return deco
-
