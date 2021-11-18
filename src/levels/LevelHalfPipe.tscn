@@ -6,7 +6,7 @@
 [ext_resource path="res://sprites/levels/Background_mountains.png" type="Texture" id=18]
 [ext_resource path="res://sprites/levels/Background_clouds.png" type="Texture" id=19]
 
-[node name="LevelChill917" type="Node2D"]
+[node name="LevelHalfPipe" type="Node2D"]
 
 [node name="ParallaxBackground" type="ParallaxBackground" parent="."]
 
