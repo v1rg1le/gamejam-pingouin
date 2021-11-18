@@ -1,7 +1,6 @@
 extends StaticBody2D
 
 const UNIT_SIZE = 64
-const width_point = 10
 export(int) var map_width = UNIT_SIZE*10
 export(int) var map_height = UNIT_SIZE*5 #ATTENTION PAS TROP HAUT SINON CA PLANTE
 
@@ -38,10 +37,7 @@ var end_x
 
 func _ready() -> void:
 	randomize()
-#	var curve = $Path2D.curve
 	var curve = generate_curve()
-#	var polygon = curve.get_baked_points()
-#	print(polygon.size())
 
 	$CollisionPolygon2D.polygon = curve
 	$Polygon2D.polygon = curve
@@ -49,84 +45,51 @@ func _ready() -> void:
 	
 	end_x = curve[curve.size()-1].x
 	print(end_x)
-	
-	
+
+func get_offset_y(x: float) -> float:
+	return map_height * self.simplex_noise.get_noise_2d(x,0) + coeff_pente * x
+
 func generate_curve() -> PoolVector2Array:
-#PAST
-#	var key = 0
 	var debut = 0
 	var fin = self.map_width
 	var curve 
-	
 
 # INITIALISE LE POOLVECTOR2ARRY ET CREER LA BASE A GAUCHE
 	curve = PoolVector2Array (
 		[
-			Vector2(debut,
-		map_height*self.simplex_noise.get_noise_2d(debut,0) + coeff_pente*debut + polygon_large), #+coeff_pente*debut effet tobogan
+			Vector2( debut,
+			get_offset_y(debut) + polygon_large ), #+coeff_pente*debut effet tobogan
 		]
 	)
-#	print("Curve Init")
-#	print(curve)
-	
 
-#CREER LA BASE DU POLYGON
-#	curve.append(
-#		Vector2(debut,
-#		self.simplex_noise.get_noise_2d(debut,0) + 6400)
-#	)
-#	curve.append(
-#		Vector2(fin,
-#		self.simplex_noise.get_noise_2d(fin,0) + 6400)
-#	)
-#	print(curve)
-
-	#random
-#	self.simplex_noise.seed = randi()
-#	static
 	self.simplex_noise.seed = self.world_seed.hash()
 	self.simplex_noise.octaves = self.noise_octaves
 	self.simplex_noise.period = self.noise_period
 	self.simplex_noise.persistence = self.noise_persistence
 	self.simplex_noise.lacunarity = self.noise_lacunarity
 
-#PAST
-#	mySS2D = get_node("/root/LevelGenerated/mySS2D_Open")
-#PAST
-#	for x in range(-self.map_width /2 ,self.map_width /2):
-#		for y in range(-self.map_height /2 ,self.map_height /2):
-#			if self.simplex_noise.get_noise_2d(x,y) < self.noise_threshold: #ICI
-#				self._set_autofile(x,y) #ICI
-#		self.tile_map.update_dirty_quadrants()
 	for x in range(debut ,fin,UNIT_SIZE):
-#		n_point += 1
-#		if coef_pente_animated:
-#			coeff_pente = get_coef_pente(n_point)
 		var point
-#		point=Vector2(x,
-#		map_height* lerp(self.simplex_noise.get_noise_2d(x,0),self.simplex_noise.get_noise_2d(x+UNIT_SIZE,0),0.1)
-#		 + coeff_pente*x) #+coeff_pente*x effet tobogan
-
-		point=Vector2(x,
-		map_height* self.simplex_noise.get_noise_2d(x,0)
-		 + coeff_pente*x) #+coeff_pente*x effet tobogan
-#		print(point)
+		point=Vector2(x, get_offset_y(x))
 		curve.append(point)
+
+	curve.append( Vector2( fin, get_offset_y(fin) + polygon_large )) 
 		
-	curve.append(
-		Vector2(fin,
-		map_height*self.simplex_noise.get_noise_2d(fin,0) + coeff_pente*fin + polygon_large)) 
+	var p = range(debut, fin, map_width/32)
+	p.invert()
+	print(p)
+	for x in p:
+		curve.append( Vector2( x, get_offset_y(x) + polygon_large ))
 		
 	# DEUX FOR POUR FAIRE LES INSTANCES L'UN APRES L'AUTRE
-	
+
+
 ##		INSTANCE BOOST
 	if is_boost:
 		for x in range(debut ,fin,UNIT_SIZE):
 			var point 
 			
-			point=Vector2(x,
-			map_height* self.simplex_noise.get_noise_2d(x,0)
-			 + coeff_pente*x)
+			point = Vector2(x, get_offset_y(x))
 			
 			if simplex_noise.get_noise_2d(x,0)<boost_treshold: #-1+1.4=0.4
 				add_boost(point)
@@ -134,16 +97,11 @@ func generate_curve() -> PoolVector2Array:
 		
 ##=		INSTANCE IGLOO
 	if is_igloo:
-		for x in range(debut ,fin,UNIT_SIZE):
-			var point 
+		for x in range(debut, fin, UNIT_SIZE):
+			var point = Vector2(x, get_offset_y(x))
 			
-			point=Vector2(x,
-			map_height* self.simplex_noise.get_noise_2d(x,0)
-			 + coeff_pente*x)
-			
-
-			if simplex_noise.get_noise_2d(x,0)>-igloo_treshold && simplex_noise.get_noise_2d(x,0)<igloo_treshold: # 1-1.5=-0.5
-	#			print(point_after)
+			if simplex_noise.get_noise_2d(x,0) > -igloo_treshold && \
+				simplex_noise.get_noise_2d(x,0) < igloo_treshold: # 1-1.5=-0.5
 				add_decoration(point)
 				
 ##=		INSTANCE IGLOO FIN
@@ -151,9 +109,7 @@ func generate_curve() -> PoolVector2Array:
 ##		INSTANCE WARNING
 	var soon_end = map_width*0.85
 	add_warning(
-		Vector2(soon_end,
-			map_height* self.simplex_noise.get_noise_2d(soon_end,0)
-			 + coeff_pente*soon_end)
+		Vector2(soon_end, get_offset_y(soon_end))
 	)
 ##		INSTANCE WARNING FIN
 
@@ -161,16 +117,9 @@ func generate_curve() -> PoolVector2Array:
 	if is_final_map:
 		var end = map_width*0.99
 		add_end(
-			Vector2(end,
-				map_height* self.simplex_noise.get_noise_2d(end,0)
-				 + coeff_pente*end)
+			Vector2(end, get_offset_y(end))
 		)
 ##		INSTANCE END FIN
-	#+ coeff_pente*fin effet tobogan
-#	print("Curve à la fin")
-#	print(curve)
-		
-#	print(n_point)
 	return curve
 
 func add_boost(position :Vector2):

@@ -83,38 +83,16 @@ func _physics_process(delta: float) -> void:
 #	_velocity = move_and_slide_with_snap(_velocity, snap, Vector2.UP)
 
 func _process(_delta): # camera follows player velocity
-	var x = _velocity.x / 2
-	var y = _velocity.y / 3
-	x = clamp(x, -20, 20)
-	y = clamp(y, -20, 20)
-	camera.offset = lerp(camera.offset, Vector2(x,y), 0.1)
-
-#	NE MARCHE PAS TRES BIEN
-#	var offset_min = 100
-#	var viewport = Vector2(
-#		get_viewport().size.x,
-#		get_viewport().size.y
-#	)
-#	var x = (_velocity.x / 3) #+ (viewport.x /2)
-#	var y = (_velocity.y / 4) #+ (viewport.y /2)
-#	var temp_offset
-#	print(camera.offset)
-#	print(Vector2(x,y))
-#
-#	if _velocity.x < 0:
-#		viewport.x = viewport.x / 2
-#	print(viewport)
-#
-#	temp_offset = lerp(camera.offset, Vector2(x,y), .5)
-#	print(temp_offset)
-#	temp_offset = Vector2(
-#		clamp(temp_offset.x, offset_min, viewport.x - offset_min),
-#		clamp(temp_offset.y, offset_min, viewport.y - offset_min)
-#	)
-#	print("-")
-#	print(temp_offset)
-#	camera.offset = temp_offset
-#	print("---")
+#	CAMERA MANU FONCTIONNE WOULLAH
+	var viewport = Vector2(
+		get_viewport().size.x,
+		get_viewport().size.y
+	)
+	print("(",_velocity.x/SUPER_MAX_SPEED.x,",",_velocity.y/SUPER_MAX_SPEED.y,")")
+	var camera_offeset_percentage_x = 0.8
+	var camera_offset_x =clamp(pow(abs(_velocity.x)/SUPER_MAX_SPEED.x,0.5),-camera_offeset_percentage_x,camera_offeset_percentage_x)
+	camera.position.x = lerp(camera.position.x,sign(_velocity.x)*camera_offset_x*camera.zoom.x*viewport.x/2,0.1)
+	print(camera.position.x)
 
 func calculate_stomp_velocity(linear_velocity: Vector2, impulse: float) -> Vector2:
 	var out = linear_velocity

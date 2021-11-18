@@ -44,6 +44,20 @@ func _ready():
 			add_player(next_pos + UNIT_SIZE*Vector2(3,-5)
 			  +Vector2(-slope_length-ramp_length-gap,-tan(deg2rad(32))*slope_length)
 			)
+##AJOUT DE 4 AUTRES JOUEURS
+#			add_player(next_pos + UNIT_SIZE*Vector2(2,-6)
+#			+Vector2(-slope_length-ramp_length-gap,-tan(deg2rad(32))*slope_length) 
+#			)
+#			add_player(next_pos + UNIT_SIZE*Vector2(1,-7)
+#			+Vector2(-slope_length-ramp_length-gap,-tan(deg2rad(32))*slope_length) 
+#			)
+#			add_player(next_pos + UNIT_SIZE*Vector2(4,-4)
+#			+Vector2(-slope_length-ramp_length-gap,-tan(deg2rad(32))*slope_length) 
+#			)
+#			add_player(next_pos + UNIT_SIZE*Vector2(5,-3)
+#			+Vector2(-slope_length-ramp_length-gap,-tan(deg2rad(32))*slope_length) 
+#			)
+## FIN AJOUT DE 4 AUTRES JOUEURS 
 			# send spawn position to LevelRandom
 #			get_parent()._set_spawn_position(next_pos + UNIT_SIZE*Vector2(3,-5))
 #			add_player(next_pos + UNIT_SIZE*Vector2(3,-5))
