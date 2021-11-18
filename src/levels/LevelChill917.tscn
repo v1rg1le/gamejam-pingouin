@@ -64,7 +64,7 @@ accel_mode = false
 
 [node name="sol" parent="Plateforms" instance=ExtResource( 1 )]
 collision_layer = 2
-map_width = 76800
 coeff_pente = 0.0
 coef_pente_animated = true
+map_width = 76800
 noise_period = 1050
