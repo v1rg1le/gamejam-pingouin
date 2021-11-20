@@ -19,6 +19,7 @@ var map_width = 2 * deck_length + 2 * map_height + flat_bottom_length
 var end_x = 0
 var end_y = 0
 
+
 func _ready() -> void:
 	randomize()
 	var curve = generate_curve()
@@ -29,7 +30,9 @@ func _ready() -> void:
 
 #	add_decoration("block", Vector2(deck_length + map_height + flat_bottom_length / 2, map_height))
 	add_decoration("block", Vector2(deck_length + map_height, -map_height - UNIT_SIZE * 6))
-	add_decoration("block", Vector2(deck_length + map_height + flat_bottom_length, -map_height - UNIT_SIZE * 6))
+	add_decoration(
+		"block", Vector2(deck_length + map_height + flat_bottom_length, -map_height - UNIT_SIZE * 6)
+	)
 ##HALF PIPE 1
 ## POSITION AU MILIEU
 #	add_decoration("finish_podium", Vector2(deck_length+length+(flat_bottom_length/2),0))
@@ -45,19 +48,22 @@ func _ready() -> void:
 #	add_decoration("ice_medium2", Vector2(0.15*deck_length,-map_height-UNIT_SIZE/4))
 
 ## POSITION SUR LE DECK DE DROITE
-	add_decoration("finish_gate", 
+	add_decoration(
+		"finish_gate",
 		Vector2(
 			1.5 * deck_length + 2 * map_height + flat_bottom_length,
 			-map_height - 7 * UNIT_SIZE / 8 - deck_length_start
 		)
 	)
-	add_decoration("ice_small", 
+	add_decoration(
+		"ice_small",
 		Vector2(
 			1.75 * deck_length + 2 * map_height + flat_bottom_length,
 			-map_height - UNIT_SIZE / 4 - deck_length_start
 		)
 	)
-	add_decoration("buisson", 
+	add_decoration(
+		"buisson",
 		Vector2(
 			1.15 * deck_length + 2 * map_height + flat_bottom_length,
 			-map_height - UNIT_SIZE / 4 - deck_length_start
@@ -65,9 +71,16 @@ func _ready() -> void:
 	)
 
 ## POSITION SUR LE DECK DE GAUCHE
-	add_decoration("finish_podium", Vector2(0.5 * deck_length, -map_height - 5 * UNIT_SIZE / 8 - deck_length_start))
-	add_decoration("ice_medium1", Vector2(0.85 * deck_length, -map_height - UNIT_SIZE / 4 - deck_length_start))
-	add_decoration("ice_medium2", Vector2(0.15 * deck_length, -map_height - UNIT_SIZE / 4 - deck_length_start))
+	add_decoration(
+		"finish_podium",
+		Vector2(0.5 * deck_length, -map_height - 5 * UNIT_SIZE / 8 - deck_length_start)
+	)
+	add_decoration(
+		"ice_medium1", Vector2(0.85 * deck_length, -map_height - UNIT_SIZE / 4 - deck_length_start)
+	)
+	add_decoration(
+		"ice_medium2", Vector2(0.15 * deck_length, -map_height - UNIT_SIZE / 4 - deck_length_start)
+	)
 
 	end_x = curve[curve.size() - 2].x
 	end_y = curve[curve.size() - 2].y
@@ -89,7 +102,7 @@ func _ready() -> void:
 #	return y
 
 
-func f(x, rayon):
+func f(x):
 	var y
 	if x < deck_length:
 		y = map_height + deck_length_start  #FIRST DECK
@@ -102,7 +115,10 @@ func f(x, rayon):
 		&& x < deck_length + 2 * map_height + flat_bottom_length
 	):
 		var offset = flat_bottom_length
-		y = -sqrt(pow(map_height, 2) - pow(x - (deck_length + map_height + flat_bottom_length), 2)) + map_height  #-sqrt(pow(map_height,2)-pow(x-deck_length-map_height-offset,2))
+		y = (
+			-sqrt(pow(map_height, 2) - pow(x - (deck_length + map_height + flat_bottom_length), 2))
+			+ map_height
+		)  #-sqrt(pow(map_height,2)-pow(x-deck_length-map_height-offset,2))
 	else:
 		y = map_height + deck_length_start
 	return y
@@ -121,12 +137,10 @@ func generate_curve() -> PoolVector2Array:
 	)
 
 	for x in range(debut, fin, UNIT_SIZE / 4):
-		var point
-
-	#HALF PIPE 1
-	#	point=Vector2(x,-f(x)) # Le moins permets de retourner l'axe de y (Godot a des coordonn�es en y inverser par rapport � celle utiliser par les matheux)
-	#HALF PIPE 2
-		point = Vector2(x, -f(x, map_height))
+		var point = Vector2(x, -f(x))
+		#HALF PIPE 1
+		#	point=Vector2(x,-f(x)) # Le moins permets de retourner l'axe de y (Godot a des coordonn�es en y inverser par rapport � celle utiliser par les matheux)
+		#HALF PIPE 2
 		curve.append(point)
 
 	curve.append(Vector2(fin - UNIT_SIZE / 4, polygon_large))
@@ -170,7 +184,7 @@ func generate_curve() -> PoolVector2Array:
 #
 ###		INSTANCE WARNING
 #	var soon_end = map_width*0.85
-#	add_decoration("warning", 
+#	add_decoration("warning",
 #		Vector2(soon_end,
 #			map_height* self.simplex_noise.get_noise_2d(soon_end,0)
 #			 + coeff_pente*soon_end)
@@ -180,7 +194,7 @@ func generate_curve() -> PoolVector2Array:
 ###		INSTANCE END
 #	if is_final_map:
 #		var end = map_width*0.99
-#		add_decoration("end", 
+#		add_decoration("end",
 #			Vector2(end,
 #				map_height* self.simplex_noise.get_noise_2d(end,0)
 #				 + coeff_pente*end)
@@ -189,7 +203,7 @@ func generate_curve() -> PoolVector2Array:
 #	curve.append(
 #		Vector2(fin,
 #		map_height*self.simplex_noise.get_noise_2d(fin,0) + coeff_pente*fin + polygon_large)) #+ coeff_pente*fin effet tobogan
-##	print("Curve à la fin")
+##	print("Curve � la fin")
 ##	print(curve)
 #
 ##	print(n_point)

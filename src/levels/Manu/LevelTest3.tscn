@@ -1,12 +1,14 @@
-[gd_scene load_steps=6 format=2]
+[gd_scene load_steps=7 format=2]
 
 [ext_resource path="res://src/levels/GroundGenerator/QuarterPipe.tscn" type="PackedScene" id=1]
+[ext_resource path="res://src/levels/Manu/LevelTest3.gd" type="Script" id=2]
 [ext_resource path="res://src/actors/Player.tscn" type="PackedScene" id=14]
 [ext_resource path="res://sprites/levels/Background_glacier.png" type="Texture" id=17]
 [ext_resource path="res://sprites/levels/Background_mountains.png" type="Texture" id=18]
 [ext_resource path="res://sprites/levels/Background_clouds.png" type="Texture" id=19]
 
 [node name="LevelTest3" type="Node2D"]
+script = ExtResource( 2 )
 
 [node name="ParallaxBackground" type="ParallaxBackground" parent="."]
 

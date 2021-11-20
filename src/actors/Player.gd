@@ -61,11 +61,25 @@ func _physics_process(delta: float) -> void:
 	_velocity.y += gravity * delta
 #	_velocity = Vector2( clamp(_velocity.x, 0, max_speed.x),
 #					clamp(_velocity.y, 0, max_speed.y) )
-	
+
 	_velocity.x = clamp(_velocity.x, -SUPER_MAX_SPEED.x, SUPER_MAX_SPEED.x)
 	_velocity.y = clamp(_velocity.y, -SUPER_MAX_SPEED.y, SUPER_MAX_SPEED.y)
 	# HookinInAirState clamp la _velocity avec player.MAX_SPEED_HOOKED
+
+	# DEBUG Label velocity, angle
+	_states.label3.text = str(Vector2(
+		floor(_velocity.length()),
+			-floor(rad2deg(_velocity.angle()))
+		))
+	print("-pos :",Vector3(
+		floor(position.x),
+			floor(position.y),
+				floor(rad2deg(_velocity.angle()))
+		))
+	print("  speed :",floor(_velocity.length()))
+#	_states.label3.text = str(Vector2(floor(position.x),floor(position.x)))
 	
+
 	_velocity = move_and_slide(_velocity)
 
 func _process(_delta): # camera follows player velocity on x

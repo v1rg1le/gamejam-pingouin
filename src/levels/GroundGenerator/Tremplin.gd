@@ -2,7 +2,7 @@ extends GroundGeneratorPart
 
 export(int) var map_height = UNIT_SIZE * 5  #ATTENTION PAS TROP HAUT SINON CA PLANTE
 
-export(int) var polygon_large = 6400
+export(int) var polygon_large = 3200
 
 export var slope_length = UNIT_SIZE * 40
 export(float) var entering_slope_angle = -32
