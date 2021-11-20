@@ -367,9 +367,9 @@ animations = [ {
 "name": "idle",
 "speed": 5.0
 }, {
-"frames": [ ExtResource( 23 ), ExtResource( 1 ) ],
+"frames": [ ExtResource( 16 ), ExtResource( 9 ), ExtResource( 15 ), ExtResource( 14 ) ],
 "loop": true,
-"name": "running",
+"name": "staggered",
 "speed": 5.0
 }, {
 "frames": [ ExtResource( 13 ) ],
@@ -377,14 +377,24 @@ animations = [ {
 "name": "pumping",
 "speed": 5.0
 }, {
-"frames": [ ExtResource( 16 ), ExtResource( 9 ), ExtResource( 15 ), ExtResource( 14 ) ],
+"frames": [ ExtResource( 23 ), ExtResource( 1 ) ],
 "loop": true,
-"name": "staggered",
+"name": "running",
 "speed": 5.0
 }, {
 "frames": [ ExtResource( 12 ) ],
 "loop": true,
 "name": "hooking",
+"speed": 5.0
+}, {
+"frames": [ ExtResource( 12 ), ExtResource( 8 ), ExtResource( 11 ), ExtResource( 10 ) ],
+"loop": true,
+"name": "spin",
+"speed": 4.0
+}, {
+"frames": [ ExtResource( 21 ) ],
+"loop": true,
+"name": "trick_etoile_ninja",
 "speed": 5.0
 }, {
 "frames": [ ExtResource( 7 ) ],
@@ -405,16 +415,6 @@ animations = [ {
 "frames": [ ExtResource( 20 ) ],
 "loop": true,
 "name": "trick_carpe",
-"speed": 5.0
-}, {
-"frames": [ ExtResource( 12 ), ExtResource( 8 ), ExtResource( 11 ), ExtResource( 10 ) ],
-"loop": true,
-"name": "spin",
-"speed": 4.0
-}, {
-"frames": [ ExtResource( 21 ) ],
-"loop": true,
-"name": "trick_etoile_ninja",
 "speed": 5.0
 } ]
 
@@ -462,7 +462,7 @@ anims/trick_spin = SubResource( 12 )
 [node name="AnimatedSprite" type="AnimatedSprite" parent="."]
 z_index = 100
 frames = SubResource( 13 )
-animation = "pumping"
+animation = "staggered"
 offset = Vector2( 0, -15 )
 
 [node name="GroundDetectorRight" type="RayCast2D" parent="."]
@@ -482,6 +482,5 @@ z_index = 500
 enabled = true
 cast_to = Vector2( 0, 30 )
 collision_mask = 2
-
 [connection signal="chain_hooked" from="Chain" to="." method="_on_Chain_chain_hooked"]
 [connection signal="animation_finished" from="AnimationPlayer" to="StateMachine" method="_on_AnimationPlayer_animation_finished"]

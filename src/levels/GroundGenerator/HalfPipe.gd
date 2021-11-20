@@ -18,7 +18,7 @@ var block_res= preload("res://src/levels/parts/Block.tscn")
 
 
 
-export(int) var polygon_large = 640
+export(int) var polygon_large = 256
 
 export(float) var height = UNIT_SIZE*7
 export(float) var deck_length = UNIT_SIZE*8
@@ -48,8 +48,8 @@ var end_x = 0
 var end_y = 0
 
 func _ready() -> void:
-	print("b=")
-	print(b)
+#	print("b=")
+#	print(b)
 	randomize()
 	var curve = generate_curve()
 
@@ -104,7 +104,7 @@ func _ready() -> void:
 #		y=height
 #	return y
 
-func f(x,rayon):
+func f(x):
 	var y
 	if x < deck_length:
 		y = height + deck_length_start #FIRST DECK
@@ -139,7 +139,7 @@ func generate_curve() -> PoolVector2Array:
 #HALF PIPE 1
 #		point=Vector2(x,-f(x)) # Le moins permets de retourner l'axe de y (Godot a des coordonnées en y inverser par rapport à celle utiliser par les matheux)
 #HALF PIPE 2
-		point=Vector2(x,-f(x,height)) 
+		point=Vector2(x,-f(x)) 
 		curve.append(point)
 
 	curve.append(Vector2(fin - UNIT_SIZE / 4, polygon_large))

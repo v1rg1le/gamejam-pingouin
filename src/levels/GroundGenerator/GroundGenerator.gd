@@ -1,8 +1,8 @@
 extends Node2D
 
 const UNIT_SIZE = 64 #Taille du joeur
-const map_width = UNIT_SIZE*300 #Largeur des ilots
-const max_height = UNIT_SIZE*3 #Hauteur des bosses
+const map_width = UNIT_SIZE*60 #Largeur des ilots
+const max_height = UNIT_SIZE*2 #Hauteur des bosses
 
 var sol_res = preload("res://src/levels/GroundGenerator/sol.tscn")
 var player_res = preload("res://src/actors/Player.tscn")
@@ -15,6 +15,10 @@ export var ramp_length = UNIT_SIZE*15
 export var gap = UNIT_SIZE * 5 #Gap horizontale entre chaque ilot
 export var gap_offset = 7 #Gap verticale = gap_offset*UNIT_SIZE
 export(int) var number_map = 2 #Nombre d'ilot sans trou généré sur la map
+export(int) var number_stage = 1 #Nombre d'ilot sans trou généré sur la map
+
+#A CHERCHER OU AFECTER A HALF PIPE
+export(float) var height = UNIT_SIZE*3 #Taille du HALF PIPE
 
 export(float) var slope_angle = 0
 export(float) var coeff_pente = tan(deg2rad(slope_angle))
@@ -38,38 +42,18 @@ func _ready():
 	
 ### GENERATION DES ILOTS
 	for i in range(number_map):
-		var is_final_map = (i == number_map -1)
-		print(is_final_map)
-		if i == 0:
-			add_player(next_pos + UNIT_SIZE*Vector2(3,-5)
-			  +Vector2(-slope_length-ramp_length-gap,-tan(deg2rad(32))*slope_length)
-			)
-##AJOUT DE 4 AUTRES JOUEURS
-#			add_player(next_pos + UNIT_SIZE*Vector2(2,-6)
-#			+Vector2(-slope_length-ramp_length-gap,-tan(deg2rad(32))*slope_length) 
-#			)
-#			add_player(next_pos + UNIT_SIZE*Vector2(1,-7)
-#			+Vector2(-slope_length-ramp_length-gap,-tan(deg2rad(32))*slope_length) 
-#			)
-#			add_player(next_pos + UNIT_SIZE*Vector2(4,-4)
-#			+Vector2(-slope_length-ramp_length-gap,-tan(deg2rad(32))*slope_length) 
-#			)
-#			add_player(next_pos + UNIT_SIZE*Vector2(5,-3)
-#			+Vector2(-slope_length-ramp_length-gap,-tan(deg2rad(32))*slope_length) 
-#			)
-## FIN AJOUT DE 4 AUTRES JOUEURS 
-			# send spawn position to LevelRandom
-#			get_parent()._set_spawn_position(next_pos + UNIT_SIZE*Vector2(3,-5))
-#			add_player(next_pos + UNIT_SIZE*Vector2(3,-5))
-			next_pos = add_sol(next_pos,false)
-		else:
-			next_pos = add_sol(
+		for j in range(number_stage):
+			var is_final_map = (i == number_map -1)
+
+			next_pos = add_sol(j*height*4*Vector2(0,1)+
 				next_pos + i*gap*Vector2(1,0) + i*(map_width+UNIT_SIZE)*Vector2(1,0)
-				+i*map_width*coeff_pente*Vector2(0,1) + i*gap_offset*UNIT_SIZE*Vector2(0,1)
-				,is_final_map)
+					+i*map_width*coeff_pente*Vector2(0,1) + i*gap_offset*UNIT_SIZE*Vector2(0,1)
+						,is_final_map)
+
 ### FIN GENERATION DES ILOTS
-	add_half_pipe(next_pos + number_map*gap*Vector2(1,0) + number_map*(map_width+UNIT_SIZE)*Vector2(1,0)
-				+number_map*map_width*coeff_pente*Vector2(0,1) + (number_map+1)*gap_offset*UNIT_SIZE*Vector2(0,1))
+			add_half_pipe(j*height*4*Vector2(0,1)+
+				next_pos + number_map*gap*Vector2(1,0) + number_map*(map_width+UNIT_SIZE)*Vector2(1,0)
+					+number_map*map_width*coeff_pente*Vector2(0,1) + (number_map+1)*gap_offset*UNIT_SIZE*Vector2(0,1))
 
 func add_sol(position :Vector2,is_final_map:bool):
 	var sol = sol_res.instance()

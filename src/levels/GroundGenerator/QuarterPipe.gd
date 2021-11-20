@@ -1,8 +1,10 @@
 extends StaticBody2D
 
 const UNIT_SIZE = 64
-export(int) var taille = UNIT_SIZE*20 #ATTENTION PAS TROP HAUT SINON CA PLANTE
-export(int) var rayon = UNIT_SIZE*15
+export(float) var taille = UNIT_SIZE*50 #ATTENTION PAS TROP HAUT SINON CA PLANTE
+export(float) var rayon = UNIT_SIZE*45
+export(float,0,90) var out_angle = 45
+var angle = 90-out_angle
 
 var boost_res = preload("res://src/levels/boost/BoostArea.tscn")  # .instance()
 
@@ -51,16 +53,21 @@ func generate_curve() -> PoolVector2Array:
 			Vector2(taille/4, taille),
 			Vector2(taille/2, taille),
 			Vector2(3*taille/4, taille),
-			Vector2(taille, taille), 
-
+			Vector2(taille, taille),
 		]
 	)
-	for teta in range(90 ,181,2):
+	if angle != 0:
+		curve.append(Vector2(cos(deg2rad(90-angle)), 0) *rayon 
+				+ Vector2(taille+taille-rayon, taille))
+		curve.append(
+			Vector2(cos(deg2rad(90-angle)), sin(deg2rad(90-angle))) *rayon 
+				+ Vector2(taille+taille-rayon, 0))
+
+	for teta in range(90-angle ,181,1):
 		var point
 		point=Vector2(cos(deg2rad(teta)), sin(deg2rad(teta))) *rayon + Vector2(taille, 0)
 		curve.append(point)
 	curve.append(Vector2(0, 0))
-
 	return curve
 		
 
