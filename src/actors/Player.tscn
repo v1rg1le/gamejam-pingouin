@@ -372,19 +372,19 @@ animations = [ {
 "name": "staggered",
 "speed": 5.0
 }, {
-"frames": [ ExtResource( 13 ) ],
-"loop": true,
-"name": "pumping",
-"speed": 5.0
-}, {
 "frames": [ ExtResource( 23 ), ExtResource( 1 ) ],
 "loop": true,
 "name": "running",
 "speed": 5.0
 }, {
-"frames": [ ExtResource( 12 ) ],
+"frames": [ ExtResource( 13 ) ],
 "loop": true,
-"name": "hooking",
+"name": "pumping",
+"speed": 5.0
+}, {
+"frames": [ ExtResource( 21 ) ],
+"loop": true,
+"name": "trick_etoile_ninja",
 "speed": 5.0
 }, {
 "frames": [ ExtResource( 12 ), ExtResource( 8 ), ExtResource( 11 ), ExtResource( 10 ) ],
@@ -402,14 +402,24 @@ animations = [ {
 "name": "fly",
 "speed": 5.0
 }, {
-"frames": [ ExtResource( 22 ) ],
+"frames": [ ExtResource( 12 ) ],
 "loop": true,
-"name": "trick_boule",
+"name": "hooking",
 "speed": 5.0
+}, {
+"frames": [ ExtResource( 12 ), ExtResource( 8 ), ExtResource( 11 ), ExtResource( 10 ) ],
+"loop": true,
+"name": "spin",
+"speed": 4.0
 }, {
 "frames": [ ExtResource( 17 ), ExtResource( 19 ), ExtResource( 18 ) ],
 "loop": true,
 "name": "stuck",
+"speed": 5.0
+}, {
+"frames": [ ExtResource( 22 ) ],
+"loop": true,
+"name": "trick_boule",
 "speed": 5.0
 }, {
 "frames": [ ExtResource( 20 ) ],

@@ -4,9 +4,6 @@ export var stomp_impulse: = 500.0
 var facing: int = 1
 var _states: StateMachine
 onready var animated_sprite = $"AnimatedSprite"
-#var snap: Vector2 = Vector2.DOWN
-#onready var floor_detector: RayCast2D = $"FloorDetector"
-#onready var rotator: = $"Rotator"
 
 export var pump_accel_factor = 1.3
 
@@ -47,11 +44,7 @@ export var running_speed = 500
 func _ready():
 	_states = $"StateMachine"
 	_states.current._enter(self)
-#	coyote_timer = get_node("/root/%s/Player/StateMachine/CoyoteTimer" % get_tree().current_scene.name)
 	coyote_timer = $"StateMachine/CoyoteTimer"
-
-func _on_EnemyDetector_area_entered(_area):
-	_velocity = calculate_stomp_velocity(_velocity, stomp_impulse)
 
 func _physics_process(delta: float) -> void:
 	is_on_ground = ground_detector_right.is_colliding() and ground_detector_left.is_colliding()
@@ -65,12 +58,7 @@ func _physics_process(delta: float) -> void:
 		facing = 1 if _velocity.x > 0 else -1
 	animated_sprite.flip_h = facing != 1
 
-#	snap = (floor_detector.position + floor_detector.cast_to)
-#	print('--')
-#	print(_velocity.y)
 	_velocity.y += gravity * delta
-#	print(gravity * delta)
-#	print(_velocity.y)
 #	_velocity = Vector2( clamp(_velocity.x, 0, max_speed.x),
 #					clamp(_velocity.y, 0, max_speed.y) )
 
@@ -93,25 +81,19 @@ func _physics_process(delta: float) -> void:
 	
 
 	_velocity = move_and_slide(_velocity)
-#	_velocity = move_and_slide_with_snap(_velocity, Vector2.DOWN, Vector2.UP)
-#	_velocity = move_and_slide_with_snap(_velocity, snap, Vector2.UP)
 
-func _process(_delta): # camera follows player velocity
+func _process(_delta): # camera follows player velocity on x
 #	CAMERA MANU FONCTIONNE WOULLAH
 	var viewport = Vector2(
 		get_viewport().size.x,
 		get_viewport().size.y
 	)
-#	print("(",_velocity.x/SUPER_MAX_SPEED.x,",",_velocity.y/SUPER_MAX_SPEED.y,")")
 	var camera_offset_percentage_x = 0.8
-	var camera_offset_x =clamp(pow(abs(_velocity.x)/SUPER_MAX_SPEED.x,0.5),-camera_offset_percentage_x,camera_offset_percentage_x)
-	camera.offset.x = lerp(camera.offset.x,sign(_velocity.x)*camera_offset_x*camera.zoom.x*viewport.x/2,0.1)
-#	print(camera.position.x)
-
-func calculate_stomp_velocity(linear_velocity: Vector2, impulse: float) -> Vector2:
-	var out = linear_velocity
-	out.y = -impulse
-	return out
+	var camera_offset_x = clamp(
+		pow( abs(_velocity.x) / SUPER_MAX_SPEED.x, 0.5),
+		-camera_offset_percentage_x,
+		camera_offset_percentage_x)
+	camera.offset.x = lerp( camera.offset.x , sign(_velocity.x) * camera_offset_x * camera.zoom.x * viewport.x / 2, 0.1)
 
 func handle_input(delta: float) -> void:
 	_states.current._handle_input(self, delta)
