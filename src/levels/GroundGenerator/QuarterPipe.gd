@@ -1,7 +1,9 @@
 extends GroundGeneratorPart
 
-export(int) var map_height = UNIT_SIZE * 7  #ATTENTION PAS TROP HAUT SINON CA PLANTE
-export(int) var rayon = UNIT_SIZE * 5  #ATTENTION rayon < map_height sinon �a plante
+export(int) var map_height = UNIT_SIZE * 50  #ATTENTION PAS TROP HAUT SINON CA PLANTE
+export(int) var rayon = UNIT_SIZE * 45  #ATTENTION rayon < map_height sinon ca plante
+export(float,0,90) var out_angle = 45
+var angle = 90-out_angle
 
 export(int) var polygon_large = 640
 
@@ -21,7 +23,7 @@ func _ready() -> void:
 
 func generate_curve() -> PoolVector2Array:
 	var curve
-## QUARTER PIPE
+	## QUARTER PIPE
 	curve = PoolVector2Array(
 		[
 			Vector2(0, 0),
@@ -35,10 +37,19 @@ func generate_curve() -> PoolVector2Array:
 			Vector2(map_height, map_height),
 		]
 	)
-	for teta in range(90, 181, 2):
+	if angle != 0:
+		curve.append(
+			Vector2(cos(deg2rad(90 - angle)), 0) * rayon
+			+ Vector2(map_height + map_height - rayon, map_height)
+		)
+		curve.append(
+			Vector2(cos(deg2rad(90 - angle)), sin(deg2rad(90 - angle))) * rayon
+			+ Vector2(map_height + map_height - rayon, 0)
+		)
+
+	for teta in range(90 - angle, 181, 1):
 		var point
 		point = Vector2(cos(deg2rad(teta)), sin(deg2rad(teta))) * rayon + Vector2(map_height, 0)
 		curve.append(point)
 	curve.append(Vector2(0, 0))
-
 	return curve

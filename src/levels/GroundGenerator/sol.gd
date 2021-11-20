@@ -59,32 +59,28 @@ func generate_curve() -> PoolVector2Array:
 	self.simplex_noise.persistence = self.noise_persistence
 	self.simplex_noise.lacunarity = self.noise_lacunarity
 
-	var p = range(debut, fin, 1.2 * UNIT_SIZE)
-	for x in p:
-		var point
-		point = Vector2(x, get_offset_y(x))
+	#POINT DU DESSUS
+	for x in range(debut, fin, 1.2 * UNIT_SIZE):
+		var point = Vector2(x, get_offset_y(x))
 		curve.append(point)
 
-	curve.append(Vector2(fin, get_offset_y(fin) + polygon_large))
-
+	#POINT DU DESSOUS
+	var p = range(debut, fin, 1.2 * UNIT_SIZE)
 	p.invert()
 	for x in p:
 		curve.append(Vector2(x, get_offset_y(x) + polygon_large))
 
 	# DEUX FOR POUR FAIRE LES INSTANCES L'UN APRES L'AUTRE
 
-##		INSTANCE BOOST
+	##		INSTANCE BOOST
 	if is_boost:
 		for x in range(debut, fin, UNIT_SIZE):
-			var point
-
-			point = Vector2(x, get_offset_y(x))
+			var point = Vector2(x, get_offset_y(x))
 
 			if simplex_noise.get_noise_2d(x, 0) < boost_treshold:  #-1+1.4=0.4
 				add_decoration("boost", point)
-##		INSTANCE BOOST FIN
 
-##=		INSTANCE IGLOO
+	##		INSTANCE IGLOO
 	if is_igloo:
 		for x in range(debut, fin, UNIT_SIZE):
 			var point = Vector2(x, get_offset_y(x))
@@ -95,16 +91,13 @@ func generate_curve() -> PoolVector2Array:
 			):  # 1-1.5=-0.5
 				add_decoration("igloo", point)
 
-##=		INSTANCE IGLOO FIN
-
-##		INSTANCE WARNING
+	##		INSTANCE WARNING
 	var soon_end = map_width * 0.85
 	add_decoration("warning", Vector2(soon_end, get_offset_y(soon_end)))
-##		INSTANCE WARNING FIN
 
-##		INSTANCE END
+	##		INSTANCE END
 	if is_final_map:
 		var end = map_width * 0.99
 		add_decoration("end", Vector2(end, get_offset_y(end)))
-##		INSTANCE END FIN
+	
 	return curve

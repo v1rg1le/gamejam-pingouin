@@ -2,7 +2,7 @@ extends Node2D
 
 const UNIT_SIZE = 64  # Taille du joeur
 const map_width = UNIT_SIZE * 300  # Largeur des ilots
-const max_height = UNIT_SIZE * 3  # Hauteur des bosses
+const map_height = UNIT_SIZE * 3  # Hauteur des bosses
 
 var sol_res = preload("res://src/levels/GroundGenerator/sol.tscn")
 var player_res = preload("res://src/actors/Player.tscn")
@@ -36,13 +36,15 @@ func _ready():
 	var next_pos = Vector2(0, 0)
 	add_tremplin(Vector2(-slope_length - ramp_length - gap, -tan(deg2rad(32)) * slope_length))
 
-### GENERATION DES ILOTS
+	### GENERATION DES ILOTS
 	for i in range(number_map):
 		for j in range(number_stage):
 			var is_final_map = i == number_map - 1
+
 			next_pos = add_sol(
 				(
-					next_pos
+					j * map_height * 4 * Vector2(0, 1)
+					+ next_pos
 					+ i * gap * Vector2(1, 0)
 					+ i * (map_width + UNIT_SIZE) * Vector2(1, 0)
 					+ i * map_width * coeff_pente * Vector2(0, 1)
@@ -50,16 +52,18 @@ func _ready():
 				),
 				is_final_map
 			)
-		### FIN GENERATION DES ILOTS
-		add_half_pipe(
-			(
-				next_pos
-				+ number_map * gap * Vector2(1, 0)
-				+ number_map * (map_width + UNIT_SIZE) * Vector2(1, 0)
-				+ number_map * map_width * coeff_pente * Vector2(0, 1)
-				+ (number_map + 1) * gap_offset * UNIT_SIZE * Vector2(0, 1)
+
+	### FIN GENERATION DES ILOTS
+			add_half_pipe(
+				(
+					j * map_height * 4 * Vector2(0, 1)
+					+ next_pos
+					+ number_map * gap * Vector2(1, 0)
+					+ number_map * (map_width + UNIT_SIZE) * Vector2(1, 0)
+					+ number_map * map_width * coeff_pente * Vector2(0, 1)
+					+ (number_map + 1) * gap_offset * UNIT_SIZE * Vector2(0, 1)
+				)
 			)
-		)
 
 
 func add_sol(position: Vector2, is_final_map: bool):
@@ -82,7 +86,7 @@ func add_sol(position: Vector2, is_final_map: bool):
 	sol.is_final_map = is_final_map
 
 	sol.map_width = map_width
-	sol.map_height = max_height
+	sol.map_height = map_height
 	sol.position = position
 #	print(sol.noise_period)
 	add_child(sol)
