@@ -1,7 +1,9 @@
 extends GroundGeneratorPart
 
-export(int) var map_height = UNIT_SIZE * 7  #ATTENTION PAS TROP HAUT SINON CA PLANTE
-export(int) var rayon = UNIT_SIZE * 5  #ATTENTION rayon < map_height sinon ca plante
+export(int) var map_height = UNIT_SIZE * 50  #ATTENTION PAS TROP HAUT SINON CA PLANTE
+export(int) var rayon = UNIT_SIZE * 45  #ATTENTION rayon < map_height sinon ca plante
+export(float,0,90) var out_angle = 45
+var angle = 90-out_angle
 
 export(int) var polygon_large = 640
 

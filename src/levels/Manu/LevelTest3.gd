@@ -15,7 +15,7 @@ var half_pipe_res = preload("res://src/levels/GroundGenerator/HalfPipe.tscn")
 # export(float) var max_height = UNIT_SIZE*7 
 
 const UNIT_SIZE = 64
-export(float) var taille = UNIT_SIZE*50 #ATTENTION PAS TROP HAUT SINON CA PLANTE
+export(float) var map_height = UNIT_SIZE*50 #ATTENTION PAS TROP HAUT SINON CA PLANTE
 export(float) var rayon = UNIT_SIZE*45
 export(float,0,90) var out_angle = 45
 
@@ -49,7 +49,7 @@ func add_res(position :Vector2,res_name:String):#, rotation_degrees): #point_a:V
 		"quarter":
 			res = quarter_res.instance()
 #			res.taille = taille
-			res.taille = UNIT_SIZE*20
+			res.map_height = UNIT_SIZE*20
 			res.rayon = UNIT_SIZE*15
 #			res.rayon = rayon
 			res.out_angle = 0

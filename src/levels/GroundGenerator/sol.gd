@@ -61,7 +61,7 @@ func generate_curve() -> PoolVector2Array:
 
 	#POINT DU DESSUS
 	for x in range(debut, fin, 1.2 * UNIT_SIZE):
-		var  = Vector2(x, get_offset_y(x))
+		var point = Vector2(x, get_offset_y(x))
 		curve.append(point)
 
 	#POINT DU DESSOUS
