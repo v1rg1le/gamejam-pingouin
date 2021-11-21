@@ -22,18 +22,19 @@ export(float,0,90) var out_angle = 45
 
 # Called when the node enters the scene tree for the first time.
 func _ready():
-	var offset = UNIT_SIZE*Vector2(-5,5)
+	var offset = UNIT_SIZE*Vector2(-5,2)
+	add_res(UNIT_SIZE*Vector2(-5,-4),"boost")
 	add_res(Vector2(10000,2790)+offset,"quarter")
 	#QUELQUES TRUC A HOOK
 	for i in range(4):
-		add_res(Vector2(11900, 1100)+UNIT_SIZE*Vector2(10*i,0),"block")
+		add_res(Vector2(11900, 844)+UNIT_SIZE*Vector2(10*i,0),"block")
 		
 	for j in range(8):
 		if j!=1:
-			add_res(Vector2(11900, 1100)+UNIT_SIZE*Vector2(30,j*5),"block")
-		add_res(Vector2(11900, 1100)+UNIT_SIZE*Vector2(40,j*5),"block")
+			add_res(Vector2(11900, 844)+UNIT_SIZE*Vector2(30,j*5),"block")
+		add_res(Vector2(11900, 844)+UNIT_SIZE*Vector2(40,j*5),"block")
 
-	add_res(Vector2(11900, 1100)+UNIT_SIZE*Vector2(30,50),"half_pipe")
+	add_res(Vector2(11900, 844)+UNIT_SIZE*Vector2(30,50),"half_pipe")
 	pass # Replace with function body.
 
 func add_res(position :Vector2,res_name:String):#, rotation_degrees): #point_a:Vector2,point_b:Vector2):
@@ -45,6 +46,9 @@ func add_res(position :Vector2,res_name:String):#, rotation_degrees): #point_a:V
 		"boost":
 			res = boost_res.instance()
 			res.impulse_mode = true
+#			res.accel_mode = true
+#			res.rotation_degrees = -90
+			res.impulse_dir = Vector2(1,0)
 			res.global_position = position
 		"quarter":
 			res = quarter_res.instance()

@@ -12,7 +12,6 @@ var chain_velocity := Vector2(0,0)
 onready var chain_length = 0
 export(bool) var chain_fixed = false
 
-# from Actor
 const SUPER_MAX_SPEED = Vector2(3000, 3000)
 const MAX_SPEED_HOOKED = Vector2(1000,1000)
 const MIN_SPEED_HOOKED = Vector2(200,200)
@@ -71,12 +70,12 @@ func _physics_process(delta: float) -> void:
 		floor(_velocity.length()),
 			-floor(rad2deg(_velocity.angle()))
 		))
-	print("-pos :",Vector3(
-		floor(position.x),
-			floor(position.y),
-				floor(rad2deg(_velocity.angle()))
-		))
-	print("  speed :",floor(_velocity.length()))
+#	print("-pos :",Vector3(
+#		floor(position.x),
+#			floor(position.y),
+#				floor(rad2deg(_velocity.angle()))
+#		))
+#	print("  speed :",floor(_velocity.length()))
 #	_states.label3.text = str(Vector2(floor(position.x),floor(position.x)))
 	
 
@@ -85,8 +84,8 @@ func _physics_process(delta: float) -> void:
 func _process(_delta): # camera follows player velocity on x
 #	CAMERA MANU FONCTIONNE WOULLAH
 	var viewport = Vector2(
-		get_viewport().size.x,
-		get_viewport().size.y
+		get_viewport_rect().size.x,
+		get_viewport_rect().size.y
 	)
 	var camera_offset_percentage_x = 0.8
 	var camera_offset_x = clamp(
@@ -94,6 +93,19 @@ func _process(_delta): # camera follows player velocity on x
 		-camera_offset_percentage_x,
 		camera_offset_percentage_x)
 	camera.offset.x = lerp( camera.offset.x , sign(_velocity.x) * camera_offset_x * camera.zoom.x * viewport.x / 2, 0.1)
+
+	# Plus le joueur va vite, plus on dézoome.
+	# Zoomer est plus lent que dézoomer.
+	var new_camera_zoom = 1 + max(abs(_velocity.x), abs(_velocity.y)) / SUPER_MAX_SPEED.x
+	var lerp_weight = .5 if new_camera_zoom > camera.zoom.y else .02
+	camera.zoom = lerp(
+		camera.zoom,
+		Vector2(
+			new_camera_zoom,
+			new_camera_zoom
+		),
+		lerp_weight
+	)
 
 func handle_input(delta: float) -> void:
 	_states.current._handle_input(self, delta)
