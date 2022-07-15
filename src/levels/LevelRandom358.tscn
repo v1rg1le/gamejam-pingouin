@@ -49,11 +49,9 @@ region_rect = Rect2( -3.104, 26.159, 7000, 298.478 )
 
 [node name="GroundGenerator" parent="." instance=ExtResource( 2 )]
 noise_period = 600
-is_boost = false
 
 [node name="GroundGenerator2" parent="." instance=ExtResource( 2 )]
 position = Vector2( 0, -1000 )
 scale = Vector2( 1, -1 )
 noise_period = 600
-is_boost = false
 is_igloo = false

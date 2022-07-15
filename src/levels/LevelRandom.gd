@@ -15,6 +15,8 @@ func _set_spawn_position(position: Vector2):
 func add_player():
 	var player = player_res.instance()
 	player.global_position = spawn_position
+	print('Player position')
 	print(spawn_position)
+#	breakpoint
 	add_child(player)  # faire un script sur LevelRandom.gd pour instancier joueur
 #	get_parent().call_deferred("add_child", player)  # faire un script sur LevelRandom.gd pour instancier joueur

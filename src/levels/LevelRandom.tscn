@@ -1,13 +1,16 @@
-[gd_scene load_steps=6 format=2]
+[gd_scene load_steps=7 format=2]
 
 [ext_resource path="res://src/levels/LevelRandom.gd" type="Script" id=1]
 [ext_resource path="res://src/levels/GroundGenerator/GroundGenerator.tscn" type="PackedScene" id=2]
+[ext_resource path="res://src/ui/UserInterface.tscn" type="PackedScene" id=3]
 [ext_resource path="res://sprites/levels/Background_glacier.png" type="Texture" id=17]
 [ext_resource path="res://sprites/levels/Background_mountains.png" type="Texture" id=18]
 [ext_resource path="res://sprites/levels/Background_clouds.png" type="Texture" id=19]
 
 [node name="LevelRandom" type="Node2D"]
 script = ExtResource( 1 )
+
+[node name="UserInterface" parent="." instance=ExtResource( 3 )]
 
 [node name="ParallaxBackground" type="ParallaxBackground" parent="."]
 
@@ -48,5 +51,5 @@ region_enabled = true
 region_rect = Rect2( -3.104, 26.159, 7000, 298.478 )
 
 [node name="GroundGenerator" parent="." instance=ExtResource( 2 )]
+coeff_pente = 0.3
 noise_period = 600
-is_boost = false

@@ -1,0 +1,22 @@
+[gd_scene load_steps=2 format=2]
+
+[ext_resource path="res://src/audio/SoundController.gd" type="Script" id=1]
+
+[node name="SoundController" type="Control"]
+anchor_right = 1.0
+anchor_bottom = 1.0
+script = ExtResource( 1 )
+__meta__ = {
+"_edit_use_anchors_": false
+}
+
+[node name="SoundStreamPlayer" type="AudioStreamPlayer" parent="."]
+bus = "Sound"
+
+[node name="SoundStreamPlayer2" type="AudioStreamPlayer" parent="."]
+bus = "Sound"
+
+[node name="UISoundStreamPlayer" type="AudioStreamPlayer" parent="."]
+bus = "UI"
+[connection signal="finished" from="SoundStreamPlayer" to="." method="_on_SoundStreamPlayer_finished"]
+[connection signal="finished" from="SoundStreamPlayer2" to="." method="_on_SoundStreamPlayer2_finished"]

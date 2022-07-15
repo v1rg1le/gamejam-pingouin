@@ -14,13 +14,14 @@
 [ext_resource path="res://addons/rmsmartshape/shapes/shape_anchor.gd" type="Script" id=12]
 [ext_resource path="res://icon.png" type="Texture" id=13]
 [ext_resource path="res://src/actors/Player.tscn" type="PackedScene" id=14]
-[ext_resource path="res://src/levels/decoration/PanelWarning.tscn" type="PackedScene" id=15]
+[ext_resource path="res://src/levels/decoration/PanelWarning_a_delete.tscn" type="PackedScene" id=15]
 [ext_resource path="res://src/levels/parts/StaticBody2DFish.tscn" type="PackedScene" id=16]
 [ext_resource path="res://src/levels/decoration/IceMedium1.tscn" type="PackedScene" id=17]
 [ext_resource path="res://src/levels/decoration/IceMedium2.tscn" type="PackedScene" id=18]
 [ext_resource path="res://src/levels/decoration/IceSmall.tscn" type="PackedScene" id=19]
 [ext_resource path="res://src/levels/Arche.tscn" type="PackedScene" id=20]
 [ext_resource path="res://src/levels/GroundGenerator/Tremplin.tscn" type="PackedScene" id=21]
+
 
 [sub_resource type="Resource" id=158]
 script = ExtResource( 5 )

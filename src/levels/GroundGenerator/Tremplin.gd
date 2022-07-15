@@ -6,8 +6,8 @@ export(int) var map_height = UNIT_SIZE*5 #ATTENTION PAS TROP HAUT SINON CA PLANT
 
 var boost_res = preload("res://src/levels/boost/BoostArea.tscn")  # .instance()
 
-var decoration_res = preload("res://sprites/levels/decoration/Igloo.tscn") #Igloo
-var warning_res = preload("res://sprites/levels/decoration/Warning.tscn")
+var decoration_res = preload("res://src/levels/decoration/Igloo.tscn") #Igloo
+var warning_res = preload("res://src/levels/decoration/Warning.tscn")
 var end_res = preload("res://src/levels/Arche.tscn")
 var finish_podium_res= preload("res://src/levels/decoration/FinishPodium.tscn")
 var finish_gate_res= preload("res://src/levels/FinishGate.tscn")
@@ -78,8 +78,8 @@ func f(x): #Tremplin
 	if x<=slope_length:
 		y = -tan(deg2rad(32))*x
 	else:
-		y = -tan(deg2rad(32))*x + pow((x-slope_length)/(UNIT_SIZE/2),2)
-		print(pow(x-slope_length,2))
+		y = -tan(deg2rad(32))*x + pow((x-slope_length)/(UNIT_SIZE/2.0),2)
+#		print(pow(x-slope_length,2))
 	return y
 
 	

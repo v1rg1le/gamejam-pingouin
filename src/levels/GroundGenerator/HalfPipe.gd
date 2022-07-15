@@ -6,8 +6,8 @@ export(int) var map_height = UNIT_SIZE*5 #ATTENTION PAS TROP HAUT SINON CA PLANT
 
 var boost_res = preload("res://src/levels/boost/BoostArea.tscn")  # .instance()
 
-var decoration_res = preload("res://sprites/levels/decoration/Igloo.tscn") #Igloo
-var warning_res = preload("res://sprites/levels/decoration/Warning.tscn")
+var decoration_res = preload("res://src/levels/decoration/Igloo.tscn") #Igloo
+var warning_res = preload("res://src/levels/decoration/Warning.tscn")
 var end_res = preload("res://src/levels/Arche.tscn")
 var finish_podium_res= preload("res://src/levels/decoration/FinishPodium.tscn")
 var finish_gate_res= preload("res://src/levels/FinishGate.tscn")
@@ -15,7 +15,8 @@ var ice_medium1_res= preload("res://src/levels/decoration/IceMedium1.tscn")
 var ice_medium2_res= preload("res://src/levels/decoration/IceMedium2.tscn")
 var ice_small_res= preload("res://src/levels/decoration/IceSmall.tscn")
 var buisson_res= preload("res://src/levels/decoration/Buisson.tscn")
-var block_res= preload("res://src/levels/parts/Block.tscn")
+#var block_res= preload("res://src/levels/parts/Block.tscn")
+var block_res= preload("res://src/levels/parts/StaticBody2DFish.tscn")
 
 
 
@@ -49,8 +50,8 @@ var end_x = 0
 var end_y = 0
 
 func _ready() -> void:
-	print("b=")
-	print(b)
+#	print("b=")
+#	print(b)
 	randomize()
 #	var curve = $Path2D.curve
 	var curve = generate_curve()
@@ -81,14 +82,14 @@ func _ready() -> void:
 #	add_ice_medium2(Vector2(0.15*deck_length,-height-UNIT_SIZE/4))
 	
 ## POSITION SUR LE DECK DE DROITE
-	add_finish_gate(Vector2(1.5*deck_length+2*height+flat_bottom_length,-height-7*UNIT_SIZE/8-deck_length_start))
-	add_ice_small(Vector2(1.75*deck_length+2*height+flat_bottom_length,-height-UNIT_SIZE/4-deck_length_start))
-	add_buisson(Vector2(1.15*deck_length+2*height+flat_bottom_length,-height-UNIT_SIZE/4-deck_length_start))
+	add_finish_gate(Vector2(1.5*deck_length+2*height+flat_bottom_length,-height-7*UNIT_SIZE/8.0-deck_length_start))
+	add_ice_small(Vector2(1.75*deck_length+2*height+flat_bottom_length,-height-UNIT_SIZE/4.0-deck_length_start))
+	add_buisson(Vector2(1.15*deck_length+2*height+flat_bottom_length,-height-UNIT_SIZE/4.0-deck_length_start))
 
 ## POSITION SUR LE DECK DE GAUCHE
-	add_finish_podium(Vector2(0.5*deck_length,-height-5*UNIT_SIZE/8-deck_length_start))
-	add_ice_medium1(Vector2(0.85*deck_length,-height-UNIT_SIZE/4-deck_length_start))
-	add_ice_medium2(Vector2(0.15*deck_length,-height-UNIT_SIZE/4-deck_length_start))
+	add_finish_podium(Vector2(0.5*deck_length,-height-5*UNIT_SIZE/8.0-deck_length_start))
+	add_ice_medium1(Vector2(0.85*deck_length,-height-UNIT_SIZE/4.0-deck_length_start))
+	add_ice_medium2(Vector2(0.15*deck_length,-height-UNIT_SIZE/4.0-deck_length_start))
 	
 	end_x = curve[curve.size()-2].x
 	end_y = curve[curve.size()-2].y
@@ -108,7 +109,7 @@ func _ready() -> void:
 #		y=height
 #	return y
 
-func f(x,rayon):
+func f(x, _rayon):
 	var y
 	if x<deck_length:
 		y=height+deck_length_start #FIRST DECK
@@ -117,7 +118,7 @@ func f(x,rayon):
 	elif x>=deck_length+height && x<deck_length+height+flat_bottom_length:
 		y=0
 	elif x>=deck_length+height+flat_bottom_length && x<deck_length+2*height+flat_bottom_length:
-		var offset = flat_bottom_length
+		var _offset = flat_bottom_length
 		y = -sqrt(pow(height,2)-pow(x-(deck_length+height+flat_bottom_length),2))+height  #-sqrt(pow(height,2)-pow(x-deck_length-height-offset,2)) 
 	else:
 		y=height+deck_length_start
@@ -139,7 +140,7 @@ func generate_curve() -> PoolVector2Array:
 		]
 	)
 
-	for x in range(debut ,fin,UNIT_SIZE/32):
+	for x in range(debut ,fin,UNIT_SIZE/32.0):
 
 		var point
 
@@ -150,7 +151,7 @@ func generate_curve() -> PoolVector2Array:
 		curve.append(point)
 	
 		
-	curve.append(Vector2(fin-UNIT_SIZE/32,polygon_large))
+	curve.append(Vector2(fin-UNIT_SIZE/32.0,polygon_large))
 	
 	return curve
 		

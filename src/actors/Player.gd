@@ -41,6 +41,7 @@ onready var anim_player = $AnimationPlayer
 
 var direction: Vector2
 
+export(bool) var DEBUG_CAM = false
 onready var camera: = $Camera2D
 export var running_speed = 500
 
@@ -82,13 +83,39 @@ func _physics_process(delta: float) -> void:
 #	_velocity = move_and_slide_with_snap(_velocity, Vector2.DOWN, Vector2.UP)
 #	_velocity = move_and_slide_with_snap(_velocity, snap, Vector2.UP)
 
+
+func _input(event):
+	if Input.is_action_pressed("debug_cam_right") and DEBUG_CAM:
+		camera.offset += Vector2(1000,0)
+#		camera.offset += lerp(camera.offset, Vector2(1000,0), 0.1)
+	elif Input.is_action_pressed("debug_cam_left")  and DEBUG_CAM:
+		camera.offset -= Vector2(1000,0)
+#		camera.offset += lerp(camera.offset, Vector2(-1000,0), 0.1)
+		
+	if event.is_action_pressed("toggle_debug"):
+		print('cam debug: ', DEBUG_CAM)
+		if DEBUG_CAM:
+			DEBUG_CAM = false
+			camera.zoom = Vector2(1,1)
+			set_process(true)
+		else:
+			DEBUG_CAM = true
+		
+
 func _process(_delta): # camera follows player velocity
+	
+	if DEBUG_CAM:
+		camera.zoom = Vector2(10,10)
+		set_process(false)
+		
 	var x = _velocity.x / 2
 	var y = _velocity.y / 3
 	x = clamp(x, -20, 20)
 	y = clamp(y, -20, 20)
 	camera.offset = lerp(camera.offset, Vector2(x,y), 0.1)
 
+
+	
 #	NE MARCHE PAS TRES BIEN
 #	var offset_min = 100
 #	var viewport = Vector2(
