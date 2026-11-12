@@ -3,8 +3,8 @@
 [ext_resource path="res://src/ui/ChangeSceneButton.gd" type="Script" id=1]
 
 [node name="ChangeSceneButton" type="Button"]
-margin_right = 556.0
-margin_bottom = 52.0
+offset_right = 556.0
+offset_bottom = 52.0
 size_flags_vertical = 3
 text = "PLAY"
 script = ExtResource( 1 )

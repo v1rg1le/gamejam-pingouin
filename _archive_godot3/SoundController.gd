@@ -1,9 +1,9 @@
 extends Node
 
 # Load the music player node
-onready var _sound_player = $SoundStreamPlayer
-onready var _sound_player_2 = $SoundStreamPlayer2
-onready var _ui_sound_player = $UISoundStreamPlayer
+@onready var _sound_player = $SoundStreamPlayer
+@onready var _sound_player_2 = $SoundStreamPlayer2
+@onready var _ui_sound_player = $UISoundStreamPlayer
 var sound
 var play_stopped = false
 
@@ -101,11 +101,11 @@ func _load_all_sounds():
 
 func get_files(path):
 	var files = []
-	var dir = Directory.new()
+	var dir = DirAccess.new()
 	dir.open(path)
-	dir.list_dir_begin()
+	dir.list_dir_begin() # TODOConverter3To4 fill missing arguments https://github.com/godotengine/godot/pull/40547
 	
-	print("NE marche pas avec export des .ogg")
+	print("NE marche pas avec export des super.ogg")
 #	print("Get files at: ", path)
 
 	while true:

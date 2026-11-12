@@ -1,9 +1,24 @@
 extends StaticBody2D
+# =============================================================================
+#  sol.gd — génération procédurale d'un "îlot" / spaghetti de glace
+#  [MIGRATION GODOT 4.7]
+#   - OpenSimplexNoise n'existe plus -> FastNoiseLite (type SIMPLEX).
+#     Correspondance des réglages : period -> frequency = 1/period,
+#     octaves -> fractal_octaves, persistence -> fractal_gain,
+#     lacunarity -> fractal_lacunarity. NB : l'algorithme de bruit est
+#     différent, donc un même "world_seed" ne donne plus EXACTEMENT le même
+#     relief qu'en Godot 3 (mêmes amplitudes / fréquences, formes différentes).
+#   - angle_to_point() a changé de sens en Godot 4 -> calcul explicite.
+#  [FIX VITESSE -> 0]
+#   - La collision est construite en SEGMENTS (contour seul) et non plus en
+#     morceaux convexes : les arêtes internes du découpage provoquaient des
+#     "collisions fantômes" qui stoppaient net le pingouin.
+# =============================================================================
 
 const UNIT_SIZE = 64
 const width_point = 10
-export(int) var map_width = UNIT_SIZE*10
-export(int) var map_height = UNIT_SIZE*5 #ATTENTION PAS TROP HAUT SINON CA PLANTE
+@export var map_width: int = UNIT_SIZE*10
+@export var map_height: int = UNIT_SIZE*5 #ATTENTION PAS TROP HAUT SINON CA PLANTE
 
 var boost_res = preload("res://src/levels/boost/BoostArea.tscn")
 var igloo = preload("res://src/levels/decoration/Igloo.tscn")
@@ -25,31 +40,31 @@ var decoration_res = igloo
 var warning_res = preload("res://src/levels/decoration/Warning.tscn")
 var end_res = preload("res://src/levels/Arche.tscn")
 
-export(int) var h = 40
-export(int) var polygon_large = h+20 #60  # 400# 6400
+@export var h: int = 40
+@export var polygon_large: int = h+20 #60  # 400# 6400
 
 
-export(float) var coeff_pente = 0
+@export var coeff_pente: float = 0
 
-onready var n_point = 0
+@onready var n_point = 0
 
-export(bool) var coef_pente_animated = false
-export(bool) var is_boost = false
-export var boost_treshold = 0.4
-export(bool) var is_igloo = false
-export var igloo_treshold = 0.01 #ATTENTION -igloo_treshold<...<igloo_treshold
-export(bool) var is_final_map = false
+@export var coef_pente_animated: bool = false
+@export var is_boost: bool = false
+@export var boost_treshold = 0.4
+@export var is_igloo: bool = false
+@export var igloo_treshold = 0.01 #ATTENTION -igloo_treshold<...<igloo_treshold
+@export var is_final_map: bool = false
 
-export(String) var world_seed = "LEO"
-export(int) var noise_octaves = 1
-export(int) var noise_period = 10000*0.7
-export(float) var noise_persistence = 0.2
-export(float) var noise_lacunarity = 3
+@export var world_seed: String = "LEO"
+@export var noise_octaves: int = 1
+@export var noise_period: int = 10000*0.7
+@export var noise_persistence: float = 0.2
+@export var noise_lacunarity: float = 3
 #export(float) var noise_threshold = 0.5
 
 var point_t1  # pour conserver le point precedent, pour pente + normal pour decoration
 
-var simplex_noise : OpenSimplexNoise = OpenSimplexNoise.new()
+var simplex_noise : FastNoiseLite = FastNoiseLite.new()
 
 #Permet d'avoir la position de la fin (x,y) y=end_height x=map_width * NUMERO MAP + SOMME DES GAP
 var end_y =coeff_pente*(map_width-UNIT_SIZE) + map_height*self.simplex_noise.get_noise_2d(map_width-UNIT_SIZE,0) 
@@ -62,6 +77,8 @@ func _ready() -> void:
 #	var polygon = curve.get_baked_points()
 #	print(polygon.size())
 
+	# [FIX VITESSE -> 0] contour en segments = plus d'arêtes internes fantômes
+	$CollisionPolygon2D.build_mode = CollisionPolygon2D.BUILD_SEGMENTS
 	$CollisionPolygon2D.polygon = curve
 	$Polygon2D.polygon = curve
 	$Line2D.points = curve
@@ -70,7 +87,7 @@ func _ready() -> void:
 #	print(end_x)
 	
 	
-func generate_curve() -> PoolVector2Array:
+func generate_curve() -> PackedVector2Array:
 #PAST
 #	var key = 0
 	var debut = 0
@@ -79,7 +96,7 @@ func generate_curve() -> PoolVector2Array:
 	
 
 # INITIALISE LE POOLVECTOR2ARRY ET CREER LA BASE A GAUCHE
-	curve = PoolVector2Array (
+	curve = PackedVector2Array (
 		[
 			Vector2(debut,
 		map_height*self.simplex_noise.get_noise_2d(debut,0) + coeff_pente*debut + h+20), #+coeff_pente*debut effet tobogan
@@ -105,10 +122,13 @@ func generate_curve() -> PoolVector2Array:
 #	self.simplex_noise.seed = randi()
 #	static
 	self.simplex_noise.seed = self.world_seed.hash()
-	self.simplex_noise.octaves = self.noise_octaves
-	self.simplex_noise.period = self.noise_period
-	self.simplex_noise.persistence = self.noise_persistence
-	self.simplex_noise.lacunarity = self.noise_lacunarity
+	# [MIGRATION GODOT 4.7] équivalents FastNoiseLite des réglages OpenSimplexNoise
+	self.simplex_noise.noise_type = FastNoiseLite.TYPE_SIMPLEX
+	self.simplex_noise.fractal_type = FastNoiseLite.FRACTAL_FBM
+	self.simplex_noise.fractal_octaves = self.noise_octaves
+	self.simplex_noise.frequency = 1.0 / max(1.0, float(self.noise_period))  # period -> frequency
+	self.simplex_noise.fractal_gain = self.noise_persistence                 # persistence -> gain
+	self.simplex_noise.fractal_lacunarity = self.noise_lacunarity
 
 #PAST
 #	mySS2D = get_node("/root/LevelGenerated/mySS2D_Open")
@@ -178,8 +198,8 @@ func generate_curve() -> PoolVector2Array:
 
 			if simplex_noise.get_noise_2d(x,0)>-igloo_treshold && simplex_noise.get_noise_2d(x,0)<igloo_treshold: # 1-1.5=-0.5
 				if point_t1 == null: point_t1 = point
-				var angrad = point.angle_to_point(point_t1)
-				add_decoration(point, rad2deg(angrad))
+				var angrad = (point - point_t1).angle()  # [MIGRATION] == point.angle_to_point(point_t1) de Godot 3
+				add_decoration(point, rad_to_deg(angrad))
 				
 			point_t1 = point
 ##=		INSTANCE IGLOO FIN
@@ -211,7 +231,7 @@ func generate_curve() -> PoolVector2Array:
 	return curve
 
 func add_boost(position :Vector2):
-	var boost = boost_res.instance()
+	var boost = boost_res.instantiate()
 	boost.impulse_mode = true
 	boost.global_position = position 
 	add_child(boost)
@@ -231,7 +251,7 @@ func add_decoration(position:Vector2, rotation_degrees): #point_a:Vector2,point_
 #	return deco
 
 func add_warning(position :Vector2):#, rotation_degrees): #point_a:Vector2,point_b:Vector2):
-	var warning = warning_res.instance()
+	var warning = warning_res.instantiate()
 #	var dvec = (point_b - point_a).normalized()
 #	var normal = Vector2(dvec.y, -dvec.x)
 	warning.global_position = position
@@ -239,7 +259,7 @@ func add_warning(position :Vector2):#, rotation_degrees): #point_a:Vector2,point
 #	return deco
 
 func add_end(position :Vector2):#, rotation_degrees): #point_a:Vector2,point_b:Vector2):
-	var end = end_res.instance()
+	var end = end_res.instantiate()
 #	var dvec = (point_b - point_a).normalized()
 #	var normal = Vector2(dvec.y, -dvec.x)
 	end.global_position = position
@@ -251,10 +271,10 @@ func get_random_decoration_instance():
 	var random_float = randf()
 
 	if random_float < 0.6:  # common
-		return decorations_common[randi() % len(decorations_common)].instance()
+		return decorations_common[randi() % len(decorations_common)].instantiate()
 	elif random_float < 0.8:  # Uncommon
-		return decorations_rare[randi() % len(decorations_rare)].instance()
+		return decorations_rare[randi() % len(decorations_rare)].instantiate()
 	else:  # Rare
-		return decorations_wow[randi() % len(decorations_wow)].instance()
+		return decorations_wow[randi() % len(decorations_wow)].instantiate()
 		 
 

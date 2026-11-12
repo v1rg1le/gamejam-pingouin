@@ -4,12 +4,12 @@ class_name StaggeredState
 var super_state_name: = "STAGGERED"
 var sub_state_name: = "STAGGERED"
 
-export var staggered_time: = 2.0
+@export var staggered_time: = 2.0
 var timer: Timer
 
 var animations = ["stuck", "staggered"]
 
-func _handle_input(player: KinematicBody2D, _delta: float) -> void:
+func _handle_input(player: CharacterBody2D, _delta: float) -> void:
 #	._handle_input(player, delta)
 	if timer.is_stopped():
 #		print("timer fini")
@@ -17,7 +17,7 @@ func _handle_input(player: KinematicBody2D, _delta: float) -> void:
 	else:
 		player._velocity = Vector2.ZERO
 
-func enter(player: KinematicBody2D, _previous_state: PlayerState) -> void:
+func enter(player: CharacterBody2D, _previous_state: PlayerState) -> void:
 	print('entering staggered')
 #	player.anim_player.play("staggered")
 #	player.anim_player.play("stuck")

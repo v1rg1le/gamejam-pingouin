@@ -3,6 +3,6 @@
 [ext_resource path="res://src/ui/MenuPause.tscn" type="PackedScene" id=1]
 
 [node name="UserInterface" type="CanvasLayer"]
-pause_mode = 2
+process_mode = 3
 
 [node name="MenuPause" parent="." instance=ExtResource( 1 )]

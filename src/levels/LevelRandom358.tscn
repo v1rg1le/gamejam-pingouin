@@ -2,9 +2,9 @@
 
 [ext_resource path="res://src/levels/LevelRandom.gd" type="Script" id=1]
 [ext_resource path="res://src/levels/GroundGenerator/GroundGenerator.tscn" type="PackedScene" id=2]
-[ext_resource path="res://sprites/levels/Background_glacier.png" type="Texture" id=17]
-[ext_resource path="res://sprites/levels/Background_mountains.png" type="Texture" id=18]
-[ext_resource path="res://sprites/levels/Background_clouds.png" type="Texture" id=19]
+[ext_resource path="res://sprites/levels/Background_glacier.png" type="Texture2D" id=17]
+[ext_resource path="res://sprites/levels/Background_mountains.png" type="Texture2D" id=18]
+[ext_resource path="res://sprites/levels/Background_clouds.png" type="Texture2D" id=19]
 
 [node name="LevelRandom358" type="Node2D"]
 script = ExtResource( 1 )
@@ -15,7 +15,7 @@ script = ExtResource( 1 )
 position = Vector2( 567.352, 1224.97 )
 motion_scale = Vector2( 0.9, 1 )
 
-[node name="Sprite" type="Sprite" parent="ParallaxBackground/ParallaxLayer"]
+[node name="Sprite2D" type="Sprite2D" parent="ParallaxBackground/ParallaxLayer"]
 position = Vector2( -2272.37, -1876.37 )
 scale = Vector2( 10, 5 )
 z_index = -123
@@ -27,7 +27,7 @@ region_rect = Rect2( -2664.13, -18.825, 7000, 198.507 )
 position = Vector2( 567.352, 1224.97 )
 motion_scale = Vector2( 0.8, 1 )
 
-[node name="Sprite" type="Sprite" parent="ParallaxBackground/ParallaxLayer2"]
+[node name="Sprite2D" type="Sprite2D" parent="ParallaxBackground/ParallaxLayer2"]
 position = Vector2( -2373.74, -1177.51 )
 scale = Vector2( 10, 5 )
 z_index = -120
@@ -39,7 +39,7 @@ region_rect = Rect2( -164.895, 80.638, 7000, 221.683 )
 position = Vector2( 567.352, 1224.97 )
 motion_scale = Vector2( 0.7, 1 )
 
-[node name="Sprite" type="Sprite" parent="ParallaxBackground/ParallaxLayer3"]
+[node name="Sprite2D" type="Sprite2D" parent="ParallaxBackground/ParallaxLayer3"]
 position = Vector2( -1744.08, -1512.51 )
 scale = Vector2( 10, 5 )
 z_index = -126

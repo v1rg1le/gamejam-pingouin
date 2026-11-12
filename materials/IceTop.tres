@@ -1,7 +1,7 @@
 [gd_resource type="Resource" load_steps=7 format=2]
 
 [ext_resource path="res://addons/rmsmartshape/materials/edge_material_metadata.gd" type="Script" id=1]
-[ext_resource path="res://sprites/levels/LevelTest/tile_ice_up_2.png" type="Texture" id=2]
+[ext_resource path="res://sprites/levels/LevelTest/tile_ice_up_2.png" type="Texture2D" id=2]
 [ext_resource path="res://addons/rmsmartshape/materials/edge_material.gd" type="Script" id=3]
 [ext_resource path="res://addons/rmsmartshape/normal_range.gd" type="Script" id=4]
 

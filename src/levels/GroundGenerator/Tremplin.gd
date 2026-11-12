@@ -2,9 +2,9 @@ extends StaticBody2D
 
 const UNIT_SIZE = 64
 const width_point = 10
-export(int) var map_height = UNIT_SIZE*5 #ATTENTION PAS TROP HAUT SINON CA PLANTE
+@export var map_height: int = UNIT_SIZE*5 #ATTENTION PAS TROP HAUT SINON CA PLANTE
 
-var boost_res = preload("res://src/levels/boost/BoostArea.tscn")  # .instance()
+var boost_res = preload("res://src/levels/boost/BoostArea.tscn")  # super.instantiate()
 
 var decoration_res = preload("res://src/levels/decoration/Igloo.tscn") #Igloo
 var warning_res = preload("res://src/levels/decoration/Warning.tscn")
@@ -18,27 +18,27 @@ var buisson_res= preload("res://src/levels/decoration/Buisson.tscn")
 
 
 
-export(int) var polygon_large = 6400
+@export var polygon_large: int = 6400
 
 #export(float) var height = UNIT_SIZE*7
 #export(float) var deck_length = UNIT_SIZE*8
 #export(float) var flat_bottom_length = UNIT_SIZE*4
 #export(float) var length = UNIT_SIZE*10
 
-export var slope_length = UNIT_SIZE*40
-export var ramp_length = UNIT_SIZE*15
+@export var slope_length = UNIT_SIZE*40
+@export var ramp_length = UNIT_SIZE*15
 
 var map_width = slope_length+ramp_length 
 
 #var b = 0.9977
 
 
-export(bool) var coef_pente_animated = false
-export(bool) var is_boost = false
-export var boost_treshold = 0.4
-export(bool) var is_igloo = false
-export var igloo_treshold = 0.01 #ATTENTION -igloo_treshold<...<igloo_treshold
-export(bool) var is_final_map = false
+@export var coef_pente_animated: bool = false
+@export var is_boost: bool = false
+@export var boost_treshold = 0.4
+@export var is_igloo: bool = false
+@export var igloo_treshold = 0.01 #ATTENTION -igloo_treshold<...<igloo_treshold
+@export var is_final_map: bool = false
 
 
 #Permet d'avoir la position de la fin (x,y) y=end_height x=map_width * NUMERO MAP + SOMME DES GAP
@@ -52,6 +52,9 @@ func _ready() -> void:
 #	var polygon = curve.get_baked_points()
 #	print(polygon.size())
 
+	# [FIX VITESSE -> 0] collision en segments (contour) : plus d'arêtes internes
+	# issues du découpage convexe, qui créaient des "collisions fantômes".
+	$CollisionPolygon2D.build_mode = CollisionPolygon2D.BUILD_SEGMENTS
 	$CollisionPolygon2D.polygon = curve
 	$Polygon2D.polygon = curve
 	$Line2D.points = curve
@@ -76,15 +79,15 @@ func _ready() -> void:
 func f(x): #Tremplin
 	var y
 	if x<=slope_length:
-		y = -tan(deg2rad(32))*x
+		y = -tan(deg_to_rad(32))*x
 	else:
-		y = -tan(deg2rad(32))*x + pow((x-slope_length)/(UNIT_SIZE/2.0),2)
+		y = -tan(deg_to_rad(32))*x + pow((x-slope_length)/(UNIT_SIZE/2.0),2)
 #		print(pow(x-slope_length,2))
 	return y
 
 	
 	
-func generate_curve() -> PoolVector2Array:
+func generate_curve() -> PackedVector2Array:
 #PAST
 #	var key = 0
 	var debut = 0
@@ -93,7 +96,7 @@ func generate_curve() -> PoolVector2Array:
 	
 
 # INITIALISE LE POOLVECTOR2ARRY ET CREER LA BASE A GAUCHE
-	curve = PoolVector2Array (
+	curve = PackedVector2Array (
 		[
 			Vector2(debut, polygon_large), #+coeff_pente*debut effet tobogan
 		]
@@ -173,7 +176,7 @@ func generate_curve() -> PoolVector2Array:
 #	return curve
 
 func add_buisson(position :Vector2):#, rotation_degrees): #point_a:Vector2,point_b:Vector2):
-	var buisson = buisson_res.instance()
+	var buisson = buisson_res.instantiate()
 #	var dvec = (point_b - point_a).normalized()
 #	var normal = Vector2(dvec.y, -dvec.x)
 	buisson.position = position
@@ -181,7 +184,7 @@ func add_buisson(position :Vector2):#, rotation_degrees): #point_a:Vector2,point
 #	return deco
 
 func add_ice_medium1(position :Vector2):#, rotation_degrees): #point_a:Vector2,point_b:Vector2):
-	var ice_medium1 = ice_medium1_res.instance()
+	var ice_medium1 = ice_medium1_res.instantiate()
 #	var dvec = (point_b - point_a).normalized()
 #	var normal = Vector2(dvec.y, -dvec.x)
 	ice_medium1.position = position
@@ -189,7 +192,7 @@ func add_ice_medium1(position :Vector2):#, rotation_degrees): #point_a:Vector2,p
 #	return deco
 
 func add_ice_medium2(position :Vector2):#, rotation_degrees): #point_a:Vector2,point_b:Vector2):
-	var ice_medium2 = ice_medium2_res.instance()
+	var ice_medium2 = ice_medium2_res.instantiate()
 #	var dvec = (point_b - point_a).normalized()
 #	var normal = Vector2(dvec.y, -dvec.x)
 	ice_medium2.position = position
@@ -197,7 +200,7 @@ func add_ice_medium2(position :Vector2):#, rotation_degrees): #point_a:Vector2,p
 #	return deco
 
 func add_ice_small(position :Vector2):#, rotation_degrees): #point_a:Vector2,point_b:Vector2):
-	var ice_small = ice_small_res.instance()
+	var ice_small = ice_small_res.instantiate()
 #	var dvec = (point_b - point_a).normalized()
 #	var normal = Vector2(dvec.y, -dvec.x)
 	ice_small.position = position
@@ -205,7 +208,7 @@ func add_ice_small(position :Vector2):#, rotation_degrees): #point_a:Vector2,poi
 #	return deco
 
 func add_finish_podium(position :Vector2):#, rotation_degrees): #point_a:Vector2,point_b:Vector2):
-	var finish_podium = finish_podium_res.instance()
+	var finish_podium = finish_podium_res.instantiate()
 #	var dvec = (point_b - point_a).normalized()
 #	var normal = Vector2(dvec.y, -dvec.x)
 	finish_podium.position = position
@@ -213,7 +216,7 @@ func add_finish_podium(position :Vector2):#, rotation_degrees): #point_a:Vector2
 #	return deco
 
 func add_finish_gate(position :Vector2):#, rotation_degrees): #point_a:Vector2,point_b:Vector2):
-	var finish_gate = finish_gate_res.instance()
+	var finish_gate = finish_gate_res.instantiate()
 #	var dvec = (point_b - point_a).normalized()
 #	var normal = Vector2(dvec.y, -dvec.x)
 	finish_gate.position = position
@@ -221,14 +224,14 @@ func add_finish_gate(position :Vector2):#, rotation_degrees): #point_a:Vector2,p
 #	return deco
 
 func add_boost(position :Vector2):
-	var boost = boost_res.instance()
+	var boost = boost_res.instantiate()
 	boost.impulse_mode = true
 	boost.global_position = position 
 	add_child(boost)
 
 
 func add_decoration(position :Vector2):#, rotation_degrees): #point_a:Vector2,point_b:Vector2):
-	var deco = decoration_res.instance()
+	var deco = decoration_res.instantiate()
 #	var dvec = (point_b - point_a).normalized()
 #	var normal = Vector2(dvec.y, -dvec.x)
 	deco.global_position = position
@@ -236,7 +239,7 @@ func add_decoration(position :Vector2):#, rotation_degrees): #point_a:Vector2,po
 #	return deco
 
 func add_warning(position :Vector2):#, rotation_degrees): #point_a:Vector2,point_b:Vector2):
-	var warning = warning_res.instance()
+	var warning = warning_res.instantiate()
 #	var dvec = (point_b - point_a).normalized()
 #	var normal = Vector2(dvec.y, -dvec.x)
 	warning.global_position = position
@@ -244,7 +247,7 @@ func add_warning(position :Vector2):#, rotation_degrees): #point_a:Vector2,point
 #	return deco
 
 func add_end(position :Vector2):#, rotation_degrees): #point_a:Vector2,point_b:Vector2):
-	var end = end_res.instance()
+	var end = end_res.instantiate()
 #	var dvec = (point_b - point_a).normalized()
 #	var normal = Vector2(dvec.y, -dvec.x)
 	end.global_position = position

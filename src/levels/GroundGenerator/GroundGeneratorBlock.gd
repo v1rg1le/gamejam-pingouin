@@ -10,33 +10,33 @@ var half_pipe_res = preload("res://src/levels/GroundGenerator/HalfPipe.tscn")
 var tremplin_res = preload("res://src/levels/GroundGenerator/Tremplin.tscn")
 var block_res= preload("res://src/levels/parts/StaticBody2DFish.tscn")
 
-export var slope_length = UNIT_SIZE*40
-export var ramp_length = UNIT_SIZE*15
+@export var slope_length = UNIT_SIZE*40
+@export var ramp_length = UNIT_SIZE*15
 
 var max_gap = UNIT_SIZE * 10
 #export var gap = UNIT_SIZE * 5 #Gap horizontale entre chaque ilot
-export var gap = [1000, UNIT_SIZE * 5,UNIT_SIZE * 5,UNIT_SIZE * 5] #Gap horizontale entre chaque ilot
-export var gap_offset = 7 #Gap verticale = gap_offset*UNIT_SIZE
-export(int) var number_map = 4 # 2 #Nombre d'ilot sans trou généré sur la map
+@export var gap = [1000, UNIT_SIZE * 5,UNIT_SIZE * 5,UNIT_SIZE * 5] #Gap horizontale entre chaque ilot
+@export var gap_offset = 7 #Gap verticale = gap_offset*UNIT_SIZE
+@export var number_map: int = 4 # 2 #Nombre d'ilot sans trou généré sur la map
 
-export var height_ground = [200, 260, 280, 400]
-export var space_btw_grd_roof = [1300, 1100, 800, 600]
+@export var height_ground = [200, 260, 280, 400]
+@export var space_btw_grd_roof = [1300, 1100, 800, 600]
 
 
-export(float) var slope_angle = 0
-export(float) var coeff_pente = tan(deg2rad(slope_angle))
+@export var slope_angle: float = 0
+@export var coeff_pente: float = tan(deg_to_rad(slope_angle))
 
-export(bool) var random_seed = false  # if true: overwrite world_seed and use a random one
-export(String) var world_seed = "LEOOOOOO"
-export(int) var noise_octaves = 1 #Number of OpenSimplex noise layers that are sampled to get the fractal noise. Higher values result in more detailed noise but take more time to generate.
-export(int) var noise_period = 1000*0.7 #Period of the base octave. A lower period results in a higher-frequency noise (more value changes across the same distance).
-export(float) var noise_persistence = 0.1 #Contribution factor of the different octaves. A persistence value of 1 means all the octaves have the same contribution, a value of 0.5 means each octave contributes half as much as the previous one.
-export(float) var noise_lacunarity = 3 # Difference in period between octaves.
+@export var random_seed: bool = false  # if true: overwrite world_seed and use a random one
+@export var world_seed: String = "LEOOOOOO"
+@export var noise_octaves: int = 1 #Number of OpenSimplex noise layers that are sampled to get the fractal noise. Higher values result in more detailed noise but take more time to generate.
+@export var noise_period: int = 1000*0.7 #Period of the base octave. A lower period results in a higher-frequency noise (more value changes across the same distance).
+@export var noise_persistence: float = 0.1 #Contribution factor of the different fractal_octaves. A persistence value of 1 means all the fractal_octaves have the same contribution, a value of 0.5 means each octave contributes half as much as the previous one.
+@export var noise_lacunarity: float = 3 # Difference in period between fractal_octaves.
 
-export(bool) var is_boost = false
-export var boost_treshold = -0.6 #if simplex_noise.get_noise_2d(x,0)<boost_treshold:
-export(bool) var is_igloo = true
-export var igloo_treshold = 0.01 #ATTENTION -igloo_treshold<...<igloo_treshold
+@export var is_boost: bool = false
+@export var boost_treshold = -0.6 #if simplex_noise.get_noise_2d(x,0)<boost_treshold:
+@export var is_igloo: bool = true
+@export var igloo_treshold = 0.01 #ATTENTION -igloo_treshold<...<igloo_treshold
 
 
 func sum_gap(index):
@@ -50,7 +50,7 @@ func _ready():
 	var next_pos = Vector2(0,0)
 	
 #	add_tremplin(Vector2(tan(deg2rad(32))*slope_length,-slope_length-ramp_length))
-	add_tremplin(Vector2(-slope_length-ramp_length-gap[0],-tan(deg2rad(32))*slope_length))
+	add_tremplin(Vector2(-slope_length-ramp_length-gap[0],-tan(deg_to_rad(32))*slope_length))
 	# set position pinpouin dans add_tremplin()
 	
 ### GENERATION DES ILOTS
@@ -111,7 +111,7 @@ func _ready():
 				
 func add_sol(position:Vector2, i, is_final_map:bool):
 	# i = numero de lilot
-	var sol = sol_res.instance()
+	var sol = sol_res.instantiate()
 	var next_pos = Vector2.ZERO
 	sol.set_collision_layer(2)
 	
@@ -124,9 +124,9 @@ func add_sol(position:Vector2, i, is_final_map:bool):
 	
 	sol.world_seed = world_seed
 	if random_seed:
-		var new_seed = str(rand_seed(randi()%200))
+		var new_seed = str(rand_from_seed(randi()%200))
 		sol.world_seed = new_seed
-		breakpoint
+#		breakpoint  # [MIGRATION] désactivé : bloquait le jeu dans le débogueur
 	sol.is_boost = is_boost
 	sol.boost_treshold = boost_treshold
 	sol.is_igloo = is_igloo
@@ -144,21 +144,21 @@ func add_sol(position:Vector2, i, is_final_map:bool):
 	return next_pos
 
 func add_player(position :Vector2):#, rotation_degrees): #point_a:Vector2,point_b:Vector2):
-	var player = player_res.instance()
+	var player = player_res.instantiate()
 #	var dvec = (point_b - point_a).normalized()
 #	var normal = Vector2(dvec.y, -dvec.x)
 	player.global_position = position
 	add_child(player)
 	
 func add_half_pipe(position :Vector2):#, rotation_degrees): #point_a:Vector2,point_b:Vector2):
-	var half_pipe = half_pipe_res.instance()
+	var half_pipe = half_pipe_res.instantiate()
 #	var dvec = (point_b - point_a).normalized()
 #	var normal = Vector2(dvec.y, -dvec.x)
 	half_pipe.global_position = position
 	add_child(half_pipe)
 	
 func add_tremplin(position :Vector2):#, rotation_degrees): #point_a:Vector2,point_b:Vector2):
-	var tremplin = tremplin_res.instance()
+	var tremplin = tremplin_res.instantiate()
 #	var dvec = (point_b - point_a).normalized()
 #	var normal = Vector2(dvec.y, -dvec.x)
 	tremplin.global_position = position
@@ -171,7 +171,7 @@ func add_tremplin(position :Vector2):#, rotation_degrees): #point_a:Vector2,poin
 
 
 func add_block(position: Vector2):#, rotation_degrees): #point_a:Vector2,point_b:Vector2):
-	var block = block_res.instance()
+	var block = block_res.instantiate()
 	print('Add block to: ',position)
 	block.position = position
 	add_child(block)

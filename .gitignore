@@ -7,3 +7,5 @@ bin/x11/release/libgitapi.so
 git_api*
 export/*
 .vscode/*
+.godot/
+*.translation

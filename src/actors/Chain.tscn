@@ -1,7 +1,7 @@
 [gd_scene load_steps=5 format=2]
 
-[ext_resource path="res://sprites/actors/chain/hook.png" type="Texture" id=1]
-[ext_resource path="res://sprites/actors/grapin/link_redraw.png" type="Texture" id=2]
+[ext_resource path="res://sprites/actors/chain/hook.png" type="Texture2D" id=1]
+[ext_resource path="res://sprites/actors/grapin/link_redraw.png" type="Texture2D" id=2]
 [ext_resource path="res://src/actors/Chain.gd" type="Script" id=3]
 
 [sub_resource type="CapsuleShape2D" id=1]
@@ -12,7 +12,7 @@ height = 8.80657
 z_index = 50
 script = ExtResource( 3 )
 
-[node name="Links" type="Sprite" parent="."]
+[node name="Links" type="Sprite2D" parent="."]
 self_modulate = Color( 0.92549, 0.92549, 0.92549, 1 )
 z_index = 50
 texture = ExtResource( 2 )
@@ -21,11 +21,11 @@ offset = Vector2( -8, 14 )
 region_enabled = true
 region_rect = Rect2( 0, 0, 16, 360 )
 
-[node name="Tip" type="KinematicBody2D" parent="."]
+[node name="Tip" type="CharacterBody2D" parent="."]
 z_index = 50
 collision_mask = 2
 
-[node name="Hook" type="Sprite" parent="Tip"]
+[node name="Hook" type="Sprite2D" parent="Tip"]
 z_index = 50
 texture = ExtResource( 1 )
 offset = Vector2( 0, 8 )

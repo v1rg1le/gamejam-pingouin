@@ -1,10 +1,10 @@
 extends Control
 
 # cache the scene tree node in a var
-onready var scene_tree: = get_tree()
-onready var pause_overlay: ColorRect = get_node("PauseOverlay")
+@onready var scene_tree: = get_tree()
+@onready var pause_overlay: ColorRect = get_node("PauseOverlay")
 
-var paused: = false setget set_paused
+var paused: = false: set = set_paused
 
 func _unhandled_input(event: InputEvent) -> void:
 	if event.is_action_pressed("ui_cancel"):

@@ -1,14 +1,15 @@
 extends Area2D
 
-export var impulse_factor = 64  # Vector2(300, 0) # 300
-export var accel_factor = Vector2(1.2, 0) #acceleration >1 decelaration 0<...<1
-export var impulse_dir = Vector2(1,0)
-export var impulse_mode = false
-export var accel_mode = false
+@export var impulse_factor = 64  # Vector2(300, 0) # 300
+@export var accel_factor = Vector2(1.2, 0) #acceleration >1 decelaration 0<...<1
+@export var impulse_dir = Vector2(1,0)
+@export var impulse_mode = false
+@export var accel_mode = false
 #export(String, FILE) var collision_shape_path 
 
 func _ready():
-	$AnimatedSprite.playing = true
+	# [MIGRATION GODOT 4.7] la propriété `playing` n'existe plus : on appelle play()
+	$AnimatedSprite2D.play()
 	
 
 func _on_BoostArea_body_entered(body):

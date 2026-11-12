@@ -1,8 +1,8 @@
 extends OnGroundState
 class_name PumpState
 
-func _handle_input(player: KinematicBody2D, delta: float) -> void:
-	._handle_input(player, delta)
+func _handle_input(player: CharacterBody2D, delta: float) -> void:
+	super._handle_input(player, delta)
 
 	if !Input.is_action_pressed("pump"):
 		player._states.go_to_state(player, "on_ground")
@@ -13,7 +13,7 @@ func _handle_input(player: KinematicBody2D, delta: float) -> void:
 		clamp(player._velocity.y, -player.max_speed.y * coef, player.max_speed.y * coef)
 	)
 
-func enter(player: KinematicBody2D, _previous_state: PlayerState) -> void:
+func enter(player: CharacterBody2D, _previous_state: PlayerState) -> void:
 	player.anim_player.play("pumping")
 
 func _ready():

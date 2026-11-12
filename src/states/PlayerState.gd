@@ -1,22 +1,22 @@
 extends Node2D
 class_name PlayerState
 
-func _handle_input(_player: KinematicBody2D, _delta: float) -> void:
+func _handle_input(_player: CharacterBody2D, _delta: float) -> void:
 	pass
 
-func _update(_player: KinematicBody2D) -> void:
+func _update(_player: CharacterBody2D) -> void:
 	pass
 
-func enter(_player: KinematicBody2D, _previous_state: PlayerState) -> void:
+func enter(_player: CharacterBody2D, _previous_state: PlayerState) -> void:
 	pass
 
-func exit(_player: KinematicBody2D) -> void:
+func exit(_player: CharacterBody2D) -> void:
 	pass
 
-func _exit(_player: KinematicBody2D) -> void:
+func _exit(_player: CharacterBody2D) -> void:
 	exit(_player)
 
-func _enter(_player: KinematicBody2D) -> void:
+func _enter(_player: CharacterBody2D) -> void:
 	_player._states.super_state_label.text = self.super_state_name
 	var sub_text = ""
 	if "sub_state_name" in self:

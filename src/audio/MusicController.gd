@@ -7,7 +7,7 @@ const tracks = [
 const main_theme = "res://assets/musics/2020-03-22_-_A_Bit_Of_Hope_-_David_Fesliyan.wav"
 
 # Load the music player node
-onready var _music_player = $AudioStreamPlayer
+@onready var _music_player = $AudioStreamPlayer
 var track
 var track_path
 var play_stopped = false
@@ -22,7 +22,7 @@ func _ready():
 
 # Calling this function will load the given track, and play it
 func play(track_url : String = ""):
-	if !track_url: # si musique non precisee
+	if track_url.is_empty(): # si musique non precisee  [MIGRATION] test explicite de chaîne vide
 		# selectionne une chanson au hasard dans le dossier
 		var rand_nb = randi() % tracks.size()
 		track_url = tracks[rand_nb]

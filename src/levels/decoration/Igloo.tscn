@@ -1,11 +1,11 @@
 [gd_scene load_steps=2 format=2]
 
-[ext_resource path="res://sprites/levels/decoration/igloo.png" type="Texture" id=1]
+[ext_resource path="res://sprites/levels/decoration/igloo.png" type="Texture2D" id=1]
 
 [node name="Igloo" type="Node2D"]
 z_index = 60
 
-[node name="Sprite" type="Sprite" parent="."]
+[node name="Sprite2D" type="Sprite2D" parent="."]
 position = Vector2( 0.0285339, 0.0500336 )
 scale = Vector2( 3, 3 )
 texture = ExtResource( 1 )
