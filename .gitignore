@@ -10,3 +10,4 @@ export/*
 .godot/
 *.translation
 build/
+*.keystore

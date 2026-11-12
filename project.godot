@@ -151,3 +151,5 @@ toggle_debug={
 
 environment/defaults/default_clear_color=Color(0.4, 0.486275, 0.584314, 1)
 environment/defaults/default_environment="res://default_env.tres"
+renderer/rendering_method.mobile="gl_compatibility"
+textures/vram_compression/import_etc2_astc=true
