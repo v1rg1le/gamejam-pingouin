@@ -70,3 +70,25 @@ Les tests ont été faits en simulation (sans écran, entrées scriptées) + cap
 - Sur les niveaux générés, l'arche décorative au bout de la dernière île (`Arche.tscn`) n'est **pas** une arrivée : la vraie arrivée est dans le half-pipe qui suit. Si les joueurs la confondent, il suffit de remplacer `end_res` par `FinishGate.tscn` dans `sol.gd`.
 - Les niveaux Chill (704 / 917) n'ont pas d'arrivée (comme avant).
 - `LevelTest2` affiche des erreurs SmartShape « collision_polygon_node_path » : ces chemins étaient déjà faux en Godot 3 (les collisions déjà calculées dans la scène fonctionnent).
+
+---
+
+## 8. Version mobile : boutons tactiles + détection PC / mobile
+
+**Détection** (`src/autoload/Settings.gd`) :
+- Au lancement : `Settings.is_mobile_device` est vrai sur Android / iOS ; le jeu démarre alors directement en mode tactile, en plein écran sans bandes noires (aspect `expand`) et en paysage.
+- En cours de jeu, le mode suit le dernier périphérique utilisé : toucher l'écran → **TOUCH**, manette → **GAMEPAD**, clavier / vraie souris → **KBD_MOUSE**. Un PC ou une tablette tactile passe donc d'un mode à l'autre automatiquement.
+- En mode tactile, les clics souris « émulés » par Godot à partir d'un toucher sont retirés des actions `hook` et `pull` (sinon chaque toucher lançait le grappin) ; ils reviennent dès qu'on retouche clavier/souris.
+
+**Boutons** (`src/ui/touch/TouchControls.gd`, chargé en autoload, donc présent dans tous les niveaux sans modifier les scènes) :
+- Gauche : ◀ ▶ (on peut glisser le doigt de l'un à l'autre) et ↺ ↻ pour la rotation en l'air.
+- Droite : SAUT, GRAPPIN, TIRER, PUMP, FIGURE ; pause en haut à droite.
+- **GRAPPIN = mini-joystick** : un tap tire vers l'avant-haut (visée par défaut) ; appuyer puis glisser tire dans la direction du glissé (une flèche jaune l'affiche). Maintenir le doigt = rester accroché.
+- Multi-touch (on peut avancer, sauter et grappiner en même temps). Les boutons restent collés aux bords sur les écrans plus larges que 1024x720.
+- Visibles uniquement en mode tactile, dans un niveau, hors pause. Aucun nouvel asset : tout est dessiné en code.
+- La caméra décale légèrement la vue (vers le haut et vers l'avant) en mode tactile pour que le pingouin ne passe pas sous les boutons (`touch_view_shift` sur la Camera2D).
+- Les écrans titre / fin acceptent aussi un toucher pour continuer.
+
+**Corrigé au passage** : le menu pause (Échap) appelait `SceneTree.set_input_as_handled()`, qui n'existe plus en Godot 4 (erreur à chaque pause).
+
+Pour publier sur téléphone, il reste à exporter pour Android (SDK Android + JDK + keystore à installer dans l'éditeur) ou iOS (Mac + Xcode).

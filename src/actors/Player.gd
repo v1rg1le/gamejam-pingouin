@@ -474,6 +474,11 @@ func _get_aim_direction() -> Vector2:
 			return Vector2(
 				Input.get_action_strength("aim_right") - Input.get_action_strength("aim_left"),
 				Input.get_action_strength("aim_down") - Input.get_action_strength("aim_up")).normalized()
+		Settings.TOUCH:
+			# [MOBILE] visée fournie par le bouton GRAPPIN tactile (glissé du doigt).
+			# Vector2.ZERO => les états de grappin utilisent la visée par défaut
+			# (vers l'avant et le haut), comme quand on ne vise pas à la manette.
+			return Settings.touch_aim
 		Settings.KBD_MOUSE, _:
 			return (get_global_mouse_position() - global_position).normalized()
 

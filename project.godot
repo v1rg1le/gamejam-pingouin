@@ -24,11 +24,13 @@ run/max_fps=60
 
 Settings="*res://src/autoload/Settings.gd"
 MusicController="*res://src/audio/MusicController.tscn"
+TouchControls="*res://src/ui/touch/TouchControls.gd"
 
 [display]
 
 window/size/viewport_width=1024
 window/size/viewport_height=720
+window/handheld/orientation=4
 window/stretch/mode="canvas_items"
 window/stretch/aspect="keep_width"
 

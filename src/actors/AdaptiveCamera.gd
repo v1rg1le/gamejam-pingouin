@@ -44,6 +44,10 @@ extends Camera2D
 @export var zoom_in_time: float = 1.5
 ## Délai (s) pendant lequel un zoom plus serré doit rester valable avant d'y revenir.
 @export var zoom_in_delay: float = 1.0
+## [MOBILE] En mode tactile, décale la vue (px) : vers le bas pour que le
+## pingouin apparaisse plus haut, et VERS L'AVANT (x multiplié par le sens de
+## la glisse) pour qu'il reste à gauche des gros boutons de droite.
+@export var touch_view_shift: Vector2 = Vector2(180, 110)
 ## Masque de collision du sol (calque 2 = "ground").
 @export_flags_2d_physics var ground_mask: int = 2
 
@@ -63,6 +67,12 @@ func _ready() -> void:
 
 
 func _physics_process(delta: float) -> void:
+	# [MOBILE] décalage doux de la vue quand les boutons tactiles sont affichés
+	var wanted_shift := Vector2.ZERO
+	if Settings.controls == Settings.TOUCH and _player != null:
+		wanted_shift = Vector2(touch_view_shift.x * _player.facing, touch_view_shift.y)
+	position = position.lerp(wanted_shift, 1.0 - exp(-delta * 1.5))  # lent : pas d'à-coup aux demi-tours
+
 	if not adaptive_zoom_enabled or _player == null:
 		return
 
