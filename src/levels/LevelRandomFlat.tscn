@@ -1,5 +1,6 @@
 [gd_scene load_steps=7 format=2]
 
+[ext_resource path="res://src/levels/parallax/VerticalParallax.gd" type="Script" id=91]
 [ext_resource path="res://sprites/levels/Background_mountains.png" type="Texture2D" id=1]
 [ext_resource path="res://sprites/levels/Background_glacier.png" type="Texture2D" id=2]
 [ext_resource path="res://sprites/levels/Background_clouds.png" type="Texture2D" id=3]
@@ -13,6 +14,7 @@ script = ExtResource( 4 )
 [node name="UserInterface" parent="." instance=ExtResource( 5 )]
 
 [node name="ParallaxBackground" type="ParallaxBackground" parent="."]
+script = ExtResource( 91 )
 
 [node name="ParallaxLayer" type="ParallaxLayer" parent="ParallaxBackground"]
 position = Vector2( 567.352, 1224.97 )

@@ -24,7 +24,11 @@
 [ext_resource path="res://sprites/pingouin/tricks/boule2.png" type="Texture2D" id=22]
 [ext_resource path="res://sprites/pingouin/wiggle/wiggle1.png" type="Texture2D" id=23]
 
+[ext_resource path="res://src/actors/AdaptiveCamera.gd" type="Script" id=90]
+
 [sub_resource type="CapsuleShape2D" id=1]
+radius = 10.0
+height = 40.0
 
 [sub_resource type="Animation" id=2]
 resource_name = "staggered"
@@ -429,6 +433,7 @@ rotation = 1.5708
 shape = SubResource( 1 )
 
 [node name="Camera2D" type="Camera2D" parent="."]
+script = ExtResource( 90 )
 current = true
 limit_smoothed = true
 position_smoothing_enabled = true

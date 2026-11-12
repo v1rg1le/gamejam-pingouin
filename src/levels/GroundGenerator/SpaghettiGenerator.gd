@@ -1,4 +1,13 @@
 extends Node2D
+# =============================================================================
+#  SpaghettiGenerator.gd — niveau "LevelRandomSpaghetti"
+#  [MIGRATION GODOT 4.7] syntaxe Godot 4 (@export, instantiate(), rand_from_seed...)
+#  [ARRIVÉE] le `breakpoint` qui figeait le jeu a été retiré et une vraie ligne
+#  d'arrivée est placée au bout des spaghettis (voir add_spaghetti_finish()) :
+#  sa zone couvre la hauteur de TOUS les spaghettis, impossible de la rater.
+# =============================================================================
+var finish_gate_res = preload("res://src/levels/FinishGate.tscn")  # [ARRIVÉE]
+var spaghetti_ends = []  # [ARRIVÉE] extrémités (fin) des spaghettis de 2e niveau
 
 const UNIT_SIZE = 64 #Taille du joeur
 const map_width = UNIT_SIZE*300 #Largeur des ilots
@@ -92,11 +101,13 @@ func _ready():
 			
 #			all_end_pos.append(add_sol(ep+extra_start, 1, false))
 			var _popo = add_sol(ep+extra_start, 1, false)
+			spaghetti_ends.append(_popo)  # [ARRIVÉE] on mémorise la fin de chaque spaghetti
 #			if sp == 0:  # toit seulement pour spaghetti du haut
 #				var _nocare = add_sol(ep + Vector2(0, -space_btw_grd_roof[1]), 1, false)
 		iter_index += 1
-	breakpoint
-	print('faire une arrivee jolie + un mur/tobogan pour pas la depasser')
+#	breakpoint  # [MIGRATION] retiré : figeait le jeu dans le débogueur
+	# print('faire une arrivee jolie + un mur/tobogan pour pas la depasser')
+	add_spaghetti_finish()  # [ARRIVÉE] c'est fait : voir la fonction ci-dessous
 
 ### FIN GENERATION DES ILOTS
 
@@ -104,6 +115,26 @@ func _ready():
 			+number_map*map_width*coeff_pente*Vector2(0,1) + (number_map+1)*gap_offset*UNIT_SIZE*Vector2(0,1))
 				
 				
+# [ARRIVÉE] Ligne d'arrivée commune à tous les spaghettis :
+# - placée un peu avant la fin du spaghetti le plus court,
+# - l'arche est posée à la hauteur du spaghetti le plus haut,
+# - sa zone de détection descend jusque sous le spaghetti le plus bas.
+func add_spaghetti_finish():
+	if spaghetti_ends.is_empty():
+		return
+	var min_x = INF
+	var top_y = INF
+	var bottom_y = -INF
+	for e in spaghetti_ends:
+		min_x = min(min_x, e.x)
+		top_y = min(top_y, e.y)
+		bottom_y = max(bottom_y, e.y)
+	var gate = finish_gate_res.instantiate()
+	gate.position = Vector2(min_x - 6 * UNIT_SIZE, top_y - max_height)
+	gate.finish_band_below = (bottom_y - gate.position.y) + 2 * max_height + 800
+	add_child(gate)
+	print('[ARRIVÉE] ligne d\'arrivée spaghetti en ', gate.position)
+
 func add_sol(position:Vector2, i, is_final_map:bool):
 	# i = numero de lilot
 	var sol = sol_res.instantiate()

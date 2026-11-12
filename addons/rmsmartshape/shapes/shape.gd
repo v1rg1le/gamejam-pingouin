@@ -1557,12 +1557,15 @@ func _build_edge_with_material(
 			else :
 				texture_idx = vert_props.texture_idx
 			tex = edge_material.get_texture(texture_idx)
-			tex_size = tex.get_size()
-			fitmode = edge_material.fit_mode
+			# [PATCH PINPOUIN] test de nullité AVANT get_size() : les matériaux
+			# Ice*.tres (issus de Godot 3) contiennent une texture "null" dans
+			# leur liste, ce qui faisait planter le rendu des formes de LevelTest.
 			# Exit if we have an edge material defined but no texture to render
 			if tex == null:
 				i += next_point_delta
 				continue
+			tex_size = tex.get_size()
+			fitmode = edge_material.fit_mode
 
 		var new_quad: SS2D_Quad = SS2D_Shape.build_quad_from_two_points(
 			pt,

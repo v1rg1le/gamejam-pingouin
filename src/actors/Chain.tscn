@@ -6,7 +6,7 @@
 
 [sub_resource type="CapsuleShape2D" id=1]
 radius = 4.61143
-height = 8.80657
+height = 18.0294
 
 [node name="Chain" type="Node2D"]
 z_index = 50

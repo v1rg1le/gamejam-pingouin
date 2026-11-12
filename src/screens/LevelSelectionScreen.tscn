@@ -163,7 +163,7 @@ offset_top = 172.0
 offset_right = 253.0
 offset_bottom = 202.0
 text = "Spaghetti"
-next_scene_path = ""
+next_scene_path = "res://src/levels/LevelRandomSpaghetti.tscn"
 
 [node name="ChangeSceneButton8" parent="TextureRect/HBoxContainer/VBoxContainer2/VBoxContainer5" instance=ExtResource( 16 )]
 offset_top = 206.0

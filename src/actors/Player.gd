@@ -111,9 +111,9 @@ const GHOST_FILTER_MAX_BLOCKED_FRAMES = 6
 ## true : on réapparaît au dernier point sûr. false : on recharge le niveau (game over).
 @export var respawn_on_death: bool = true
 ## Marge (px) sous le point le plus bas du décor avant de considérer la chute comme mortelle.
-@export var fall_death_margin: float = 2500.0
+@export var fall_death_margin: float = 1500.0
 ## Durée max (s) d'une chute RAPIDE ininterrompue (sécurité si le niveau n'a pas de fond).
-@export var max_fall_time: float = 8.0
+@export var max_fall_time: float = 4.0
 ## Vitesse verticale (px/s) à partir de laquelle on considère qu'on "tombe vite".
 @export var fast_fall_speed: float = 900.0
 var last_safe_position: Vector2 = Vector2.ZERO  # dernier endroit sûr (au sol, sans grappin)
