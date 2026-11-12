@@ -5,6 +5,10 @@ func _handle_input(player: CharacterBody2D, delta: float) -> void:
 #	If input not handled
 #	Call parent method
 	super._handle_input(player, delta)
+	# [MIGRATION GODOT 4.7 / FIX] si l'état parent a déjà changé d'état dans cette
+	# frame (saut, grappin, atterrissage...), on ne superpose pas une 2e transition.
+	if player._states.current != self:
+		return
 	if Input.get_action_strength("move_right") - Input.get_action_strength("move_left") != 0:
 		var input_speed = Input.get_action_strength("move_right") - Input.get_action_strength("move_left")
 		player.direction.x = input_speed

@@ -3,6 +3,10 @@ class_name TrixState
 
 func _handle_input(player: CharacterBody2D, delta: float) -> void:
 	super._handle_input(player, delta)
+	# [MIGRATION GODOT 4.7 / FIX] si l'état parent a déjà changé d'état dans cette
+	# frame (saut, grappin, atterrissage...), on ne superpose pas une 2e transition.
+	if player._states.current != self:
+		return
 #	print("trix")
 	
 #	if trix est fini
