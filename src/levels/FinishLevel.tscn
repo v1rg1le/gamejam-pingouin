@@ -177,6 +177,7 @@ fill_mesh_offset = 0.0
 render_offset = 0.0
 
 [node name="FinishLevel" type="Node2D"]
+texture_repeat = 2
 
 [node name="Sprite2D" type="Sprite2D" parent="."]
 position = Vector2( 162.328, -24.6697 )

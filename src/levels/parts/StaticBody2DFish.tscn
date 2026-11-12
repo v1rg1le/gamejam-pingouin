@@ -171,6 +171,7 @@ fill_mesh_offset = 0.0
 render_offset = 0.0
 
 [node name="StaticBody2D" type="StaticBody2D"]
+texture_repeat = 2
 collision_layer = 2
 
 [node name="SS2D_Shape_Closed" type="Node2D" parent="."]

@@ -10,6 +10,7 @@
 [ext_resource path="res://sprites/levels/Background_clouds.png" type="Texture2D" id=19]
 
 [node name="LevelChill704" type="Node2D"]
+texture_repeat = 2
 
 [node name="UserInterface" parent="." instance=ExtResource( 3 )]
 

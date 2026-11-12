@@ -1147,6 +1147,7 @@ _next_key = 7
 extents = Vector2( 400, 20 )
 
 [node name="LevelTest" type="Node2D"]
+texture_repeat = 2
 
 [node name="StaticBody2D2" type="StaticBody2D" parent="."]
 position = Vector2( -1588.63, -584.067 )

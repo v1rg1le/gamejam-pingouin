@@ -730,6 +730,7 @@ _constraints = {
 _next_key = 7
 
 [node name="LevelTest2" type="Node2D"]
+texture_repeat = 2
 
 [node name="ParallaxBackground" type="ParallaxBackground" parent="."]
 script = ExtResource( 91 )
