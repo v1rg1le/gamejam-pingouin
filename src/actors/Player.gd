@@ -24,16 +24,24 @@ extends CharacterBody2D
 #     2. Filtre anti-arête-fantôme ici : si une collision aux pieds donne une
 #        normale incohérente avec le sol mesuré par les 2 raycasts, on utilise
 #        la normale du sol à la place.
-#     3. Garde anti-NaN (le swing du grappin pouvait produire des NaN).
-#     4. Diagnostic : si la vitesse s'effondre quand même, un message
-#        "[SPEED DROP]" explique la cause dans la console (désactivable).
+#     3. Amorti d'atterrissage : retomber "contre" une pente (fond de vallée)
+#        effaçait toute la vitesse qui rentrait dans le sol (900 -> 60 px/s
+#        en une frame). Une partie (landing_speed_keep = 50 %) est rendue le
+#        long de la pente. Mettre landing_speed_keep à 0 = comportement d'origine.
+#     4. Garde anti-NaN (le swing du grappin pouvait produire des NaN).
+#     5. Diagnostic : si la vitesse s'effondre quand même, un message
+#        "[SPEED DROP]" explique la cause dans la console (désactivable via
+#        debug_speed_drop). Les chocs contre un plafond/mur réel restent normaux.
 #   Autres causes corrigées ailleurs : conflit de touche Shift (pull/trix)
 #   dans InAirState.gd, freinage "idle" trop brutal dans OnGroundState.gd.
 #
 #  [MORT / RESPAWN]  (nouveau)
 #   Chute infinie gérée : sous le point le plus bas du niveau (+ marge), ou
-#   après une chute rapide trop longue, le pingouin réapparaît au dernier
-#   endroit sûr où il glissait au sol.
+#   après une chute rapide trop longue (max_fall_time), le pingouin
+#   réapparaît là où il glissait au sol ~2 s avant sa chute, AVEC l'élan
+#   qu'il avait à ce moment-là (pour pouvoir retenter le saut). Chaque mort
+#   successive rembobine un peu plus loin. respawn_on_death = false donne
+#   un "game over" (rechargement du niveau) à la place.
 # =============================================================================
 
 # --- Signaux ajoutés (mort / respawn) : utiles pour l'UI ou le son plus tard ---
@@ -117,6 +125,14 @@ const GHOST_FILTER_MAX_BLOCKED_FRAMES = 6
 ## Vitesse verticale (px/s) à partir de laquelle on considère qu'on "tombe vite".
 @export var fast_fall_speed: float = 900.0
 var last_safe_position: Vector2 = Vector2.ZERO  # dernier endroit sûr (au sol, sans grappin)
+## Au respawn, on "rembobine" de ce nombre de secondes avant la dernière glisse
+## au sol, et on rend la vitesse qu'on avait à ce moment-là : on peut donc
+## retenter le saut avec de l'élan (sinon on réapparaît au bord du trou, à
+## l'arrêt, et on retombe en boucle).
+@export var respawn_rewind_time: float = 2.0
+var _safe_history: Array = []      # échantillons {pos, vel, time} pris au sol
+var _last_ground_time: float = 0.0
+var _respawn_sample = null         # échantillon choisi pour le respawn en cours
 var fall_death_y: float = INF                    # calculé au démarrage du niveau
 var death_count: int = 0                         # nombre de morts (pour l'UI si besoin)
 var _fall_timer: float = 0.0
@@ -324,8 +340,14 @@ func _update_fall_and_safe_position(delta: float) -> void:
 	# Mémorise un point sûr : au sol depuis un petit moment et sans grappin.
 	if is_on_ground and not chain.hooked:
 		_safe_ground_timer += delta
+		_last_ground_time = Time.get_ticks_msec() / 1000.0
 		if _safe_ground_timer > 0.25:
+			# un échantillon toutes les 0.25 s environ (on garde ~10 s d'historique)
+			_safe_ground_timer = 0.0
 			last_safe_position = global_position
+			_safe_history.append({"pos": global_position, "vel": _velocity, "time": _last_ground_time})
+			if _safe_history.size() > 40:
+				_safe_history.pop_front()
 	else:
 		_safe_ground_timer = 0.0
 
@@ -354,6 +376,7 @@ func die() -> void:
 		get_tree().call_deferred("reload_current_scene")
 		return
 	_respawning = true
+	_respawn_sample = _pick_respawn_sample()
 	chain.release()
 	_fall_timer = 0.0
 	# Petit fondu de l'image du pingouin pour que la téléportation ne soit pas brutale.
@@ -363,11 +386,33 @@ func die() -> void:
 	tween.tween_property(animated_sprite, "modulate:a", 1.0, 0.35)
 
 
+# Choisit l'échantillon "sûr" pris environ respawn_rewind_time secondes avant
+# la dernière glisse au sol (ou le plus ancien disponible).
+func _pick_respawn_sample():
+	if _safe_history.is_empty():
+		return null
+	var limit := _last_ground_time - respawn_rewind_time
+	var chosen = _safe_history[0]
+	for sample in _safe_history:
+		if sample.time <= limit:
+			chosen = sample
+	return chosen
+
+
 func _do_respawn() -> void:
-	global_position = last_safe_position + Vector2(0, -40)
+	if _respawn_sample != null:
+		global_position = _respawn_sample.pos + Vector2(0, -30)
+		# On rend l'élan qu'on avait à cet endroit (limité pour rester jouable).
+		_velocity = _respawn_sample.vel.limit_length(1200.0)
+		# On oublie l'historique postérieur : si on meurt encore, on rembobine plus loin.
+		while _safe_history.size() > 1 and _safe_history.back().time > _respawn_sample.time:
+			_safe_history.pop_back()
+		_last_ground_time = _respawn_sample.time
+	else:
+		global_position = last_safe_position + Vector2(0, -40)
+		# On repart avec un petit élan dans le sens où l'on regardait.
+		_velocity = Vector2(200 * facing, 0)
 	rotation = 0.0
-	# On repart avec un petit élan dans le sens où l'on regardait.
-	_velocity = Vector2(200 * facing, 0)
 	chain_velocity = Vector2.ZERO
 	_states.go_to_state(self, "in_air")
 	camera.reset_smoothing()  # la caméra saute directement au pingouin
