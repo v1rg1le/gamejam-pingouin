@@ -9,3 +9,4 @@ export/*
 .vscode/*
 .godot/
 *.translation
+build/
