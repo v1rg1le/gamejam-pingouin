@@ -1,0 +1,72 @@
+# Pinpouin Le Ninja — Migration Godot 3.4 → Godot 4.7 + corrections
+
+Branche git : `godot4-migration` (le premier commit, « Baseline », contient votre état local d'avant, modifications non commitées comprises).
+Lancement : ouvrir le projet dans **Godot 4.7** puis F5 (la scène principale est maintenant `src/screens/MainScreen.tscn`).
+
+Toutes les modifications dans le code sont repérées par des balises en commentaire :
+`[MIGRATION GODOT 4.7]`, `[FIX VITESSE -> 0]`, `[GRAPPIN]`, `[MORT / RESPAWN]`, `[ARRIVÉE]`, `[NOUVEAU]`, `[PATCH PINPOUIN]`.
+Aucun nom de variable existant n'a été changé, aucun visuel ni aucune ressource n'a été supprimé.
+
+---
+
+## 1. Migration Godot 4.7
+
+- Conversion automatique (`godot --convert-3to4`) puis relecture et corrections à la main de tous les scripts du jeu.
+- `KinematicBody2D` → `CharacterBody2D`. **Point important** : en Godot 4, `move_and_slide()` ne modifie plus la vitesse après une collision. Le comportement de Godot 3 est reproduit à la main dans `Player._apply_godot3_slide()` (mode `FLOATING`, `wall_min_slide_angle = 0`), sinon le pingouin accumulait de la gravité dans le sol ou s'arrêtait net contre les pentes.
+- `OpenSimplexNoise` → `FastNoiseLite` (période → fréquence, persistence → gain…). ⚠️ L'algorithme de bruit n'est plus le même : un même `world_seed` donne un relief de même amplitude mais de forme différente.
+- `Vector2.angle_to_point()` a changé de sens en Godot 4 : corrigé dans `Chain.gd` (rotation de la chaîne) et `sol.gd` (rotation des décorations).
+- Zoom caméra inversé en Godot 4 (le mode debug « zoom 10 » devient « zoom 0.1 »).
+- Capsules de collision : en Godot 4, `height` inclut les demi-cercles → tailles recalculées pour garder les mêmes dimensions (pingouin et crochet).
+- La répétition des textures n'est plus une option d'import mais une propriété des nœuds : activée sur les sols, la chaîne du grappin, les fonds et les niveaux SmartShape (sinon textures étirées).
+- Thème : l'ancien bloc `ToolButton` (fusionné dans `Button` en Godot 4) écrasait le style des boutons → retiré ; police Roboto rebranchée.
+- Écrans : `expand` → `expand_mode` / `ignore_texture_size`, `_get_configuration_warnings()` renvoie une liste, `export(String, FILE)` → `@export_file`.
+- Manettes : les numéros de boutons/axes ont été remappés automatiquement vers la nomenclature Godot 4.
+- **SmartShape2D** : remplacé par la version 3.3.2 (portage officiel Godot 4). Un petit correctif de plantage est appliqué dans `addons/rmsmartshape/shapes/shape.gd` (texture `null` dans les matériaux `Ice*.tres`).
+- Outils Godot 3 incompatibles (addon GUT + ses tests, démo `godot-git-plugin`, scripts de tests, ancien SmartShape2D, `SoundController` inutilisé dont les sons n'existent pas) : **déplacés** dans `_archive_godot3/` (ignoré par Godot via `.gdignore`), rien n'est supprimé.
+- `breakpoint` qui figeaient le jeu (Spaghetti, GroundGeneratorBlock) retirés.
+- Les fichiers `.tscn` sont encore au format texte Godot 3 (Godot 4.7 les lit sans souci) ; ils passeront au format 4 la première fois que vous les enregistrerez dans l'éditeur.
+
+## 2. Bug « vitesse → 0 » (prioritaire)
+
+Plusieurs causes, toutes traitées :
+
+1. **Collisions fantômes** (cause principale) : le sol généré est un grand polygone concave que le moteur découpe en morceaux convexes ; les arêtes internes renvoyaient parfois une normale presque horizontale et `velocity.slide()` annulait toute la vitesse en une frame. → Les sols générés (`sol`, `HalfPipe`, `Tremplin`) utilisent maintenant des collisions en **segments** (contour seul), plus un filtre dans `Player.gd` qui remplace une normale « aberrante » aux pieds par celle mesurée par les raycasts.
+2. **Atterrissage contre une pente** (fond de vallée) : la projection de Godot 3 effaçait toute la vitesse « écrasée » contre le sol (900 → 60 px/s observé en test). → 50 % de cette vitesse est rendue le long de la pente (`landing_speed_keep`, réglable ; 0 = comportement d'origine).
+3. **Touche Shift partagée entre `pull` et `trix`** : tirer sur le grappin en l'air lançait une figure, et toucher le sol en figure = état STAGGERED = vitesse forcée à 0 pendant 2 s. → Pas de figure pendant le grappin.
+4. **État IDLE trop agressif** : il freinait fort dès que la vitesse *horizontale* passait sous 100 px/s (donc dans les pentes raides). → On regarde la vitesse totale.
+5. **NaN** possibles dans le swing du grappin → calcul réécrit + garde anti-NaN.
+
+Un diagnostic reste actif : si la vitesse s'effondre encore, la console affiche `[SPEED DROP] …` avec l'état et la collision en cause (désactivable : `debug_speed_drop` sur le Player). Lors des tests, les seuls cas restants étaient des chocs réels (pingouin tiré par le grappin contre un plafond).
+
+## 3. Grappin stabilisé (les modes de traction sont conservés)
+
+- La direction de traction était calculée dans le repère d'un nœud qui **tourne avec le pingouin** : penché à 90°, la traction partait sur le côté. → Calcul en coordonnées globales.
+- Le choix « pull » (crochet en dessous) / « swing » (crochet au-dessus) changeait à chaque frame autour de la hauteur du crochet → hystérésis de 48 px.
+- `pull_factor` restait bloqué à 2 après un premier appui sur « pull ».
+- `Vector2 < Vector2` (comparaison lexicographique) remplacé par une vraie comparaison composante par composante.
+- Sorties d'état propres ; si le grappin se décroche tout seul, on sort proprement de l'état grappin.
+- Le crochet ne déclenche plus les zones (ligne d'arrivée, boosts) et une accroche collée au joueur (< 40 px) est ignorée.
+
+## 4. Parallax vertical (`src/levels/parallax/VerticalParallax.gd`)
+
+L'horizontal reste géré par Godot exactement comme avant. Le vertical est piloté par script : chaque plan se décale d'une fraction du déplacement de la caméra proportionnelle à sa profondeur (perspective conservée), avec une saturation douce (`tanh`) et un garde-fou qui empêche de voir le vide sous le décor. Les fonds ignorent le zoom de la caméra. Réglages dans l'inspecteur du nœud `ParallaxBackground` de chaque niveau (`vertical_strength`, `max_vertical_shift`, `reference_camera_y`).
+
+## 5. Mort et arrivée
+
+- **Chute** : sous le point le plus bas du décor (+ `fall_death_margin`), ou après `max_fall_time` s de chute rapide, le pingouin réapparaît là où il glissait ~2 s avant, **avec l'élan qu'il avait** (on peut retenter le saut) ; chaque mort successive rembobine un peu plus loin. `respawn_on_death = false` → game over (rechargement du niveau).
+- **Arrivée** (`FinishGate.gd`) : la zone n'est plus un carré de 128 px mais une **bande verticale de 6000 px** (franchir la ligne à n'importe quelle altitude compte), avec une sécurité anti-traversée à grande vitesse, un faisceau lumineux pulsant + le texte « ARRIVÉE » visibles de loin, et un petit ralenti de victoire.
+
+## 6. Caméra adaptative (`src/actors/AdaptiveCamera.gd`)
+
+Toutes les 0,2 s, la trajectoire du pingouin est prédite (vitesse + gravité) et le point d'atterrissage cherché par raycasts. La caméra dézoome juste assez pour voir ce point, ou au maximum s'il n'y a rien en vue. Anti-nausée : 4 paliers fixes (1 / 0,8 / 0,65 / 0,5), dézoom rapide mais re-zoom lent et retardé d'1 s, rien ne bouge pendant le grappin. En test : environ un changement de palier toutes les 6 à 9 s, et 70-80 % du temps au zoom normal. Tout est réglable sur le nœud `Camera2D` du Player.
+
+## 7. LevelRandomSpaghetti
+
+Ajouté au menu (le bouton « Spaghetti » existait déjà mais n'avait pas de scène). Le `breakpoint` qui bloquait le niveau est retiré et une ligne d'arrivée couvrant la hauteur de tous les spaghettis est placée à leur extrémité.
+
+## À vérifier manette en main
+
+Les tests ont été faits en simulation (sans écran, entrées scriptées) + captures d'écran : les sensations de glisse, l'intensité de l'amorti d'atterrissage et le rythme du zoom méritent d'être validés en jouant. Remarques :
+- Sur les niveaux générés, l'arche décorative au bout de la dernière île (`Arche.tscn`) n'est **pas** une arrivée : la vraie arrivée est dans le half-pipe qui suit. Si les joueurs la confondent, il suffit de remplacer `end_res` par `FinishGate.tscn` dans `sol.gd`.
+- Les niveaux Chill (704 / 917) n'ont pas d'arrivée (comme avant).
+- `LevelTest2` affiche des erreurs SmartShape « collision_polygon_node_path » : ces chemins étaient déjà faux en Godot 3 (les collisions déjà calculées dans la scène fonctionnent).
