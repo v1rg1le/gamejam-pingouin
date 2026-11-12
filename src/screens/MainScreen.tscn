@@ -72,5 +72,6 @@ __meta__ = {
 [node name="AnimationTimer" type="Timer" parent="."]
 wait_time = 0.15
 autostart = true
+
 [connection signal="button_up" from="TextureButton" to="." method="_on_TextureButton_button_up"]
 [connection signal="timeout" from="AnimationTimer" to="." method="_on_AnimationTimer_timeout"]
