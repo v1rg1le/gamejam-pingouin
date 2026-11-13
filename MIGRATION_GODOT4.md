@@ -112,3 +112,17 @@ Tests en simulation : sans rien toucher, le pingouin glisse jusqu'à l'arrivée 
 - **Disposition** (proposition de l'équipe) : **PUMP dans le coin bas-droit** (le plus gros bouton, le plus accessible au pouce), **SAUT juste au-dessus**, GRAPPIN à gauche du PUMP, FIGURE un peu plus loin. À gauche : ◀ ▶ et ↺ ↻ (inchangé).
 - **TIRER n'est plus un bouton séparé.** Avant, il fallait maintenir GRAPPIN et appuyer sur TIRER en même temps, deux doigts sur la même zone : impossible en pratique. Maintenant, une fois accroché, on **glisse le doigt loin du bouton GRAPPIN** (plus de 90 px) pour tirer sur la corde. Un cercle pointillé montre la distance à franchir, puis « TIRE ! » et une flèche orange s'affichent pendant qu'on tire. On revient sous 70 px pour arrêter. Un petit glissé de visée ne tire jamais par erreur.
 - Positions et seuils regroupés en haut de `src/ui/touch/TouchControls.gd` (`_buttons`, `PULL_DISTANCE`, `PULL_RELEASE`).
+
+## 11. Finition visuelle et menus (13/11, version 1.2)
+
+- **Pixel-art net retrouvé** : en Godot 3, 88 images étaient importées « sans lissage ». Ce réglage d'import n'existe plus en Godot 4, et le lissage par défaut rendait tout le jeu légèrement flou depuis la migration. Le projet utilise maintenant le filtrage « Nearest » par défaut (`rendering/textures/canvas_textures/default_texture_filter`).
+- **Caméra** : le dézoom maximal passe de ×0,5 à ×0,7 sur PC et ×0,8 sur mobile (`zoom_levels` / `zoom_levels_mobile`). À ×0,5, le pingouin devenait minuscule.
+- **Menu de sélection des niveaux refait** :
+  - titre en haut, panneau « COURSES » (tuto en premier, mis en avant) et panneau « CHILL » (étiquette d'origine, dans le bon sens) ;
+  - Spaghetti rangé dans les courses, puisqu'il a désormais une arrivée ;
+  - bouton Retour et numéro de version ;
+  - navigation complète au clavier et à la manette, avec un cadre jaune sur le bouton sélectionné.
+  - Le bouton « todo bolo » (sans niveau) est masqué, pas supprimé. L'ancienne scène est archivée dans `_archive_godot3/LevelSelectionScreen_v1_godot4.tscn`.
+- **Menu pause** : fond assombri, titre « PAUSE », boutons plus grands en français (Reprendre / Recommencer / Choisir un niveau / Quitter le jeu), focus clavier/manette. « Choisir un niveau » ramène à la sélection des niveaux (avant : écran titre). L'interface passe au-dessus du bandeau du tuto.
+- **Touche « retour » Android** : avant, elle fermait l'appli même en pleine partie. Maintenant : pause en jeu, retour au menu précédent dans la sélection des niveaux, et sortie seulement depuis l'écran titre (`application/config/quit_on_go_back = false` + gestion dans `Settings.gd`).
+- **Version** affichée dans le menu, lue dans `application/config/version` (1.2).

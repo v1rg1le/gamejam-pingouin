@@ -30,7 +30,12 @@ extends Camera2D
 ## Active / désactive le dézoom intelligent (le mode debug caméra le coupe).
 @export var adaptive_zoom_enabled: bool = true
 ## Paliers de zoom autorisés, du plus proche (1.0) au plus large.
-@export var zoom_levels: Array[float] = [1.0, 0.8, 0.65, 0.5]
+## [FINITION 13/11] le dézoom max passe de 0.5 à 0.7 : à 0.5 le pingouin
+## devenait minuscule (≈20 px de haut) et on ne le voyait plus.
+@export var zoom_levels: Array[float] = [1.0, 0.85, 0.7]
+## [FINITION 13/11] paliers utilisés sur téléphone / tablette (écran plus petit :
+## on dézoome encore moins pour que le pingouin reste bien visible).
+@export var zoom_levels_mobile: Array[float] = [1.0, 0.9, 0.8]
 ## Fréquence d'analyse de la trajectoire (s).
 @export var scan_interval: float = 0.2
 ## Jusqu'où (en secondes de vol) on cherche le point d'atterrissage.
@@ -63,6 +68,9 @@ func _ready() -> void:
 	# défaut ; en Godot 4 il faut les activer explicitement pour garder le même ressenti.
 	drag_horizontal_enabled = true
 	drag_vertical_enabled = true
+	# [FINITION 13/11] paliers plus serrés sur mobile
+	if Settings.is_mobile_device and not zoom_levels_mobile.is_empty():
+		zoom_levels = zoom_levels_mobile
 	zoom = Vector2.ONE * zoom_levels[0]
 
 

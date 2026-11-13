@@ -52,6 +52,24 @@ func _ready() -> void:
 		get_tree().root.content_scale_aspect = Window.CONTENT_SCALE_ASPECT_EXPAND
 
 
+# [FINITION 13/11] Touche "retour" d'Android : par défaut Godot FERME l'appli
+# (même en pleine partie). On la désactive dans les réglages du projet
+# (application/config/quit_on_go_back = false) et on la traduit ici :
+#  - écran titre      -> on quitte le jeu (comportement attendu sur Android)
+#  - partout ailleurs -> équivalent de Échap (pause en jeu, retour au menu
+#    précédent dans la sélection des niveaux)
+func _notification(what: int) -> void:
+	if what == NOTIFICATION_WM_GO_BACK_REQUEST:
+		var scene = get_tree().current_scene
+		if scene != null and scene.scene_file_path == "res://src/screens/MainScreen.tscn":
+			get_tree().quit()
+		else:
+			var ev := InputEventAction.new()
+			ev.action = "ui_cancel"
+			ev.pressed = true
+			Input.parse_input_event(ev)
+
+
 func _input(event: InputEvent) -> void:
 	if event is InputEventScreenTouch or event is InputEventScreenDrag:
 		self.controls = TOUCH

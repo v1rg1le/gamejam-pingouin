@@ -17,3 +17,9 @@ func set_paused(value: bool) -> void:
 	paused = value
 	scene_tree.paused = value
 	pause_overlay.visible = value
+	# [FINITION 13/11] navigation clavier / manette : le bouton "Resume" prend
+	# le focus à l'ouverture de la pause (inutile en tactile).
+	if value and Settings.controls != Settings.TOUCH:
+		var resume = pause_overlay.get_node_or_null("VBoxContainer/ResumeButton")
+		if resume != null:
+			resume.grab_focus()

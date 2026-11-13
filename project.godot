@@ -15,6 +15,8 @@ ss2d/version="3.3.2"
 [application]
 
 config/name="Pinpouin"
+config/version="1.2"
+config/quit_on_go_back=false
 run/main_scene="res://src/screens/MainScreen.tscn"
 config/features=PackedStringArray("4.7")
 config/icon="res://icon.png"
@@ -152,4 +154,5 @@ toggle_debug={
 environment/defaults/default_clear_color=Color(0.4, 0.486275, 0.584314, 1)
 environment/defaults/default_environment="res://default_env.tres"
 renderer/rendering_method.mobile="gl_compatibility"
+textures/canvas_textures/default_texture_filter=0
 textures/vram_compression/import_etc2_astc=true
