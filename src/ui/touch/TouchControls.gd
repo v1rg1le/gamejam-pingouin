@@ -13,9 +13,12 @@ extends CanvasLayer
 #    TOUT le code du joueur et des états reste inchangé.
 #  - Aucun nouvel asset : les boutons sont dessinés en code (_draw).
 #
-#  Disposition (écran de référence 1024 x 720, paysage) :
+#  Disposition (écran de référence 1024 x 720, paysage) — [BOUTONS v2, 13/11] :
 #    gauche : ◀ ▶ (avancer / reculer), au-dessus ↺ ↻ (rotation en l'air)
-#    droite : SAUT (gros), GRAPPIN, TIRER, PUMP, FIGURE ; pause en haut à droite
+#    droite : PUMP dans le coin (le plus accessible au pouce, c'est le bouton
+#             le plus utilisé), SAUT juste au-dessus, GRAPPIN à gauche du
+#             PUMP, FIGURE un peu plus loin ; pause en haut à droite.
+#    (proposition de l'équipe : "Pump dans le coin, Jump juste au-dessus")
 #
 #  GRAPPIN = mini-joystick :
 #    - simple tap / appui  -> tir dans la direction par défaut (avant-haut)
@@ -23,11 +26,21 @@ extends CanvasLayer
 #    Pour laisser le temps de glisser, le tir part quand le doigt a glissé de
 #    AIM_DEADZONE px, ou au plus tard après AIM_DELAY secondes.
 #    Maintenir le doigt = rester accroché (comme la touche Espace).
+#
+#  TIRER (action "pull") — [BOUTONS v2] plus de bouton séparé :
+#    avant, il fallait maintenir GRAPPIN ET appuyer sur TIRER, deux doigts
+#    sur la même zone : en pratique impossible, d'où "TIRER ne marche pas".
+#    Maintenant, une fois ACCROCHÉ, on glisse le doigt LOIN du bouton GRAPPIN
+#    (au-delà de PULL_DISTANCE) : on "tire sur la corde". Un cercle pointillé
+#    montre la distance à franchir, la corde-flèche devient orange quand on tire.
+#    Un petit glissé de visée (< PULL_DISTANCE) ne tire donc jamais par erreur.
 # =============================================================================
 
 const AIM_DEADZONE = 28.0   # px de glissé avant de considérer qu'on vise
 const AIM_DELAY = 0.12      # s : délai max avant de tirer sans visée
 const BUTTON_ALPHA = 0.45   # transparence des boutons au repos
+const PULL_DISTANCE = 90.0  # [BOUTONS v2] glissé (px) depuis GRAPPIN pour "tirer"
+const PULL_RELEASE = 70.0   # [BOUTONS v2] en dessous : on arrête de tirer (hystérésis)
 
 # Description des boutons : position (repère 1024x720), rayon, action, libellé.
 # "slide" = on peut glisser le doigt d'un bouton de ce groupe à l'autre (◀ ▶).
@@ -36,11 +49,10 @@ var _buttons := [
 	{"id": "right",  "pos": Vector2(250, 610), "r": 62, "action": "move_right",     "label": "",        "icon": "right", "slide": true},
 	{"id": "rot_l",  "pos": Vector2(100, 465), "r": 46, "action": "rotate_trigo",   "label": "",        "icon": "rot_l", "slide": true},
 	{"id": "rot_r",  "pos": Vector2(250, 465), "r": 46, "action": "rotate_horaire", "label": "",        "icon": "rot_r", "slide": true},
-	{"id": "jump",   "pos": Vector2(925, 610), "r": 72, "action": "jump",           "label": "SAUT",    "icon": "",      "slide": false},
-	{"id": "hook",   "pos": Vector2(770, 640), "r": 62, "action": "hook",           "label": "GRAPPIN", "icon": "",      "slide": false},
-	{"id": "pull",   "pos": Vector2(780, 505), "r": 48, "action": "pull",           "label": "TIRER",   "icon": "",      "slide": false},
-	{"id": "pump",   "pos": Vector2(925, 455), "r": 52, "action": "pump",           "label": "PUMP",    "icon": "",      "slide": false},
-	{"id": "trix",   "pos": Vector2(635, 655), "r": 42, "action": "trix",           "label": "FIGURE",  "icon": "",      "slide": false},
+	{"id": "pump",   "pos": Vector2(925, 615), "r": 74, "action": "pump",           "label": "PUMP",    "icon": "",      "slide": false},
+	{"id": "jump",   "pos": Vector2(925, 450), "r": 60, "action": "jump",           "label": "SAUT",    "icon": "",      "slide": false},
+	{"id": "hook",   "pos": Vector2(765, 640), "r": 62, "action": "hook",           "label": "GRAPPIN", "icon": "",      "slide": false},
+	{"id": "trix",   "pos": Vector2(625, 655), "r": 44, "action": "trix",           "label": "FIGURE",  "icon": "",      "slide": false},
 	{"id": "pause",  "pos": Vector2(980, 44),  "r": 30, "action": "ui_cancel",      "label": "II",      "icon": "",      "slide": false},
 ]
 
@@ -51,6 +63,7 @@ var _hook_origin := Vector2.ZERO
 var _hook_time := 0.0
 var _hook_fired := false
 var _aim_vec := Vector2.ZERO  # pour dessiner la flèche de visée
+var _pulling := false         # [BOUTONS v2] "pull" appuyé via le glissé du doigt
 var _canvas: Control          # nœud qui dessine tous les boutons
 var _font: Font
 
@@ -83,6 +96,12 @@ func _process(delta: float) -> void:
 			_release_all()  # on ne laisse jamais une action "coincée"
 	if not visible:
 		return
+
+	# [BOUTONS v2] l'état accroché peut changer sans que le doigt bouge
+	if _hook_finger != -1:
+		_update_pull(_aim_vec.length())
+	elif _pulling:
+		_update_pull(0.0)
 
 	# GRAPPIN : tir différé si le doigt n'a pas (encore) glissé
 	if _hook_finger != -1 and not _hook_fired:
@@ -155,6 +174,7 @@ func _finger_up(index: int) -> void:
 			_fire_hook(Vector2.ZERO)  # tap très court : on tire quand même
 		_hook_finger = -1
 		_aim_vec = Vector2.ZERO
+		_update_pull(0.0)  # [BOUTONS v2] on arrête de tirer
 		# relâché à la frame suivante, pour que "just_pressed" ait été vu
 		_release_hook_deferred()
 	elif id != "pause" and _pressed_count[id] == 0:
@@ -172,12 +192,25 @@ func _release_hook_deferred() -> void:
 func _update_hook_aim(pos: Vector2) -> void:
 	var d := pos - _hook_origin
 	_aim_vec = d
+	_update_pull(d.length())
 	if d.length() >= AIM_DEADZONE:
 		# Visée : la direction du glissé est transmise au joueur
 		# (Player._get_aim_direction() lit Settings.touch_aim en mode TOUCH).
 		Settings.touch_aim = d.normalized()
 		if not _hook_fired:
 			_fire_hook(d.normalized())
+
+
+# [BOUTONS v2] Tirer = glisser loin, seulement quand le grappin est accroché.
+func _update_pull(drag_length: float) -> void:
+	var player = get_tree().get_first_node_in_group("player")
+	var hooked: bool = player != null and player.chain.hooked
+	var want := hooked and (drag_length >= PULL_DISTANCE or (_pulling and drag_length >= PULL_RELEASE))
+	if want and not _pulling:
+		Input.action_press("pull")
+	elif not want and _pulling:
+		Input.action_release("pull")
+	_pulling = want
 
 
 func _fire_hook(aim: Vector2) -> void:
@@ -190,6 +223,9 @@ func _release_all() -> void:
 	for b in _buttons:
 		if b.id != "pause" and InputMap.has_action(b.action):
 			Input.action_release(b.action)
+	if _pulling:
+		Input.action_release("pull")
+		_pulling = false
 	_fingers.clear()
 	_pressed_count.clear()
 	_hook_finger = -1
@@ -261,12 +297,24 @@ func _draw_buttons() -> void:
 				var size := 30 if b.id == "pause" else (22 if b.r >= 60 else 17)
 				var w := _font.get_string_size(b.label, HORIZONTAL_ALIGNMENT_LEFT, -1, size).x
 				_canvas.draw_string(_font, c + Vector2(-w * 0.5, size * 0.35), b.label, HORIZONTAL_ALIGNMENT_LEFT, -1, size, line)
-	# flèche de visée du grappin pendant le glissé
+	var hook_pos: Vector2 = _pos(_get_button("hook"))
+	# [BOUTONS v2] accroché : cercle pointillé = distance à franchir pour TIRER
+	var player = get_tree().get_first_node_in_group("player")
+	if _hook_finger != -1 and player != null and player.chain.hooked:
+		var ring_col := Color(1, 0.6, 0.15, 0.9) if _pulling else Color(1, 1, 1, 0.55)
+		var seg := 24
+		for k in seg:
+			if k % 2 == 0:
+				_canvas.draw_arc(hook_pos, PULL_DISTANCE, TAU * k / seg, TAU * (k + 1) / seg, 4, ring_col, 3.0, true)
+		var t := "TIRE !" if _pulling else "glisse loin = TIRER"
+		var tw := _font.get_string_size(t, HORIZONTAL_ALIGNMENT_LEFT, -1, 16).x
+		_canvas.draw_string(_font, hook_pos + Vector2(-tw * 0.5, -PULL_DISTANCE - 10), t, HORIZONTAL_ALIGNMENT_LEFT, -1, 16, ring_col)
+	# flèche de visée du grappin pendant le glissé (orange quand on tire)
 	if _hook_finger != -1 and _aim_vec.length() >= AIM_DEADZONE:
-		var hook_pos: Vector2 = _pos(_get_button("hook"))
-		var tip := hook_pos + _aim_vec.normalized() * 110.0
-		_canvas.draw_line(hook_pos, tip, Color(1, 0.95, 0.4, 0.9), 5.0, true)
-		_canvas.draw_circle(tip, 9.0, Color(1, 0.95, 0.4, 0.9))
+		var col := Color(1, 0.6, 0.15, 0.95) if _pulling else Color(1, 0.95, 0.4, 0.9)
+		var tip: Vector2 = hook_pos + _aim_vec.normalized() * clampf(_aim_vec.length(), 110.0, 160.0)
+		_canvas.draw_line(hook_pos, tip, col, 5.0, true)
+		_canvas.draw_circle(tip, 9.0, col)
 
 
 func _draw_triangle(c: Vector2, dir: int, s: float, col: Color) -> void:

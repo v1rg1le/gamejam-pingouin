@@ -33,7 +33,7 @@ const JOY_BUTTON_NAMES = {0: "A", 1: "B", 2: "X", 3: "Y", 4: "Back", 6: "Start",
 const JOY_AXIS_NAMES = {4: "LT", 5: "RT"}
 # Noms des boutons tactiles (cf. TouchControls.gd)
 const TOUCH_NAMES = {"move_right": "▶", "move_left": "◀", "jump": "SAUT", "pump": "PUMP",
-	"hook": "GRAPPIN", "pull": "TIRER", "trix": "FIGURE", "rotate_trigo": "↺", "rotate_horaire": "↻"}
+	"hook": "GRAPPIN", "pull": "GRAPPIN en glissant le doigt loin", "trix": "FIGURE", "rotate_trigo": "↺", "rotate_horaire": "↻"}
 
 
 func _ready() -> void:
