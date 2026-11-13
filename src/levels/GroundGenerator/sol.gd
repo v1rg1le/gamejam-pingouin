@@ -9,6 +9,17 @@ extends StaticBody2D
 #     différent, donc un même "world_seed" ne donne plus EXACTEMENT le même
 #     relief qu'en Godot 3 (mêmes amplitudes / fréquences, formes différentes).
 #   - angle_to_point() a changé de sens en Godot 4 -> calcul explicite.
+#  [RELIEF 3.4] (calibrage du 13/11/2026)
+#   Mesuré sur TOUS les sols des niveaux (bruit Godot 3.4 recompilé à
+#   l'identique vs FastNoiseLite) : à réglages égaux, FastNoiseLite donnait
+#   un relief ~1,5x plus haut et des bosses ~2x plus serrées (25 % des
+#   montées > 25°, contre 0 % en 3.4). Deux facteurs corrigent cela :
+#     fréquence x NOISE_FREQUENCY_G3 (0.5) et valeur x NOISE_AMPLITUDE_G3 (0.668)
+#   -> pentes et bosses identiques à la 3.4 à ~1 % près, avec les MÊMES
+#   réglages de niveau (noise_period, map_height...). Les formes exactes
+#   d'un seed restent différentes (algorithme différent), pas leur "ressenti".
+#   Toutes les lectures du bruit passent par _noise(x) (seuils boost / igloo
+#   compris, qui gardent donc la même fréquence d'apparition qu'en 3.4).
 #  [FIX VITESSE -> 0]
 #   - La collision est construite en SEGMENTS (contour seul) et non plus en
 #     morceaux convexes : les arêtes internes du découpage provoquaient des
@@ -62,12 +73,19 @@ var end_res = preload("res://src/levels/Arche.tscn")
 @export var noise_lacunarity: float = 3
 #export(float) var noise_threshold = 0.5
 
+# [RELIEF 3.4] facteurs de calibrage FastNoiseLite -> OpenSimplexNoise de Godot 3.4
+const NOISE_FREQUENCY_G3 = 0.5     # fréquence = 0.5 / noise_period
+const NOISE_AMPLITUDE_G3 = 0.668   # valeur du bruit x 0.668
+## [RELIEF 3.4] true = relief calibré comme en 3.4 ; false = FastNoiseLite brut
+## (relief plus raide, celui des premières versions 4.7) — utile pour comparer.
+@export var g3_terrain_calibration: bool = true
+
 var point_t1  # pour conserver le point precedent, pour pente + normal pour decoration
 
 var simplex_noise : FastNoiseLite = FastNoiseLite.new()
 
 #Permet d'avoir la position de la fin (x,y) y=end_height x=map_width * NUMERO MAP + SOMME DES GAP
-var end_y =coeff_pente*(map_width-UNIT_SIZE) + map_height*self.simplex_noise.get_noise_2d(map_width-UNIT_SIZE,0) 
+var end_y = 0.0  # [RELIEF 3.4] calculé dans _ready() une fois le bruit configuré (avant : bruit pas encore réglé)
 var end_x
 
 func _ready() -> void:
@@ -84,6 +102,7 @@ func _ready() -> void:
 	$Line2D.points = curve
 	
 	end_x = curve[curve.size()-1].x
+	end_y = coeff_pente*(map_width-UNIT_SIZE) + map_height*_noise(map_width-UNIT_SIZE)  # [RELIEF 3.4]
 #	print(end_x)
 	
 	
@@ -95,11 +114,26 @@ func generate_curve() -> PackedVector2Array:
 	var curve 
 	
 
+	#random
+#	self.simplex_noise.seed = randi()
+#	static
+	# [RELIEF 3.4] le bruit est maintenant configuré AVANT le tout premier point
+	# (avant, le coin bas-gauche du polygone lisait un bruit encore "par défaut").
+	self.simplex_noise.seed = self.world_seed.hash()
+	# [MIGRATION GODOT 4.7] équivalents FastNoiseLite des réglages OpenSimplexNoise
+	self.simplex_noise.noise_type = FastNoiseLite.TYPE_SIMPLEX
+	self.simplex_noise.fractal_type = FastNoiseLite.FRACTAL_FBM
+	self.simplex_noise.fractal_octaves = self.noise_octaves
+	var freq_factor = NOISE_FREQUENCY_G3 if g3_terrain_calibration else 1.0  # [RELIEF 3.4]
+	self.simplex_noise.frequency = freq_factor / max(1.0, float(self.noise_period))  # period -> frequency
+	self.simplex_noise.fractal_gain = self.noise_persistence                 # persistence -> gain
+	self.simplex_noise.fractal_lacunarity = self.noise_lacunarity
+
 # INITIALISE LE POOLVECTOR2ARRY ET CREER LA BASE A GAUCHE
 	curve = PackedVector2Array (
 		[
 			Vector2(debut,
-		map_height*self.simplex_noise.get_noise_2d(debut,0) + coeff_pente*debut + h+20), #+coeff_pente*debut effet tobogan
+		map_height*_noise(debut) + coeff_pente*debut + h+20), #+coeff_pente*debut effet tobogan
 		]
 	)
 #	print("Curve Init")
@@ -118,17 +152,6 @@ func generate_curve() -> PackedVector2Array:
 #	)
 #	print(curve)
 
-	#random
-#	self.simplex_noise.seed = randi()
-#	static
-	self.simplex_noise.seed = self.world_seed.hash()
-	# [MIGRATION GODOT 4.7] équivalents FastNoiseLite des réglages OpenSimplexNoise
-	self.simplex_noise.noise_type = FastNoiseLite.TYPE_SIMPLEX
-	self.simplex_noise.fractal_type = FastNoiseLite.FRACTAL_FBM
-	self.simplex_noise.fractal_octaves = self.noise_octaves
-	self.simplex_noise.frequency = 1.0 / max(1.0, float(self.noise_period))  # period -> frequency
-	self.simplex_noise.fractal_gain = self.noise_persistence                 # persistence -> gain
-	self.simplex_noise.fractal_lacunarity = self.noise_lacunarity
 
 #PAST
 #	mySS2D = get_node("/root/LevelGenerated/mySS2D_Open")
@@ -148,7 +171,7 @@ func generate_curve() -> PackedVector2Array:
 #		 + coeff_pente*x) #+coeff_pente*x effet tobogan
 
 		point=Vector2(x,
-		map_height* self.simplex_noise.get_noise_2d(x,0)
+		map_height* _noise(x)
 		 + coeff_pente*x) #+coeff_pente*x effet tobogan
 #		print(point)
 		curve.append(point)
@@ -179,10 +202,10 @@ func generate_curve() -> PackedVector2Array:
 			var point 
 			
 			point=Vector2(x,
-			map_height* self.simplex_noise.get_noise_2d(x,0)
+			map_height* _noise(x)
 			 + coeff_pente*x)
 			
-			if simplex_noise.get_noise_2d(x,0)<boost_treshold: #-1+1.4=0.4
+			if _noise(x)<boost_treshold: #-1+1.4=0.4
 				add_boost(point)
 ##		INSTANCE BOOST FIN
 		
@@ -192,11 +215,11 @@ func generate_curve() -> PackedVector2Array:
 			var point 
 			
 			point=Vector2(x,
-			map_height* self.simplex_noise.get_noise_2d(x,0)
+			map_height* _noise(x)
 			 + coeff_pente*x)
 			
 
-			if simplex_noise.get_noise_2d(x,0)>-igloo_treshold && simplex_noise.get_noise_2d(x,0)<igloo_treshold: # 1-1.5=-0.5
+			if _noise(x)>-igloo_treshold && _noise(x)<igloo_treshold: # 1-1.5=-0.5
 				if point_t1 == null: point_t1 = point
 				var angrad = (point - point_t1).angle()  # [MIGRATION] == point.angle_to_point(point_t1) de Godot 3
 				add_decoration(point, rad_to_deg(angrad))
@@ -208,7 +231,7 @@ func generate_curve() -> PackedVector2Array:
 	var soon_end = map_width*0.94
 	add_warning(
 		Vector2(soon_end,
-			map_height* self.simplex_noise.get_noise_2d(soon_end,0)
+			map_height* _noise(soon_end)
 			 + coeff_pente*soon_end)
 	)
 ##		INSTANCE WARNING FIN
@@ -218,7 +241,7 @@ func generate_curve() -> PackedVector2Array:
 		var end = map_width*0.99
 		add_end(
 			Vector2(end,
-				map_height* self.simplex_noise.get_noise_2d(end,0)
+				map_height* _noise(end)
 				 + coeff_pente*end)
 		)
 ##		INSTANCE END FIN
@@ -229,6 +252,13 @@ func generate_curve() -> PackedVector2Array:
 
 #	print(n_point)
 	return curve
+
+# [RELIEF 3.4] Lecture du bruit le long de la ligne y = 0, calibrée pour
+# reproduire l'échelle de l'OpenSimplexNoise de Godot 3.4.
+func _noise(x: float) -> float:
+	var v := simplex_noise.get_noise_2d(x, 0)
+	return v * NOISE_AMPLITUDE_G3 if g3_terrain_calibration else v
+
 
 func add_boost(position :Vector2):
 	var boost = boost_res.instantiate()
