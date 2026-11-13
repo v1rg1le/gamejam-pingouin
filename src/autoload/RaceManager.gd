@@ -26,6 +26,17 @@ extends Node
 #     Partage : copier un fichier .ghost dans le dossier des fantômes d'un ami
 #     (bouton "Dossier des fantômes" dans le menu, sur PC). Le plus rapide des
 #     fantômes présents pour un niveau est celui qui court.
+#
+#  4. [MULTI] COURSE EN RÉSEAU LOCAL (étape 6, avec NetSession)
+#     Quand NetSession.in_race est vrai :
+#       - le seed est celui choisi par l'hôte (tout le monde a le même terrain),
+#         et il n'y a pas de fantôme (les vrais adversaires le remplacent) ;
+#       - le pingouin est figé (process_mode DISABLED) jusqu'à la fin du compte
+#         à rebours 3-2-1-GO, lancé par l'hôte quand TOUT le monde est chargé ;
+#       - l'état du pingouin local est envoyé 20 fois par seconde ;
+#       - les pingouins des autres (RemotePenguin) sont créés à la réception de
+#         leur premier état, et supprimés s'ils se déconnectent ;
+#       - à l'arrivée, le temps est annoncé à tous et le HUD affiche le classement.
 # =============================================================================
 
 signal race_finished(time: float, is_record: bool, previous_best: float)
@@ -54,6 +65,12 @@ var _ghost_node = null              # nœud GhostPenguin dans la scène
 var _hud = null                     # RaceHud (chrono à l'écran)
 var _best_cache := {}               # niveau -> meilleur temps (s)
 
+# [MULTI] course en réseau
+var _remotes := {}                  # peer_id -> nœud RemotePenguin
+var _state_timer: float = 0.0       # cadence d'envoi de l'état local (20/s)
+var _countdown: float = -1.0        # > 0 : compte à rebours en cours (s restantes)
+var _waiting_go: bool = false       # pingouin figé, en attente du "GO" de l'hôte
+
 
 func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_PAUSABLE   # le chrono s'arrête pendant la pause
@@ -62,6 +79,20 @@ func _ready() -> void:
 	# On repère l'arrivée d'une nouvelle scène de niveau AVANT que ses enfants
 	# (les générateurs de terrain) ne fassent leur _ready().
 	get_tree().node_added.connect(_on_node_added)
+	# [MULTI] le compte à rebours est lancé par l'hôte (NetSession). On se
+	# connecte en différé : NetSession est déclaré APRÈS RaceManager.
+	_connect_net.call_deferred()
+
+
+func _connect_net() -> void:
+	NetSession.countdown_started.connect(_on_countdown_started)
+	NetSession.race_results_changed.connect(func():
+		if _hud != null and is_instance_valid(_hud):
+			_hud.set_ranking(NetSession.ranking())
+			# déjà arrivé : on met à jour le bandeau ("En attente des autres…" disparaît)
+			if NetSession.my_rank() > 0:
+				_hud.show_multi_result(NetSession.players[NetSession.my_id()].time,
+					NetSession.my_rank(), NetSession.players.size()))
 
 
 # --- 1. Seed de course --------------------------------------------------------
@@ -80,8 +111,12 @@ func _prepare_level(path: String) -> void:
 	_reset_race()
 	level_path = path
 	_ghost_data = load_best_ghost(path) if ghost_enabled else null
+	# [MULTI] en course réseau : seed imposé par l'hôte, pas de fantôme
+	if NetSession.in_race:
+		_ghost_data = null
+		race_seed = NetSession.race_seed
 	# Même terrain que le fantôme, sinon un nouveau seed (terrain aléatoire comme avant)
-	if _ghost_data != null:
+	elif _ghost_data != null:
 		race_seed = int(_ghost_data.seed)
 	else:
 		race_seed = randi()
@@ -105,6 +140,10 @@ func _reset_race() -> void:
 	_sample_timer = 0.0
 	_ghost_node = null
 	_hud = null
+	_remotes.clear()          # [MULTI] les nœuds sont libérés avec l'ancienne scène
+	_state_timer = 0.0
+	_countdown = -1.0
+	_waiting_go = false
 
 
 # --- 2. Chrono + enregistrement ----------------------------------------------
@@ -116,6 +155,14 @@ func _physics_process(delta: float) -> void:
 		if _player != null:
 			_start_race()
 		return
+	# [MULTI] compte à rebours puis envoi de l'état local (même après l'arrivée,
+	# pour que les autres nous voient continuer à glisser)
+	if NetSession.in_race:
+		_update_countdown(delta)
+		_state_timer -= delta
+		if _state_timer <= 0.0 and not _waiting_go:
+			_state_timer += NetSession.STATE_INTERVAL
+			_send_state()
 	if not racing:
 		return
 	race_time += delta
@@ -127,7 +174,7 @@ func _physics_process(delta: float) -> void:
 
 func _start_race() -> void:
 	has_finish = not get_tree().get_nodes_in_group("finish_gate").is_empty()
-	if not has_finish:
+	if not has_finish and not NetSession.in_race:
 		return  # niveau "Chill" : pas de chrono
 	racing = true
 	race_time = 0.0
@@ -142,6 +189,15 @@ func _start_race() -> void:
 		_ghost_node = preload("res://src/ui/race/GhostPenguin.gd").new()
 		_ghost_node.setup(_ghost_data, _player)
 		scene.add_child(_ghost_node)
+	# [MULTI] on fige le pingouin et on prévient l'hôte qu'on est prêt.
+	# Le chrono ne part qu'au "GO" (cf. _on_countdown_started).
+	if NetSession.in_race:
+		racing = false
+		_waiting_go = true
+		_player.process_mode = Node.PROCESS_MODE_DISABLED
+		_hud.set_best(-2.0)   # -2 = "en attente des autres joueurs"
+		_hud.set_ranking(NetSession.ranking())
+		NetSession.notify_loaded()
 
 
 # Un échantillon = 10 nombres : t, x, y, rotation, n° d'animation, image,
@@ -172,10 +228,74 @@ func finish_race() -> bool:
 		_rec.time = race_time
 		_save_ghost(_rec)
 	print("[COURSE] arrivée en ", format_time(race_time), " | record : ", is_record)
-	if _hud != null and is_instance_valid(_hud):
+	if NetSession.in_race:
+		# [MULTI] annonce l'arrivée à tous (appel local immédiat + envoi aux
+		# autres), puis on affiche la PLACE plutôt que le record.
+		NetSession.report_finish(race_time)
+		if _hud != null and is_instance_valid(_hud):
+			_hud.show_multi_result(race_time, NetSession.my_rank(), NetSession.players.size())
+	elif _hud != null and is_instance_valid(_hud):
 		_hud.show_result(race_time, is_record, previous_best)
 	emit_signal("race_finished", race_time, is_record, previous_best)
 	return is_record
+
+
+# --- 4. [MULTI] Course en réseau ----------------------------------------------
+func _on_countdown_started(seconds: float) -> void:
+	_countdown = seconds
+
+
+func _update_countdown(delta: float) -> void:
+	if _countdown < 0.0:
+		return
+	_countdown -= delta
+	if _hud != null and is_instance_valid(_hud):
+		_hud.show_countdown(_countdown)
+	if _countdown <= 0.0:
+		_countdown = -1.0
+		# GO ! on libère le pingouin, le chrono part de zéro
+		_waiting_go = false
+		racing = true
+		race_time = 0.0
+		_sample_timer = 0.0
+		if _player != null and is_instance_valid(_player):
+			_player.process_mode = Node.PROCESS_MODE_INHERIT
+
+
+# État envoyé : même format que les échantillons du fantôme (10 nombres :
+# t, x, y, rotation, -, image, retourné, accroché, crochet x, crochet y),
+# le nom de l'animation voyageant à part.
+func _send_state() -> void:
+	var spr = _player.animated_sprite
+	var tip: Vector2 = _player.chain.tip
+	var hooked: bool = _player.chain.hooked or _player.chain.flying
+	NetSession.send_state(PackedFloat32Array([race_time, _player.global_position.x, _player.global_position.y,
+		_player.rotation + spr.rotation, 0.0, spr.frame, 1.0 if spr.flip_h else 0.0,
+		1.0 if hooked else 0.0, tip.x, tip.y]), str(spr.animation))
+
+
+## Appelé par NetSession à chaque état reçu d'un autre joueur.
+func on_remote_state(id: int, state: PackedFloat32Array, anim: String) -> void:
+	if level_path == "" or _player == null or not is_instance_valid(_player) or state.size() < 10:
+		return  # niveau pas encore prêt : on ignore (le suivant arrivera 50 ms après)
+	var node = _remotes.get(id)
+	if node == null or not is_instance_valid(node):
+		node = preload("res://src/ui/race/RemotePenguin.gd").new()
+		var p_name: String = NetSession.players[id].name if NetSession.players.has(id) else "?"
+		node.setup(_player, p_name, id)
+		get_tree().current_scene.add_child(node)
+		_remotes[id] = node
+	node.push_state(state, anim)
+
+
+## Appelé par NetSession quand un joueur se déconnecte.
+func remove_remote(id: int) -> void:
+	var node = _remotes.get(id)
+	if node != null and is_instance_valid(node):
+		node.queue_free()
+	_remotes.erase(id)
+	if _hud != null and is_instance_valid(_hud) and NetSession.in_race:
+		_hud.set_ranking(NetSession.ranking())
 
 
 # --- 3. Fichiers fantômes ------------------------------------------------------

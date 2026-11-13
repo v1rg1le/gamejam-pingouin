@@ -137,3 +137,42 @@ Première brique du multijoueur (étape 5 de la feuille de route). Un nouvel aut
 - **Niveaux à terrain aléatoire** (SlightOffset, Spaghetti) : si un fantôme existe, on court sur SON terrain. Pour un nouveau terrain aléatoire, désactiver « Fantôme » dans le menu.
 - **Partage** : sur PC, le bouton « Dossier des fantômes » ouvre le dossier. On y copie le `.ghost` d'un ami (renommé, par ex. `LevelBateau_leo.ghost`) : le plus rapide des fantômes du dossier pour un niveau est celui qui court, sur son terrain.
 - **Menu** : interrupteur « Fantôme » (mémorisé dans `user://pinpouin.cfg`), records sur les boutons de course.
+
+## 13. Multijoueur en réseau local (13/11, version 1.4)
+
+Étape 6 de la feuille de route : des courses à plusieurs, en temps réel, sur le même Wi-Fi (jusqu'à 8 joueurs). Pas de serveur à héberger : un des joueurs crée la partie.
+
+- **Menu** : nouveau bouton « Multijoueur » en bas de la sélection des niveaux → **salon** (`src/screens/MultiplayerLobby.tscn`).
+  - Champ « Ton nom », mémorisé.
+  - « Créer la partie » : le panneau devient le SALON, avec l'adresse IP de l'hôte, la liste des joueurs (★ = hôte), le choix de la course et « Lancer la course ».
+  - « Rejoindre » : les parties du même Wi-Fi apparaissent toutes seules (un bouton par partie). On peut aussi taper l'adresse IP de l'hôte (utile si le réseau bloque la découverte).
+- **Course** :
+  - Tout le monde charge le même niveau avec **le même seed**, donc le même terrain.
+  - Les pingouins sont figés jusqu'à ce que tous soient prêts, puis un **compte à rebours 3-2-1-GO** démarre pour tous en même temps.
+  - Chacun voit **les autres pingouins en direct**, colorés, avec leur nom et leur grappin. Ils se traversent : pas de collision entre joueurs.
+  - Le **classement** s'affiche en haut à droite et se remplit à chaque arrivée.
+  - À l'arrivée, un bandeau affiche la **place** (« 1re place ! ») et le temps.
+  - Quand tout le monde est arrivé (ou 45 s après le premier), tous reviennent au salon. Le classement de la course y reste affiché et on peut relancer.
+- **Pause en multijoueur** : le jeu ne s'arrête pas (les autres continuent). « Recommencer » est masqué, puisque la chute fait déjà réapparaître le pingouin. « Choisir un niveau » devient « Quitter la course ».
+- **Déconnexions** :
+  - Si un invité part, la course continue sans lui.
+  - Si l'hôte part, les invités reviennent au salon avec le message « L'hôte a quitté la partie ».
+  - Une partie refuse un joueur qui a une autre version du jeu, ou qui arrive pendant une course.
+- **Technique** :
+  - Nouvel autoload `src/autoload/NetSession.gd` : ENet sur le port 47230, annonces UDP sur le port 47231 une fois par seconde.
+  - Chaque appareil simule son propre pingouin, donc **aucune latence sur ses commandes**. Il envoie son état 20 fois par seconde.
+  - Les autres sont affichés avec 100 ms de retard volontaire, interpolés, pour rester fluides (`src/ui/race/RemotePenguin.gd`).
+  - `RaceManager` impose le seed de l'hôte, désactive le fantôme et gère le compte à rebours.
+  - `RaceHud` affiche le décompte et le classement.
+- **Android** : permissions réseau ajoutées à l'export (internet, état du réseau / Wi-Fi, multidiffusion Wi-Fi).
+- **Testé** avec deux jeux qui se connectent l'un à l'autre :
+  - découverte automatique, puis connexion par IP ;
+  - départ synchronisé et même terrain (même seed des deux côtés) ;
+  - pingouins distants visibles et fidèles ;
+  - classement identique des deux côtés, retour au salon, deux courses d'affilée ;
+  - départ d'un invité et de l'hôte en pleine course.
+- **Limites connues** :
+  - Les records battus en multijoueur sont aussi enregistrés comme records solo, avec leur fantôme.
+  - Certains Wi-Fi (entreprise, école, réseau invité) isolent les appareils : ni découverte ni connexion possible. Un partage de connexion depuis un téléphone marche en général.
+  - Sur certains Android, la découverte automatique peut ne rien trouver. Taper l'IP fonctionne quand même.
+  - Deux jeux sur le même PC : seul le premier voit les annonces, l'autre peut rejoindre via `127.0.0.1`.

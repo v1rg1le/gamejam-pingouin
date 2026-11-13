@@ -16,6 +16,8 @@ extends Control
 #   - interrupteur "Courir contre mon fantôme" (mémorisé entre les parties) ;
 #   - sur PC, bouton "Dossier des fantômes" : ouvre le dossier où sont rangés
 #     les fichiers .ghost (pour en envoyer un à un ami, ou déposer le sien).
+#  [MULTI] (étape 6) bouton "Multijoueur" -> salon réseau local
+#   (src/screens/MultiplayerLobby.tscn).
 #  Les boutons de niveau restent des ChangeSceneButton : on ajoute un niveau
 #  en dupliquant un bouton dans l'éditeur et en changeant next_scene_path.
 # =============================================================================
@@ -25,12 +27,15 @@ extends Control
 @onready var version_label: Label = $Margin/VBox/Bottom/VersionLabel
 @onready var ghost_toggle: CheckButton = $Margin/VBox/Bottom/GhostToggle
 @onready var ghost_folder_button: Button = $Margin/VBox/Bottom/GhostFolderButton
+@onready var multi_button: Button = $Margin/VBox/Bottom/MultiButton   # [MULTI]
 @onready var races_box: VBoxContainer = $Margin/VBox/Columns/RacesPanel/VBox
 
 
 func _ready() -> void:
 	version_label.text = "v" + str(ProjectSettings.get_setting("application/config/version", "?"))
 	back_button.pressed.connect(_go_back)
+	multi_button.pressed.connect(func():   # [MULTI] vers le salon multijoueur
+		get_tree().change_scene_to_file(NetSession.LOBBY_SCENE))
 	# [FANTÔMES] records sur les boutons de course
 	for b in races_box.get_children():
 		if b is Button and "next_scene_path" in b and b.next_scene_path != "":

@@ -6,6 +6,26 @@ extends Control
 
 var paused: = false: set = set_paused
 
+
+# [MULTI] (étape 6) en course réseau, le menu pause s'adapte :
+#  - le jeu n'est PAS mis en pause (les autres continuent de courir, et notre
+#    chrono doit rester juste) : le menu s'affiche simplement par-dessus ;
+#  - "Recommencer" est masqué (le pingouin réapparaît déjà tout seul après
+#    une chute, et recharger le niveau désynchroniserait la course) ;
+#  - "Choisir un niveau" devient "Quitter la course" : on quitte la partie
+#    réseau et on revient au salon multijoueur.
+func _ready() -> void:
+	if not NetSession.in_race:
+		return
+	var box := pause_overlay.get_node("VBoxContainer")
+	box.get_node("RestartButton").visible = false
+	var change_button = box.get_node("ChangeSceneButton")
+	change_button.text = "Quitter la course"
+	change_button.next_scene_path = NetSession.LOBBY_SCENE
+	# button_down arrive avant button_up (qui change de scène) : on quitte
+	# la session réseau juste avant de partir vers le salon.
+	change_button.button_down.connect(NetSession.leave)
+
 func _unhandled_input(event: InputEvent) -> void:
 	if event.is_action_pressed("ui_cancel"):
 		self.paused = not paused  # self eplicite pour que GODOT utilise la fonction set_paused
@@ -15,7 +35,7 @@ func _unhandled_input(event: InputEvent) -> void:
 
 func set_paused(value: bool) -> void:
 	paused = value
-	scene_tree.paused = value
+	scene_tree.paused = value and not NetSession.in_race   # [MULTI] pas de vraie pause en réseau
 	pause_overlay.visible = value
 	# [FINITION 13/11] navigation clavier / manette : le bouton "Resume" prend
 	# le focus à l'ouverture de la pause (inutile en tactile).

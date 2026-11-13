@@ -114,6 +114,11 @@ func _finish() -> void:
 	# [FANTÔMES] un peu plus long pour lire le temps / le record
 	await get_tree().create_timer(1.8, true, false, true).timeout
 	Engine.time_scale = 1.0
+	# [MULTI] en course réseau, on reste dans le niveau (on voit arriver les
+	# autres, classement en haut à droite) : c'est l'hôte qui renverra tout le
+	# monde au salon quand tous seront arrivés (cf. NetSession).
+	if NetSession.in_race:
+		return
 	var error = get_tree().change_scene_to_file(next_scene_path)
 	if error != 0:
 		print("ERROR: ", error)

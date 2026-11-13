@@ -1,0 +1,187 @@
+extends Control
+# =============================================================================
+#  MultiplayerLobby.gd — [MULTI] salon multijoueur en réseau local (étape 6)
+# -----------------------------------------------------------------------------
+#  Deux colonnes, comme l'écran des niveaux :
+#   - à gauche "CRÉER UNE PARTIE" : bouton pour devenir l'hôte. Une fois la
+#     partie créée, ce panneau devient le SALON : adresse IP à donner aux
+#     autres, liste des joueurs, choix de la course et bouton "Lancer"
+#     (l'hôte seulement ; les invités voient "En attente de l'hôte…") ;
+#   - à droite "REJOINDRE" : les parties trouvées automatiquement sur le Wi-Fi
+#     (un bouton par partie) et un champ pour taper l'adresse IP à la main
+#     (utile si le réseau bloque la diffusion, ex. Wi-Fi d'entreprise).
+#  En bas : Retour (quitte la partie et revient au choix des niveaux),
+#  "Quitter la partie" (reste dans le salon), numéro de version.
+#  Après une course, on revient ici, toujours connectés, avec le classement
+#  de la dernière course affiché dans le salon.
+#  Toute la logique réseau est dans l'autoload NetSession.
+# =============================================================================
+
+# Courses proposées en multijoueur (les niveaux avec arrivée ; les niveaux
+# Chill n'ont pas de fin, donc pas de classement).
+const RACES = [
+	["Tuto : Bateau", "res://src/levels/LevelBateau.tscn"],
+	["Flat and fun", "res://src/levels/LevelRandomFlat.tscn"],
+	["Corridor", "res://src/levels/LevelRandomCorridor.tscn"],
+	["Nice Slope", "res://src/levels/LevelRandomNiceSlope.tscn"],
+	["Hook, you fool !", "res://src/levels/LevelRandomGap.tscn"],
+	["Spaghetti", "res://src/levels/LevelRandomSpaghetti.tscn"],
+]
+
+@onready var name_edit: LineEdit = $Margin/VBox/NameRow/NameEdit
+@onready var host_header: Label = $Margin/VBox/Columns/HostPanel/VBox/HostHeader
+@onready var host_button: Button = $Margin/VBox/Columns/HostPanel/VBox/HostButton
+@onready var ip_label: Label = $Margin/VBox/Columns/HostPanel/VBox/IpLabel
+@onready var players_label: Label = $Margin/VBox/Columns/HostPanel/VBox/PlayersLabel
+@onready var level_option: OptionButton = $Margin/VBox/Columns/HostPanel/VBox/LevelOption
+@onready var start_button: Button = $Margin/VBox/Columns/HostPanel/VBox/StartButton
+@onready var join_panel: PanelContainer = $Margin/VBox/Columns/JoinPanel
+@onready var search_label: Label = $Margin/VBox/Columns/JoinPanel/VBox/SearchLabel
+@onready var hosts_list: VBoxContainer = $Margin/VBox/Columns/JoinPanel/VBox/HostsList
+@onready var ip_edit: LineEdit = $Margin/VBox/Columns/JoinPanel/VBox/IpRow/IpEdit
+@onready var join_button: Button = $Margin/VBox/Columns/JoinPanel/VBox/IpRow/JoinButton
+@onready var status_label: Label = $Margin/VBox/StatusLabel
+@onready var back_button: Button = $Margin/VBox/Bottom/BackButton
+@onready var leave_button: Button = $Margin/VBox/Bottom/LeaveButton
+@onready var version_label: Label = $Margin/VBox/Bottom/VersionLabel
+
+var _connecting: bool = false   # invité : connexion en cours (pas encore dans la liste)
+
+
+func _ready() -> void:
+	version_label.text = "v" + str(ProjectSettings.get_setting("application/config/version", "?"))
+	name_edit.text = NetSession.player_name
+	name_edit.text_changed.connect(NetSession.set_player_name)
+	for race in RACES:
+		level_option.add_item(race[0])
+	level_option.selected = clampi(NetSession.last_level_index, 0, RACES.size() - 1)
+	level_option.item_selected.connect(func(i): NetSession.last_level_index = i)
+
+	host_button.pressed.connect(_on_host_pressed)
+	join_button.pressed.connect(func(): _join(ip_edit.text))
+	ip_edit.text_submitted.connect(_join)
+	start_button.pressed.connect(func(): NetSession.start_race(RACES[level_option.selected][1]))
+	leave_button.pressed.connect(func():
+		NetSession.leave()
+		status_label.text = "Tu as quitté la partie.")
+	back_button.pressed.connect(_go_back)
+
+	NetSession.players_changed.connect(_refresh)
+	NetSession.hosts_changed.connect(_refresh_hosts)
+	NetSession.session_ended.connect(func(reason):
+		_connecting = false
+		status_label.text = reason
+		NetSession.pending_message = ""   # déjà affiché ici
+		_refresh())
+	NetSession.start_discovery()
+	# message laissé par NetSession avant le changement de scène (ex. l'hôte
+	# a quitté pendant la course) : on l'affiche une fois
+	status_label.text = NetSession.pending_message
+	NetSession.pending_message = ""
+	_refresh()
+	_refresh_hosts()
+	if Settings.controls != Settings.TOUCH:
+		(start_button if NetSession.is_host() else host_button).grab_focus()
+
+
+func _exit_tree() -> void:
+	NetSession.stop_discovery()
+
+
+func _unhandled_input(_event: InputEvent) -> void:
+	if Input.is_action_just_pressed("ui_cancel"):
+		_go_back()
+
+
+func _go_back() -> void:
+	NetSession.leave()
+	get_tree().change_scene_to_file("res://src/screens/LevelSelectionScreen.tscn")
+
+
+func _on_host_pressed() -> void:
+	var err := NetSession.host()
+	if err != OK:
+		status_label.text = "Impossible de créer la partie (erreur %d). Le port %d est peut-être déjà utilisé." % [err, NetSession.GAME_PORT]
+	else:
+		status_label.text = ""
+	_refresh()
+
+
+func _join(ip: String) -> void:
+	ip = ip.strip_edges()
+	if not ip.is_valid_ip_address():
+		status_label.text = "Adresse invalide : tape quelque chose comme 192.168.1.12"
+		return
+	if NetSession.join(ip) != OK:
+		status_label.text = "Connexion impossible."
+		return
+	_connecting = true
+	status_label.text = "Connexion à %s…" % ip
+	_refresh()
+
+
+# --- Mise à jour de l'affichage ---------------------------------------------------
+func _refresh() -> void:
+	var in_session := NetSession.is_active()
+	# hors partie, on écoute les annonces (l'hôte arrête d'écouter en créant)
+	if not in_session and not NetSession.is_discovering():
+		NetSession.start_discovery()
+	var joined := in_session and NetSession.players.has(NetSession.my_id())
+	if joined:
+		_connecting = false
+		if status_label.text.begins_with("Connexion"):
+			status_label.text = ""
+	join_panel.visible = not in_session
+	leave_button.visible = in_session
+	host_button.visible = not in_session
+	host_header.text = "SALON" if in_session else "CRÉER UNE PARTIE"
+	name_edit.editable = not in_session   # le nom est envoyé à la connexion
+
+	if NetSession.is_host():
+		var ips: Array = NetSession.local_ips()
+		ip_label.text = "Partie ouverte ! Sur le même Wi-Fi, les autres la verront dans « Rejoindre ».\nAdresse : " + (", ".join(ips) if not ips.is_empty() else "inconnue")
+	elif joined:
+		ip_label.text = "Connecté ! L'hôte choisit la course et la lance."
+	elif _connecting:
+		ip_label.text = "Connexion…"
+	else:
+		ip_label.text = "Les autres joueurs te trouveront automatiquement s'ils sont sur le même Wi-Fi."
+
+	# Joueurs + classement de la dernière course
+	var lines := PackedStringArray()
+	if joined:
+		lines.append("Joueurs (%d) :" % NetSession.players.size())
+		for id in NetSession.players:
+			var mark := "  ★ " if id == 1 else "  • "   # ★ = l'hôte
+			lines.append(mark + str(NetSession.players[id].name) + ("  (toi)" if id == NetSession.my_id() else ""))
+	if not NetSession.last_results.is_empty():
+		lines.append("")
+		lines.append("Dernière course :")
+		var rank := 1
+		for entry in NetSession.last_results:
+			if entry[1] >= 0.0:
+				lines.append("  %d. %s   %s" % [rank, entry[0], RaceManager.format_time(entry[1])])
+				rank += 1
+			else:
+				lines.append("  –  %s   (pas arrivé)" % entry[0])
+	players_label.text = "\n".join(lines)
+	players_label.visible = not lines.is_empty()
+
+	level_option.visible = NetSession.is_host()
+	start_button.visible = NetSession.is_host()
+	start_button.disabled = NetSession.players.size() < 1
+
+
+func _refresh_hosts() -> void:
+	for c in hosts_list.get_children():
+		c.queue_free()
+	var n := 0
+	for ip in NetSession.found_hosts:
+		var h: Dictionary = NetSession.found_hosts[ip]
+		var b := Button.new()
+		b.custom_minimum_size = Vector2(0, 46)
+		b.text = "%s   (%d joueur%s)" % [h.name, h.players, "s" if h.players > 1 else ""]
+		b.pressed.connect(_join.bind(ip))
+		hosts_list.add_child(b)
+		n += 1
+	search_label.text = "Recherche des parties sur le Wi-Fi…" if n == 0 else "Parties trouvées :"
