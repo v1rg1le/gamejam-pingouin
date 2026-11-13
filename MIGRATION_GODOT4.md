@@ -126,3 +126,14 @@ Tests en simulation : sans rien toucher, le pingouin glisse jusqu'à l'arrivée 
 - **Menu pause** : fond assombri, titre « PAUSE », boutons plus grands en français (Reprendre / Recommencer / Choisir un niveau / Quitter le jeu), focus clavier/manette. « Choisir un niveau » ramène à la sélection des niveaux (avant : écran titre). L'interface passe au-dessus du bandeau du tuto.
 - **Touche « retour » Android** : avant, elle fermait l'appli même en pleine partie. Maintenant : pause en jeu, retour au menu précédent dans la sélection des niveaux, et sortie seulement depuis l'écran titre (`application/config/quit_on_go_back = false` + gestion dans `Settings.gd`).
 - **Version** affichée dans le menu, lue dans `application/config/version` (1.2).
+
+## 12. Seed de course, chrono, records et fantômes (13/11, version 1.3)
+
+Première brique du multijoueur (étape 5 de la feuille de route). Un nouvel autoload, `src/autoload/RaceManager.gd`, gère :
+- **Seed de course** : à chaque chargement de niveau, un seed est choisi, et tout le hasard qui change le terrain en dépend (graines des îles `random_seed` des 3 générateurs, choix des décorations). Même seed = exactement le même terrain (vérifié : mêmes graines d'îles à chaque rejeu).
+- **Chrono** en haut à gauche, avec le record du niveau, sur les niveaux avec arrivée seulement. Il s'arrête pendant la pause.
+- **Record** : à l'arrivée, un bandeau affiche « NOUVEAU RECORD ! » (avec l'écart) ou « Temps / Record ». Le record s'affiche aussi sur le bouton du niveau dans le menu.
+- **Fantôme** : chaque record est enregistré (30 fois par seconde : position, rotation, animation, grappin) dans `user://ghosts/<niveau>.ghost`, environ 50 Ko compressé. À la course suivante, un pingouin bleu translucide (« record ») rejoue cette course, sans aucune collision. Testé : avec les mêmes entrées, le fantôme suit le joueur à une image près et le temps est identique au centième.
+- **Niveaux à terrain aléatoire** (SlightOffset, Spaghetti) : si un fantôme existe, on court sur SON terrain. Pour un nouveau terrain aléatoire, désactiver « Fantôme » dans le menu.
+- **Partage** : sur PC, le bouton « Dossier des fantômes » ouvre le dossier. On y copie le `.ghost` d'un ami (renommé, par ex. `LevelBateau_leo.ghost`) : le plus rapide des fantômes du dossier pour un niveau est celui qui court, sur son terrain.
+- **Menu** : interrupteur « Fantôme » (mémorisé dans `user://pinpouin.cfg`), records sur les boutons de course.

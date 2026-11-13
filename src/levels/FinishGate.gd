@@ -40,6 +40,7 @@ var _time := 0.0
 
 
 func _ready() -> void:
+	add_to_group("finish_gate")  # [FANTÔMES] RaceManager sait ainsi que le niveau a une arrivée
 	# 1. Bande verticale de détection (remplace le carré de 128 px)
 	var shape := RectangleShape2D.new()
 	shape.size = Vector2(finish_band_width, finish_band_height + finish_band_below)
@@ -107,9 +108,11 @@ func _finish() -> void:
 		return
 	_finished = true
 	print("yay")
+	RaceManager.finish_race()  # [FANTÔMES] arrête le chrono, sauve le record + le fantôme
 	# 5. Petit ralenti de victoire (le timer ignore le ralenti : 4e argument)
 	Engine.time_scale = 0.3
-	await get_tree().create_timer(0.8, true, false, true).timeout
+	# [FANTÔMES] un peu plus long pour lire le temps / le record
+	await get_tree().create_timer(1.8, true, false, true).timeout
 	Engine.time_scale = 1.0
 	var error = get_tree().change_scene_to_file(next_scene_path)
 	if error != 0:

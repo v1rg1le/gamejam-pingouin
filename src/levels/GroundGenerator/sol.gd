@@ -297,14 +297,14 @@ func add_end(position :Vector2):#, rotation_degrees): #point_a:Vector2,point_b:V
 #	return deco
 
 func get_random_decoration_instance():
-	randomize()
-	var random_float = randf()
+	# [FANTÔMES] hasard tiré du seed de course : mêmes décorations à chaque rejeu
+	var random_float = RaceManager.deco_rng.randf()
 
 	if random_float < 0.6:  # common
-		return decorations_common[randi() % len(decorations_common)].instantiate()
+		return decorations_common[RaceManager.deco_rng.randi() % len(decorations_common)].instantiate()
 	elif random_float < 0.8:  # Uncommon
-		return decorations_rare[randi() % len(decorations_rare)].instantiate()
+		return decorations_rare[RaceManager.deco_rng.randi() % len(decorations_rare)].instantiate()
 	else:  # Rare
-		return decorations_wow[randi() % len(decorations_wow)].instantiate()
+		return decorations_wow[RaceManager.deco_rng.randi() % len(decorations_wow)].instantiate()
 		 
 

@@ -124,7 +124,8 @@ func add_sol(position:Vector2, i, is_final_map:bool):
 	
 	sol.world_seed = world_seed
 	if random_seed:
-		var new_seed = str(rand_from_seed(randi()%200))
+		# [FANTÔMES] graine tirée du seed de course (avant : randi()) -> terrain rejouable à l'identique
+		var new_seed = str(rand_from_seed(RaceManager.next_seed_index()))
 		sol.world_seed = new_seed
 #		breakpoint  # [MIGRATION] désactivé : bloquait le jeu dans le débogueur
 	sol.is_boost = is_boost
