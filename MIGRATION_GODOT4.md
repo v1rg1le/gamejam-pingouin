@@ -92,3 +92,17 @@ Les tests ont été faits en simulation (sans écran, entrées scriptées) + cap
 **Corrigé au passage** : le menu pause (Échap) appelait `SceneTree.set_input_as_handled()`, qui n'existe plus en Godot 4 (erreur à chaque pause).
 
 **Export Android** : preset « Android » ajouté (`export_presets.cfg`) — APK sans Gradle, ARM 32 + 64 bits, Android 7.0 minimum (API 24), paquet `com.pinpouin.leninja`, plein écran immersif, rendu « Compatibility » (OpenGL ES, le plus compatible pour un jeu 2D) et compression de textures ETC2/ASTC activée. L'APK est signé avec une clé de publication dédiée (`pinpouin-release.keystore`, alias `pinpouin`), fournie à part et **jamais commitée** (`*.keystore` dans `.gitignore`). Gardez-la précieusement : toutes les mises à jour de l'appli devront être signées avec la même clé. Pour ré-exporter depuis l'éditeur : Éditeur → Paramètres de l'éditeur → Export → Android (chemin du SDK Android + JDK), puis Projet → Exporter → Android, en renseignant la clé dans la section Keystore → Release du preset.
+
+## 9. Map « bateau » : niveau d'apprentissage (`src/levels/LevelBateau.tscn`)
+
+Premier bouton du menu : **« Tuto : Bateau »**. Il a son propre petit générateur (`src/levels/tutorial/BateauGenerator.gd`) qui réutilise `sol.tscn` et la ligne d'arrivée :
+- **une seule piste continue, sans aucun trou**, en légère descente (3,4°), relief doux, sol épais ;
+- **graine choisie par calcul** parmi 400 : le départ ne fait que descendre et la pire montée de la piste ne dépasse pas ~3° ;
+- **mur invisible au départ** (on ne peut pas tomber en reculant) ;
+- **plafond d'entraînement au grappin** au milieu, visible à l'écran mais hors de portée d'un simple saut ;
+- **8 panneaux** (avancer, sauter, pump, rotation, grappin, tirer, figure, arrivée) qui affichent les **vraies touches** lues dans les réglages du projet, adaptées au mode (clavier / manette / tactile) et mises à jour en direct. Quand le pingouin passe un panneau, son texte reste **6 s en haut de l'écran** ;
+- **ligne d'arrivée** posée sur la piste.
+
+Tests en simulation : sans rien toucher, le pingouin glisse jusqu'à l'arrivée (~32 s) ; avec seulement la flèche droite : 44 s ; avec le pump : 29 s ; 0 mort, et le grappin s'accroche bien au plafond. Tous les réglages (longueur, pente, relief, plafond, arrivée, textes) sont exportés dans `BateauGenerator.gd`.
+
+⚠️ La **figure** (`trix`) n'a **aucun bouton manette** dans les réglages du projet (le panneau l'indique). À choisir.

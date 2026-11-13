@@ -76,6 +76,13 @@ __meta__ = {
 }
 next_scene_path = "res://src/levels/LevelRandomFlat.tscn"
 
+[node name="ChangeSceneButtonBateau" parent="TextureRect/HBoxContainer/VBoxContainer4/VBoxContainer2" instance=ExtResource( 16 )]
+offset_top = 104.0
+offset_right = 253.0
+offset_bottom = 134.0
+text = "Tuto : Bateau"
+next_scene_path = "res://src/levels/LevelBateau.tscn"
+
 [node name="ChangeSceneButton3" parent="TextureRect/HBoxContainer/VBoxContainer4/VBoxContainer2" instance=ExtResource( 16 )]
 offset_top = 104.0
 offset_right = 253.0

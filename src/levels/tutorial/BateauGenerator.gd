@@ -1,0 +1,121 @@
+extends Node2D
+# =============================================================================
+#  BateauGenerator.gd — [MAP BATEAU] niveau d'apprentissage, simple et SANS TROU
+# -----------------------------------------------------------------------------
+#  Réutilise les briques existantes (sol.tscn, FinishGate.tscn) mais, à la
+#  différence de GroundGenerator.gd :
+#   - pas de tremplin ni de trou : UNE seule longue piste continue ;
+#   - légère descente régulière (coeff_pente) : on garde de la vitesse sans rien faire ;
+#   - relief doux (grande période, faible hauteur) et sol épais (impossible de passer à travers) ;
+#   - un mur invisible au départ : impossible de tomber en reculant ;
+#   - un PLAFOND au milieu pour s'entraîner au grappin sans aucun risque ;
+#   - des panneaux (TutorialSign) qui expliquent chaque commande avec les
+#     touches du périphérique utilisé (clavier, manette ou tactile) ;
+#   - une ligne d'arrivée posée sur la piste, bien visible.
+#  Tous les réglages sont exportés pour pouvoir ajuster le niveau dans l'éditeur.
+# =============================================================================
+
+const UNIT_SIZE = 64
+var sol_res = preload("res://src/levels/GroundGenerator/sol.tscn")
+var finish_gate_res = preload("res://src/levels/FinishGate.tscn")
+var sign_script = preload("res://src/levels/tutorial/TutorialSign.gd")
+
+## Longueur de la piste (px).
+@export var track_length: int = UNIT_SIZE * 400
+## Pente moyenne (0.06 ≈ 3,4° de descente) : assez pour avancer seul.
+@export var coeff_pente: float = 0.06
+## Relief doux : bosses espacées (période) et basses (hauteur).
+@export var noise_period: int = 1300
+@export var bump_height: int = 110
+## Épaisseur du sol (px) : bien épais, on ne peut pas le traverser.
+@export var ground_thickness: int = 240
+## Graine choisie par calcul parmi 400 : le départ ne fait que descendre et la
+## pire montée de toute la piste ne dépasse pas ~3°.
+@export var world_seed: String = "BATEAU397"
+## Plafond d'entraînement au grappin : début, longueur et hauteur au-dessus de la piste.
+@export var roof_start: int = UNIT_SIZE * 160
+@export var roof_length: int = UNIT_SIZE * 120
+@export var roof_height: int = 450  # visible à l'écran, mais hors de portée d'un simple saut
+## Position de la ligne d'arrivée (px depuis le début de la piste).
+@export var finish_x: int = UNIT_SIZE * 380
+
+# Panneaux : position x sur la piste + texte ({action} = touche réelle).
+var signs = [
+	[700,   "Bienvenue sur la banquise !\nAvancer : {move_right}    Reculer : {move_left}\nPrends de l'élan, la piste descend jusqu'à l'arrivée."],
+	[3200,  "Sauter : {jump}"],
+	[6000,  "PUMP : {pump} dans les DESCENTES\npour prendre de la vitesse.\nRelâche dans les montées."],
+	[8600,  "En l'air, tourne avec {rotate_trigo} / {rotate_horaire}\npour retomber bien à plat."],
+	[10800, "GRAPPIN : vise le plafond et maintiens {hook}\npour t'accrocher. Lâche pour te décrocher."],
+	[13800, "Accroché : maintiens aussi {pull}\npour te hisser vers le plafond."],
+	[17600, "FIGURE en l'air : {trix}\nTermine-la avant de toucher le sol,\nsinon tu es sonné !"],
+	[22300, "Dernière ligne droite :\nfonce sous l'arche !"],
+]
+
+var _track  # le sol principal (pour connaître la hauteur de la piste)
+
+
+func _ready() -> void:
+	# 1. La piste principale (un seul sol continu)
+	_track = _add_sol(Vector2.ZERO, track_length, bump_height, ground_thickness, world_seed)
+
+	# 2. Plafond d'entraînement au grappin, parallèle à la piste
+	var roof_pos := Vector2(roof_start, surface_y(roof_start) - roof_height)
+	_add_sol(roof_pos, roof_length, int(bump_height * 0.5), 60, world_seed + "_PLAFOND")
+
+	# 3. Mur invisible au départ (on ne peut pas tomber en reculant)
+	_add_wall(Vector2(-40, surface_y(0) - 1500), Vector2(80, 3000))
+
+	# 4. Panneaux d'explication
+	for s in signs:
+		var sign_node := Node2D.new()
+		sign_node.set_script(sign_script)
+		sign_node.sign_text = s[1]
+		sign_node.position = Vector2(s[0], surface_y(s[0]) - 170)
+		add_child(sign_node)
+
+	# 5. Ligne d'arrivée posée sur la piste
+	var gate = finish_gate_res.instantiate()
+	gate.position = Vector2(finish_x, surface_y(finish_x))
+	add_child(gate)
+
+	# 6. Point de départ du joueur (LevelRandom.gd l'ajoute après ce _ready)
+	get_parent()._set_spawn_position(Vector2(250, surface_y(250) - 80))
+
+
+# Hauteur (y) de la surface de la piste à l'abscisse x — même formule que sol.gd.
+func surface_y(x: float) -> float:
+	return _track.position.y + _track.map_height * _track._noise(x) + _track.coeff_pente * x
+
+
+func _add_sol(pos: Vector2, width: int, height: int, thickness: int, seed_text: String):
+	var sol = sol_res.instantiate()
+	sol.set_collision_layer(2)   # calque "ground", comme dans GroundGenerator.gd
+	sol.coeff_pente = coeff_pente
+	sol.noise_octaves = 1
+	sol.noise_period = noise_period
+	sol.noise_persistence = 0.2
+	sol.noise_lacunarity = 3
+	sol.world_seed = seed_text
+	sol.is_boost = false
+	sol.is_igloo = true
+	sol.igloo_treshold = 0.01
+	sol.is_final_map = false
+	sol.map_width = width
+	sol.map_height = height
+	sol.h = thickness
+	sol.position = pos
+	add_child(sol)
+	return sol
+
+
+func _add_wall(pos: Vector2, size: Vector2) -> void:
+	var body := StaticBody2D.new()
+	body.collision_layer = 2
+	var shape := CollisionShape2D.new()
+	var rect := RectangleShape2D.new()
+	rect.size = size
+	shape.shape = rect
+	shape.position = size * 0.5
+	body.position = pos
+	body.add_child(shape)
+	add_child(body)
