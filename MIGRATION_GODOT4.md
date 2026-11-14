@@ -385,3 +385,25 @@ Demande de l'équipe : plus de coupure nette du fond, une boucle infinie qui sui
   - les îles ne bougent pas, donc même niveau et fantômes toujours valables ;
   - les prises sont maintenant réparties sur la largeur réelle de chaque trou, de la fin de l'île précédente au début de la suivante. Le nombre de prises par trou ne change pas.
 - **Effet de bord voulu** : la simulation qui ne fait qu'avancer, sans grappin, retombe maintenant dans le premier trou. Le niveau redemande donc le grappin, ce qui répond aussi à la remarque de la 1.10 (« on passe les trous sans grappin »).
+
+## 22. Équilibrage des scores + arrivée du half-pipe (14/11, version 1.13)
+
+- **Mesure sur la 1.12** (bots `vitesse` = avancer + pump, `mixte` = + un saut/figure toutes les 3 s) : avec l'ancien barème `60 000 / temps`, la vitesse valait 3140 pts sur le Bateau (19 s) mais seulement ~900 pts sur les niveaux longs (66 s) ; les figures (100 à 150 pts) écrasaient tout sur les longs niveaux, même en arrivant 30 s plus tard.
+- **Nouveau barème** (`RaceManager.speed_points(time, reference)`) :
+  - temps de référence = distance départ → arrivée ÷ `REF_SPEED` (1250 px/s, vitesse moyenne mesurée) ;
+  - points de vitesse = `SPEED_BASE` (3000) au temps de référence, ± `SPEED_PER_SECOND` (100) par seconde d'avance / de retard, jamais négatif ;
+  - figures inchangées → règle simple : **1 seconde = 100 points = 1 figure**.
+- **Meilleurs scores** : nouvelle section de config `scores_v2` (l'ancienne `scores` est ignorée, pas supprimée) ; les records de temps sont conservés.
+- **Textes** : panneau SCORE du tuto, aide de début de niveau, écran de résultat (affiche le temps de référence).
+- **Résultats 1.13** :
+
+  | Niveau | vitesse | mixte |
+  |---|---|---|
+  | Bateau | 19.08 s → 3020 | 21.77 s → 2750 + 600 = 3350 |
+  | Flat | 65.80 s → 3210 | 68.97 s → 2890 + 1900 = 4790 |
+  | Corridor | 67.05 s → 3010 | 94.93 s → 230 + 2100 = 2330 |
+  | Spaghetti | 32.60 s → 3060 | — |
+  | Nice Slope | 53.53 s → 4370 | — |
+
+  Des figures qui ne coûtent presque pas de temps rapportent gros ; des figures qui font perdre 28 s font perdre la course.
+- **Bug trouvé au passage (Nice Slope)** : sans grappin, le pingouin pouvait rester collé en haut du mur vertical du half-pipe final, à 274 px de l'arche posée sur le deck. `FinishGate.trigger_offset_x` (nouveau, 0 par défaut) permet de décaler la ligne de détection : `HalfPipe` la descend au milieu de la courbe de droite et allonge la bande vers le bas. L'arche ne bouge pas.

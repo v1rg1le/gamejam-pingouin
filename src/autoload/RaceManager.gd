@@ -39,7 +39,15 @@ extends Node
 #       - à l'arrivée, le temps est annoncé à tous et le HUD affiche le classement.
 #
 #  5. [SCORE 1.5] SCORE = POINTS DE VITESSE + POINTS DE FIGURES
-#       - points de vitesse = SPEED_POINTS / temps (s) : 60 000 / 30 s = 2000 ;
+#       - [SCORE 1.13] points de vitesse = SPEED_BASE au TEMPS DE RÉFÉRENCE du
+#         niveau, puis ± SPEED_PER_SECOND par seconde d'avance / de retard
+#         (jamais négatif). Temps de référence = distance départ -> arrivée
+#         ÷ REF_SPEED (1250 px/s, la vitesse moyenne mesurée d'un joueur qui
+#         avance en pumpant, sur tous les niveaux). Règle à retenir :
+#         « 1 seconde = 100 points = 1 figure ».
+#         (1.5 à 1.12 : 60 000 / temps -> sur un niveau long (66 s) la vitesse
+#         ne valait que 900 points et les figures écrasaient tout ; sur un
+#         niveau court (19 s), c'était l'inverse.)
 #         plus on arrive vite, plus on en a ;
 #       - points de figures : comptés par TrickScore.gd (figures, vrilles,
 #         combos, validés à l'atterrissage) ;
@@ -54,7 +62,11 @@ const GHOST_DIR = "user://ghosts"
 const CONFIG_PATH = "user://pinpouin.cfg"
 const SAMPLE_INTERVAL = 1.0 / 30.0   # 30 échantillons par seconde
 const GHOST_FORMAT_VERSION = 1
-const SPEED_POINTS = 60000.0         # [SCORE 1.5] points de vitesse = SPEED_POINTS / temps (s)
+const SPEED_POINTS = 60000.0         # [SCORE 1.5] ancien barème (60 000 / temps), plus utilisé depuis la 1.13
+const SPEED_BASE = 3000              # [SCORE 1.13] points de vitesse au temps de référence
+const SPEED_PER_SECOND = 100         # [SCORE 1.13] points par seconde d'avance / de retard
+const REF_SPEED = 1250.0             # [SCORE 1.13] px/s : sert à calculer le temps de référence
+const SCORES_SECTION = "scores_v2"   # [SCORE 1.13] nouveaux meilleurs scores (barème différent)
 
 ## Courir contre son meilleur fantôme (réglable dans le menu des niveaux).
 var ghost_enabled: bool = true
@@ -85,6 +97,7 @@ var _waiting_go: bool = false       # pingouin figé, en attente du "GO" de l'h�
 var trick_score = null              # nœud TrickScore de la course en cours
 var last_score := {}                # détail du dernier score : speed, tricks, score
 var _best_scores := {}              # niveau -> meilleur score (chargé depuis la config)
+var ref_time: float = 0.0           # [SCORE 1.13] temps de référence du niveau en cours (s)
 
 
 func _ready() -> void:
@@ -200,6 +213,10 @@ func _start_race() -> void:
 	racing = true
 	race_time = 0.0
 	_sample_timer = 0.0
+	# [SCORE 1.13] temps de référence = distance départ -> arrivée / REF_SPEED
+	var gate = get_tree().get_first_node_in_group("finish_gate")
+	if gate != null and _player != null:
+		ref_time = maxf(10.0, absf(gate.global_position.x - _player.global_position.x) / REF_SPEED)
 	_rec = {"version": GHOST_FORMAT_VERSION, "level": level_path, "seed": race_seed,
 		"anims": [], "samples": PackedFloat32Array(), "time": 0.0}
 	var scene := get_tree().current_scene
@@ -267,9 +284,9 @@ func finish_race() -> bool:
 		_save_ghost(_rec)
 	# [SCORE 1.5] calcul du score
 	var tricks: int = trick_score.total if trick_score != null and is_instance_valid(trick_score) else 0
-	var speed := speed_points(race_time)
+	var speed := speed_points(race_time, ref_time)
 	var previous_best_score := get_best_score(level_path)
-	last_score = {"speed": speed, "tricks": tricks, "score": speed + tricks,
+	last_score = {"speed": speed, "tricks": tricks, "score": speed + tricks, "ref_time": ref_time,
 		"best_score": previous_best_score, "is_best_score": speed + tricks > previous_best_score}
 	if last_score.is_best_score:
 		_save_best_score(level_path, speed + tricks)
@@ -288,7 +305,8 @@ func finish_race() -> bool:
 
 # --- [AIDE 1.7] Carte d'aide en début de niveau ------------------------------------
 const START_HELP_TEXT = "Avancer : {move_right}    Reculer : {move_left}\nSauter : {jump}    PUMP : {pump}  (dans les descentes)\nGrappin : {hook}    Tirer : {pull}\nFigure : {trix}    Rotation : {rotate_trigo} / {rotate_horaire}"
-const START_HELP_SCORE = "\n\nSCORE = points de vitesse + points de figures\nFigures et vrilles comptent si tu atterris bien !"
+# [SCORE 1.13] aide de départ : rappel de la règle « 1 s = 100 pts = 1 figure »
+const START_HELP_SCORE = "\n\nSCORE = vitesse + figures  (1 seconde gagnée = 100 pts = 1 figure)\nFigures et vrilles comptent si tu atterris bien !"
 
 func _show_start_help() -> void:
 	# Pas dans le tuto (ses panneaux expliquent déjà tout), pas en multijoueur
@@ -481,8 +499,11 @@ static func format_time(t: float) -> String:
 
 # --- 5. [SCORE 1.5] Score ---------------------------------------------------------
 ## Points de vitesse pour un temps donné (arrondis à la dizaine).
-static func speed_points(time: float) -> int:
-	return int(round(SPEED_POINTS / maxf(time, 1.0) / 10.0)) * 10
+## [SCORE 1.13] SPEED_BASE au temps de référence, ± SPEED_PER_SECOND par
+## seconde d'avance ou de retard, arrondi à la dizaine, jamais négatif.
+static func speed_points(time: float, reference: float) -> int:
+	var pts: float = SPEED_BASE + (reference - time) * SPEED_PER_SECOND
+	return maxi(0, int(round(pts / 10.0)) * 10)
 
 
 ## Meilleur score connu pour un niveau, -1 s'il n'y en a pas.
@@ -495,7 +516,7 @@ func _save_best_score(path: String, score: int) -> void:
 	_best_scores[key] = score
 	var cfg := ConfigFile.new()
 	cfg.load(CONFIG_PATH)
-	cfg.set_value("scores", key, score)
+	cfg.set_value(SCORES_SECTION, key, score)
 	cfg.save(CONFIG_PATH)
 
 
@@ -512,6 +533,8 @@ func _load_config() -> void:
 	var cfg := ConfigFile.new()
 	if cfg.load(CONFIG_PATH) == OK:
 		ghost_enabled = cfg.get_value("race", "ghost_enabled", true)
-		if cfg.has_section("scores"):   # [SCORE 1.5]
-			for key in cfg.get_section_keys("scores"):
-				_best_scores[key] = int(cfg.get_value("scores", key, -1))
+		# [SCORE 1.13] nouvelle section : les meilleurs scores de l'ancien
+		# barème ne sont plus comparables (ils restent dans "scores", ignorés)
+		if cfg.has_section(SCORES_SECTION):
+			for key in cfg.get_section_keys(SCORES_SECTION):
+				_best_scores[key] = int(cfg.get_value(SCORES_SECTION, key, -1))

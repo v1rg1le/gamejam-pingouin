@@ -269,6 +269,14 @@ func add_finish_gate(position :Vector2):#, rotation_degrees): #point_a:Vector2,p
 #	var dvec = (point_b - point_a).normalized()
 #	var normal = Vector2(dvec.y, -dvec.x)
 	finish_gate.position = position
+	# [ARRIVÉE 1.13] Le mur de droite du half-pipe finit à la verticale : sans
+	# grappin ni saut, on monte, on retombe, et le pingouin pouvait rester
+	# bloqué contre le haut du mur à quelques px du deck où est l'arche (mesuré
+	# sur Nice Slope : bloqué à 274 px de la ligne). On descend donc la ligne
+	# d'arrivée au milieu de la courbe de droite (l'arche ne bouge pas) et on
+	# allonge la bande vers le bas jusqu'au fond du half-pipe.
+	finish_gate.trigger_offset_x = -(0.5 * deck_length + 0.5 * height)
+	finish_gate.finish_band_below = height + 3 * UNIT_SIZE
 	add_child(finish_gate)
 #	return deco
 

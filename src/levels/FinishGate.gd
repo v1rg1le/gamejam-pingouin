@@ -26,6 +26,13 @@ extends Node2D
 @export var finish_band_height: float = 6000.0
 ## Profondeur (px) de la zone sous l'arche (pour les arrivées un peu basses).
 @export var finish_band_below: float = 400.0
+## [ARRIVÉE 1.13] Décalage horizontal (px) de la LIGNE de détection par
+## rapport à l'arche (négatif = plus tôt). Utilisé par le half-pipe final :
+## l'arche reste posée sur le deck, mais la ligne est descendue dans la
+## courbe de droite, pour qu'un pingouin qui n'a pas assez d'élan pour
+## sortir du half-pipe (il reste collé en haut du mur vertical) arrive quand
+## même. Valeur 0 = comportement d'avant.
+@export var trigger_offset_x: float = 0.0
 ## Largeur (px) de la zone d'arrivée.
 @export var finish_band_width: float = 200.0
 ## Affiche le faisceau + le texte "ARRIVÉE".
@@ -45,7 +52,7 @@ func _ready() -> void:
 	var shape := RectangleShape2D.new()
 	shape.size = Vector2(finish_band_width, finish_band_height + finish_band_below)
 	$Area2D/CollisionShape2D.shape = shape
-	$Area2D/CollisionShape2D.position = Vector2(0, (finish_band_below - finish_band_height) * 0.5)
+	$Area2D/CollisionShape2D.position = Vector2(trigger_offset_x, (finish_band_below - finish_band_height) * 0.5)
 	$Area2D.collision_mask = 1  # calque 1 = "player"
 	# 4. Repère visuel
 	if show_beacon:
@@ -90,9 +97,10 @@ func _physics_process(_delta: float) -> void:
 	if player == null:
 		return
 	var x: float = player.global_position.x
+	var line_x: float = global_position.x + trigger_offset_x  # [ARRIVÉE 1.13] ligne éventuellement décalée
 	var in_height: bool = player.global_position.y < global_position.y + finish_band_below \
 		and player.global_position.y > global_position.y - finish_band_height
-	if _player_prev_x != null and _player_prev_x < global_position.x and x >= global_position.x and in_height:
+	if _player_prev_x != null and _player_prev_x < line_x and x >= line_x and in_height:
 		_finish()
 	_player_prev_x = x
 

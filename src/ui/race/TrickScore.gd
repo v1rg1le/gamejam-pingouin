@@ -7,7 +7,8 @@ extends Node
 #  score final est calculé par RaceManager à l'arrivée :
 #
 #      SCORE = points de vitesse + points de figures
-#      points de vitesse = SPEED_POINTS / temps en secondes (RaceManager)
+#      points de vitesse : 3000 au temps de référence du niveau, ± 100 par
+#      seconde d'avance / de retard (RaceManager, barème 1.13)
 #
 #  Barème des figures (tout est regroupé dans les constantes ci-dessous) :
 #   - FIGURE réussie (l'animation de figure va jusqu'au bout) : TRICK_POINTS

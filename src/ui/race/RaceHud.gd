@@ -172,6 +172,9 @@ func _score_text(score: Dictionary) -> String:
 	if score.is_empty():
 		return ""
 	var t := "\n\nVitesse %d  +  Figures %d\nSCORE  %d" % [score.speed, score.tricks, score.score]
+	# [SCORE 1.13] rappel du temps de référence (3000 points de vitesse à ce temps)
+	if score.has("ref_time") and score.ref_time > 0.0:
+		t += "\n(temps de référence %s)" % RaceManager.format_time(score.ref_time)
 	if score.is_best_score and score.best_score >= 0:
 		t += "\nMeilleur score !"   # (pas affiché la toute 1re fois)
 	elif not score.is_best_score and score.best_score >= 0:

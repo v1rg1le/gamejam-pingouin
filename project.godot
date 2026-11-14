@@ -15,7 +15,7 @@ ss2d/version="3.3.2"
 [application]
 
 config/name="Pinpouin"
-config/version="1.12"
+config/version="1.13"
 config/quit_on_go_back=false
 run/main_scene="res://src/screens/MainScreen.tscn"
 config/features=PackedStringArray("4.7")

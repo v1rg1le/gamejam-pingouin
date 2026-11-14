@@ -52,7 +52,7 @@ var sign_script = preload("res://src/levels/tutorial/TutorialSign.gd")
 # panneau des figures annonce leurs points.
 var signs = [
 	[700,   "Bienvenue sur la banquise !\nAvancer : {move_right}    Reculer : {move_left}\nPrends de l'élan, la piste descend jusqu'à l'arrivée."],
-	[1900,  "SCORE = points de VITESSE + points de FIGURES\nPlus tu arrives vite, plus tu marques.\nLes figures en l'air rapportent des bonus !"],
+	[1900,  "SCORE = points de VITESSE + points de FIGURES\n3000 pts au temps de référence, +100 par seconde gagnée.\nUne figure réussie = 100 pts = 1 seconde !"],
 	[3200,  "Sauter : {jump}"],
 	[6000,  "PUMP : {pump} dans les DESCENTES\npour prendre de la vitesse.\nRelâche dans les montées."],
 	[8600,  "En l'air, tourne avec {rotate_trigo} / {rotate_horaire}\npour retomber bien à plat.\nDans les grands sauts : un tour complet = VRILLE, +150 pts !"],
