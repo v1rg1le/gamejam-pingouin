@@ -270,3 +270,23 @@ Choix de l'équipe : pas de serveur à payer ou à gérer. C'est l'hôte qui ouv
   - en simulation : une vrille validée à chaque saut (+150).
 - **Bouton manette pour la figure** : croix directionnelle haut. Les panneaux et l'aide l'affichent tout seuls.
 - **Corrigé au passage** : un nœud ajouté par code à la racine de l'arbre était pris pour un changement de scène par `RaceManager`, ce qui coupait le chrono. Seules les vraies scènes comptent maintenant.
+
+## 17. Fond infini qui suit le niveau (14/11, version 1.8)
+
+Demande de l'équipe : plus de coupure nette du fond, une boucle infinie qui suit les pentes et s'adapte à la forme du niveau. Tout est dans `src/levels/parallax/VerticalParallax.gd`, aucune image n'est modifiée.
+
+- **Boucle horizontale infinie** : chaque plan se répète tous les 3200 px (largeur de l'image × échelle du sprite, `motion_mirroring`). Avant, les plans s'arrêtaient au bout de leur région de 70 000 px.
+- **Plus de bords nets** :
+  - le bas du ciel était coupé en ligne droite par la région du sprite (ligne 180 de l'image, alors que le dessin descend jusqu'à 200 avec un bord ondulé). La région est maintenant rallongée jusqu'au bord naturel du dessin, sans rien déplacer ;
+  - le ciel est prolongé vers le haut avec sa couleur dominante ;
+  - le glacier, qui est le plan le plus au fond (`z_index` -126), est prolongé vers le haut (brume) et vers le bas (sa dernière ligne étirée : les falaises continuent).
+  - Ces prolongements sont des `Sprite2D` enfants, dessinés derrière l'image d'origine (`show_behind_parent`).
+  - Les plans de devant ne sont pas prolongés vers le bas : ils cacheraient le glacier.
+- **Le fond suit les pentes** :
+  - la composition est fixe à l'écran : ciel et montagnes en haut, glacier en bas, avec le bas du glacier calé sur le bas de l'écran (`anchor_offset` pour la décaler) ;
+  - la hauteur de référence suit la caméra en douceur (`follow_time` = 3 s) : sur une longue descente, le fond accompagne le niveau au lieu de rester en butée ;
+  - les mouvements rapides (sauts, chutes, grappin) font toujours bouger les plans selon leur profondeur ;
+  - l'ancien garde-fou « anti-vide », qui recalait le décor par à-coups, n'est plus nécessaire quand les images sont prolongées. Il reste actif si `extend_vertically` est coupé.
+- **Réglages** (inspecteur du nœud `ParallaxBackground` de chaque niveau) : `infinite_horizontal`, `extend_vertically`, `follow_time`, `anchor_offset`, `extension_rows`, en plus des anciens.
+- **Vérifié** sur Spaghetti, Nice Slope et le tuto, en courant tout le niveau : composition cohérente partout, aucun vide (couleur de fond de la fenêtre) détecté à l'écran.
+- **Note** : l'ordre d'affichage des plans dépend de leur `z_index` dans les scènes (glacier -126 au fond, nuages -123, montagnes -120 devant), pas de leur ordre dans l'arbre.

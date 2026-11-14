@@ -30,6 +30,34 @@ extends ParallaxBackground
 #     leurs bords quand la caméra s'élargit.
 #  Script à poser sur le nœud ParallaxBackground d'un niveau (déjà fait pour
 #  tous les niveaux existants).
+#
+#  [FOND 1.8] (demande de l'équipe, 14/11 : « pas de coupure nette, une boucle
+#  infinie qui suit les pentes et s'adapte à la forme du niveau ») :
+#   1. BOUCLE HORIZONTALE INFINIE : chaque plan reçoit un motion_mirroring.x
+#      égal à la largeur de son motif (largeur de l'image × échelle du sprite,
+#      320 × 10 = 3200 px pour les fonds actuels). Godot répète alors le plan
+#      à l'infini ; comme l'image est elle-même répétée (texture_repeat), le
+#      raccord est invisible. Avant : chaque plan s'arrêtait au bout de sa
+#      région (70 000 px), ce qui coupait le fond sur les niveaux longs
+#      (ex. le tuto Bateau, vers x = 14 000).
+#   2. LE FOND SUIT LES PENTES : la hauteur de référence n'est plus fixe. Elle
+#      suit la caméra en douceur (moyenne glissante, follow_time ≈ 3 s) :
+#        - sur une longue descente ou montée, le fond « accompagne » le niveau
+#          et garde la même composition à l'écran (glacier en bas, ciel en
+#          haut), au lieu de rester bloqué en butée ;
+#        - sur les mouvements rapides (sauts, chutes, grappin), l'écart avec
+#          cette référence donne toujours l'effet de profondeur entre les
+#          plans (le proche bouge plus que le lointain).
+#      follow_time = 0 revient à l'ancien comportement (référence fixe).
+#   3. PLUS DE BORD NET EN HAUT ET EN BAS DES IMAGES : chaque image de fond
+#      s'arrêtait sur une ligne droite (bas du ciel, bas des montagnes…). Dès
+#      que le parallax décalait un peu les plans, on voyait ces coupures.
+#      On PROLONGE donc chaque image, sans nouvel asset : la dernière ligne
+#      entièrement opaque de l'image est étirée vers le bas (et, pour le plan
+#      le plus lointain, la première ligne vers le haut). Ces prolongements
+#      sont des Sprite2D enfants, dessinés DERRIÈRE l'image d'origine
+#      (show_behind_parent), qui reste intacte. Les falaises du glacier se
+#      prolongent ainsi naturellement vers le bas, le ciel vers le haut.
 # =============================================================================
 
 ## Active le parallax vertical (sinon : fonds fixes verticalement à l'écran).
@@ -43,6 +71,20 @@ extends ParallaxBackground
 ## Hauteur de caméra (monde) pour laquelle les fonds sont exactement à leur
 ## place "éditeur". Le décalage vertical est calculé par rapport à elle.
 @export var reference_camera_y: float = 0.0
+## [FOND 1.8] Temps (s) que met la référence verticale à rejoindre la caméra :
+## le fond suit les pentes du niveau. 0 = référence fixe (ancien comportement).
+@export var follow_time: float = 3.0
+## [FOND 1.8] Boucle horizontale infinie des plans (motion_mirroring).
+@export var infinite_horizontal: bool = true
+## [FOND 1.8] Prolonge les images vers le haut / le bas (plus de bord net).
+@export var extend_vertically: bool = true
+## [FOND 1.8] Décalage (px écran) de toute la composition : > 0 la descend.
+@export var anchor_offset: float = 0.0
+## [FOND 1.8] Longueur des prolongements, en pixels de l'image d'origine
+## (× l'échelle du sprite : 2000 × 5 = 10 000 px à l'écran).
+@export var extension_rows: float = 2000.0
+
+var _follow_y = null         # [FOND 1.8] hauteur de caméra moyenne (suit les pentes)
 
 var _ref_cam_y = null        # = reference_camera_y (gardé en variable pour lisibilité)
 var _base_offsets := {}      # ParallaxLayer -> motion_offset.y d'origine
@@ -67,6 +109,14 @@ func _ready() -> void:
 			_bounds[child] = _layer_bounds(child)
 			# Le vertical est désormais calculé dans _process()
 			child.motion_scale.y = 0.0
+			# [FOND 1.8] boucle horizontale infinie
+			if infinite_horizontal:
+				var period := _layer_period(child)
+				if period > 0.0:
+					child.motion_mirroring.x = period
+	# [FOND 1.8] prolongements haut / bas (après le calcul des _bounds d'origine)
+	if extend_vertically:
+		_extend_all()
 	# Repère les plans extrêmes (bas / haut) pour le garde-fou anti-vide
 	for layer in _bounds:
 		var r: Rect2 = _bounds[layer]
@@ -76,6 +126,141 @@ func _ready() -> void:
 			_bottom_layer = layer
 		if _top_layer == null or _orig_y[layer] + r.position.y < _orig_y[_top_layer] + _bounds[_top_layer].position.y:
 			_top_layer = layer
+
+
+# [FOND 1.8] Prolonge les images de fond. L'ordre d'affichage des plans est
+# donné par leur z_index (dans les niveaux : glacier -126 au fond, nuages -123,
+# montagnes -120 devant), pas par leur ordre dans l'arbre :
+#  - chaque image dont la RÉGION coupe le dessin en ligne droite (ex. le bas
+#    des nuages, coupé à la ligne 180 alors que le dessin s'arrête à 200 par
+#    un bord ondulé) retrouve son bord naturel : la région est agrandie
+#    jusqu'au bout du dessin, sans rien déplacer à l'écran ;
+#  - une image qui touche son bord HAUT par une ligne pleine (le ciel) est
+#    prolongée vers le haut avec sa couleur dominante ;
+#  - le plan le plus au fond (le glacier) est prolongé vers le bas (sa
+#    dernière ligne étirée : les falaises continuent) et vers le haut
+#    (couleur de sa brume), pour qu'aucun vide n'apparaisse jamais derrière.
+func _extend_all() -> void:
+	var sprites := []
+	for layer in _base_offsets:
+		for c in layer.get_children():
+			if c is Sprite2D and c.texture != null:
+				sprites.append(c)
+	if sprites.is_empty():
+		return
+	var back: Sprite2D = sprites[0]
+	for spr in sprites:
+		if spr.z_index < back.z_index:
+			back = spr
+	for spr in sprites:
+		_extend_sprite(spr, spr == back)
+
+
+func _extend_sprite(spr: Sprite2D, is_back: bool) -> void:
+	var img: Image = spr.texture.get_image()
+	if img == null:
+		return
+	if img.is_compressed():
+		img = img.duplicate()
+		img.decompress()
+	var w := img.get_width()
+	var h := img.get_height()
+	if not spr.region_enabled:
+		return
+	var used := img.get_used_rect()          # lignes réellement dessinées
+	var reg: Rect2 = spr.region_rect
+	# 1. Région coupée en plein dessin -> on la rallonge jusqu'au bord du dessin
+	#    (seulement dans l'image, sans répétition verticale)
+	if reg.end.y < used.end.y and reg.end.y > used.position.y:
+		var grow := used.end.y - reg.end.y
+		reg.size.y += grow
+		spr.region_rect = reg
+		if spr.centered:
+			spr.position.y += grow * 0.5 * spr.scale.y   # le haut reste au même endroit
+	if reg.position.y > used.position.y and reg.position.y < used.end.y:
+		var grow_up := reg.position.y - used.position.y
+		reg.position.y -= grow_up
+		reg.size.y += grow_up
+		spr.region_rect = reg
+		if spr.centered:
+			spr.position.y -= grow_up * 0.5 * spr.scale.y
+	var rect: Rect2 = spr.get_rect()
+	# lignes de l'image affichées par la région
+	var r0 := clampi(int(ceil(reg.position.y)), 0, h - 1)
+	var r1 := clampi(int(floor(reg.end.y)) - 1, 0, h - 1)
+	var top_row := -1
+	var bottom_row := -1
+	for r in range(r0, r1 + 1):
+		if _row_opaque(img, r):
+			if top_row < 0:
+				top_row = r
+			bottom_row = r
+	# 2. Vers le haut : si l'image touche son haut par une ligne pleine (ciel),
+	#    ou pour le plan du fond (couleur de la 1re ligne pleine)
+	if top_row >= 0 and (top_row <= used.position.y + 1 or is_back):
+		_add_extension(spr, reg, top_row, rect.position.y + (top_row - reg.position.y), false, rect, img)
+	# 3. Vers le bas : plan du fond uniquement (sinon il cacherait les plans
+	#    situés derrière lui)
+	if is_back and bottom_row >= 0:
+		_add_extension(spr, reg, bottom_row, rect.position.y + (bottom_row + 1 - reg.position.y), true, rect, img)
+
+
+func _add_extension(spr: Sprite2D, reg: Rect2, row: int, edge_y: float, downward: bool, rect: Rect2, img: Image) -> void:
+	var ext := Sprite2D.new()
+	ext.name = "Prolongement" + ("Bas" if downward else "Haut")
+	ext.texture = spr.texture
+	ext.centered = false
+	ext.region_enabled = true
+	if downward:
+		# la dernière ligne étirée : les falaises du glacier continuent vers le bas
+		ext.region_rect = Rect2(reg.position.x, row, reg.size.x, 1)
+		ext.scale = Vector2(1, extension_rows)
+	else:
+		# vers le haut : un seul pixel de la couleur dominante de la ligne
+		# (une ligne étirée ferait des rayures verticales dans le ciel)
+		var x := _dominant_pixel_x(img, row)
+		ext.region_rect = Rect2(x, row, 1, 1)
+		ext.scale = Vector2(reg.size.x, extension_rows)
+	ext.position = Vector2(rect.position.x, edge_y - (0.0 if downward else extension_rows))
+	ext.texture_repeat = CanvasItem.TEXTURE_REPEAT_ENABLED
+	ext.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	ext.show_behind_parent = true   # l'image d'origine reste dessinée par-dessus
+	spr.add_child(ext)
+
+
+func _dominant_pixel_x(img: Image, r: int) -> int:
+	var counts := {}
+	var first := {}
+	for x in img.get_width():
+		var c := img.get_pixel(x, r)
+		counts[c] = counts.get(c, 0) + 1
+		if not first.has(c):
+			first[c] = x
+	var best = null
+	for c in counts:
+		if best == null or counts[c] > counts[best]:
+			best = c
+	return first[best]
+
+
+func _row_opaque(img: Image, r: int) -> bool:
+	for x in img.get_width():
+		if img.get_pixel(x, r).a < 0.99:
+			return false
+	return true
+
+
+# [FOND 1.8] Largeur (px du plan) après laquelle le motif se répète : largeur de
+# l'image × échelle si l'image est répétée dans la région du sprite, sinon
+# largeur du sprite entier. 0 si le plan n'a pas d'image.
+func _layer_period(layer: Node) -> float:
+	for c in layer.get_children():
+		if c is Sprite2D and c.texture != null:
+			var tex_w: float = c.texture.get_size().x
+			var reg_w: float = c.region_rect.size.x if c.region_enabled else tex_w
+			var w: float = tex_w if reg_w > tex_w else reg_w
+			return absf(w * c.scale.x)
+	return 0.0
 
 
 # Rectangle (dans le repère du ParallaxLayer) réellement VISIBLE de ses Sprite2D :
@@ -114,7 +299,12 @@ func _process(_delta: float) -> void:
 	if _ref_cam_y == null:
 		_ref_cam_y = reference_camera_y
 
-	var dy: float = center_y - _ref_cam_y  # > 0 : la caméra est descendue
+	# [FOND 1.8] la référence suit la caméra en douceur (le fond suit les pentes)
+	if _follow_y == null:
+		_follow_y = center_y
+	if follow_time > 0.0:
+		_follow_y = lerpf(_follow_y, center_y, 1.0 - exp(-_delta / follow_time))
+	var dy: float = center_y - (_follow_y if follow_time > 0.0 else _ref_cam_y)  # > 0 : la caméra est descendue
 	var offsets := {}
 	for layer in _base_offsets:
 		# Décalage qui reproduit le cadrage "éditeur" quand la caméra est à la
@@ -132,6 +322,18 @@ func _process(_delta: float) -> void:
 	# composition et la perspective entre plans restent intactes).
 	var correction := 0.0
 	var view_h := half_h * 2.0
+	if extend_vertically and _bottom_layer != null:
+		# [FOND 1.8] composition FIXE à l'écran : le bas de l'image du glacier
+		# (plan le plus bas) est calé sur le bas de l'écran — c'est la mise en
+		# page que le garde-fou produisait déjà la plupart du temps. Les plans
+		# gardent leur disposition d'origine entre eux ; seul l'écart caméra /
+		# référence (sauts, chutes) les fait bouger, chacun selon sa profondeur.
+		# Les images étant prolongées, ces mouvements ne montrent jamais de bord.
+		var b = _bottom_layer
+		var anchor: float = view_h - (_base_offsets[b] + (half_h - _ref_cam_y) + _orig_y[b] + _bounds[b].end.y) + anchor_offset
+		for layer in offsets:
+			layer.motion_offset.y = _base_offsets[layer] + offsets[layer] + anchor
+		return
 	if _bottom_layer != null:
 		var bottom: float = _base_offsets[_bottom_layer] + offsets[_bottom_layer] + _orig_y[_bottom_layer] + _bounds[_bottom_layer].end.y
 		if bottom < view_h:
