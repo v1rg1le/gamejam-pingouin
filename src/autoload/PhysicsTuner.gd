@@ -76,6 +76,13 @@ func apply_to(player: Node) -> void:
 	_refresh_sliders(player)
 
 
+## [GRAPPIN TACTILE 1.11] Vrai si ce point de l'écran est sur le panneau ou
+## sur le bouton ⚙ : un toucher à cet endroit ne doit pas lancer le grappin.
+func covers(screen_pos: Vector2) -> bool:
+	return (_panel.visible and _panel.get_global_rect().has_point(screen_pos)) \
+		or (_gear.visible and _gear.get_global_rect().has_point(screen_pos))
+
+
 func _player():
 	return get_tree().get_first_node_in_group("player")
 

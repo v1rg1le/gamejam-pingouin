@@ -349,3 +349,20 @@ Demande de l'équipe : plus de coupure nette du fond, une boucle infinie qui sui
 - **Non-régression** : 7 niveaux × 2 modes de jeu automatiques, aucune chute brutale de vitesse et aucune mort inattendue. Le multijoueur est OK.
 - ⚠️ **Équilibrage à vérifier** : sur « Hook, you fool ! », la simulation qui ne fait qu'avancer passe maintenant les trous sans grappin (avant : 3 morts au premier trou). Si ce niveau doit obliger à utiliser le grappin, il faudra élargir les trous ou baisser les vitesses max.
 - Les records et fantômes faits avec l'ancienne physique restent rejouables, mais ils seront faciles à battre.
+
+## 20. Grappin tactile : toucher l'écran = viser là (14/11, version 1.11)
+
+- **Problème** (retour de test de la 1.8) : sur mobile, un appui sur le bouton GRAPPIN tirait toujours à 45° vers l'avant. On pouvait viser en glissant depuis le bouton, mais c'était peu pratique et peu compris.
+- **Maintenant** (`src/ui/touch/TouchControls.gd`) :
+  - **toucher n'importe où dans la zone de jeu**, hors boutons, lance le grappin **vers le point touché**. La direction est calculée dans le monde, en tenant compte du zoom et du décalage de la caméra ;
+  - **maintenir le doigt** : rester accroché ; **relever** : se décrocher ;
+  - une fois accroché, **glisser ce doigt loin** du point touché (au-delà de 90 px) fait **tirer** sur la corde, comme avec le bouton ;
+  - une petite cible jaune marque le point touché, avec le cercle « glisse loin = TIRER » autour ;
+  - le bouton GRAPPIN marche toujours comme avant (tap = avant-haut, glissé = direction) ;
+  - un toucher sur le panneau de réglage physique (⚙) ne lance pas le grappin ;
+  - `free_aim_enabled = false` remet le comportement de la 1.10.
+- **Textes en tactile** : les panneaux du tuto et la carte d'aide disent maintenant « le doigt sur l'endroit visé » pour le grappin et « le doigt et glisse-le loin » pour tirer.
+- **Testé** en simulant des doigts :
+  - visée à 20°, 60°, 70°, 100° et 110° : le grappin part dans la bonne direction, à quelques degrés près (le pingouin avance pendant le tir) ;
+  - sous le plafond du tuto, il s'accroche ; doigt relevé, il se décroche.
+- **À tester sur un vrai téléphone** : le confort du geste, et vérifier qu'on ne lance pas le grappin par erreur en visant mal un bouton. Les boutons gardent une zone de toucher un peu plus large que leur dessin.

@@ -34,6 +34,17 @@ extends CanvasLayer
 #    (au-delà de PULL_DISTANCE) : on "tire sur la corde". Un cercle pointillé
 #    montre la distance à franchir, la corde-flèche devient orange quand on tire.
 #    Un petit glissé de visée (< PULL_DISTANCE) ne tire donc jamais par erreur.
+#
+#  [GRAPPIN TACTILE 1.11] TOUCHER L'ÉCRAN = VISER LÀ (retour de test de la 1.8 :
+#  « le grappin sur mobile est bloqué à 45°, ça pénalise fortement le jeu ») :
+#    - toucher n'importe où dans la zone de jeu (hors boutons) lance le
+#      grappin VERS LE POINT TOUCHÉ (on vise directement la prise du doigt) ;
+#    - maintenir le doigt = rester accroché ; relâcher = se décrocher ;
+#    - une fois accroché, glisser ce doigt loin du point touché (au-delà de
+#      PULL_DISTANCE) = TIRER sur la corde, comme avec le bouton ;
+#    - une petite cible marque le point touché.
+#    Le bouton GRAPPIN (tap = avant-haut, glissé = direction) reste disponible.
+#    Réglable : free_aim_enabled (désactivé = comportement 1.10).
 # =============================================================================
 
 const AIM_DEADZONE = 28.0   # px de glissé avant de considérer qu'on vise
@@ -64,6 +75,8 @@ var _hook_time := 0.0
 var _hook_fired := false
 var _aim_vec := Vector2.ZERO  # pour dessiner la flèche de visée
 var _pulling := false         # [BOUTONS v2] "pull" appuyé via le glissé du doigt
+var _free_hook := false       # [GRAPPIN TACTILE 1.11] le doigt du grappin vise un point de l'écran
+var free_aim_enabled := true  # [GRAPPIN TACTILE 1.11] toucher la zone de jeu = grappin vers ce point
 var _canvas: Control          # nœud qui dessine tous les boutons
 var _font: Font
 
@@ -128,13 +141,22 @@ func _input(event: InputEvent) -> void:
 			if b != null:
 				_finger_down(event.index, b, pos)
 				get_viewport().set_input_as_handled()
+			elif free_aim_enabled and _hook_finger == -1 and not PhysicsTuner.covers(pos):
+				# [GRAPPIN TACTILE 1.11] toucher hors des boutons : grappin vers là
+				_free_hook_down(event.index, pos)
+				get_viewport().set_input_as_handled()
 		elif _fingers.has(event.index):
 			_finger_up(event.index)
 			get_viewport().set_input_as_handled()
 	elif event is InputEventScreenDrag and _fingers.has(event.index):
 		var pos := _to_reference(event.position)
 		var held = _get_button(_fingers[event.index])
-		if event.index == _hook_finger:
+		if event.index == _hook_finger and _free_hook:
+			# [GRAPPIN TACTILE 1.11] le tir est déjà parti vers le point touché :
+			# le glissé ne sert plus qu'à TIRER sur la corde (glisser loin)
+			_aim_vec = pos - _hook_origin
+			_update_pull(_aim_vec.length())
+		elif event.index == _hook_finger:
 			_update_hook_aim(pos)
 		elif held.slide:
 			# glisser d'un bouton à l'autre (ex. de ◀ à ▶) sans relever le doigt
@@ -164,8 +186,37 @@ func _finger_down(index: int, b: Dictionary, pos: Vector2) -> void:
 		Input.action_press(b.action)
 
 
+# [GRAPPIN TACTILE 1.11] Doigt posé dans la zone de jeu : on calcule la
+# direction pingouin -> point touché DANS LE MONDE (la caméra peut être
+# dézoomée ou décalée vers l'avant) et on tire tout de suite.
+func _free_hook_down(index: int, pos: Vector2) -> void:
+	var player = get_tree().get_first_node_in_group("player")
+	if player == null:
+		return
+	# repère écran -> repère du monde : inverse de la transformation de la caméra
+	var world_point: Vector2 = get_viewport().get_canvas_transform().affine_inverse() * pos
+	var aim: Vector2 = world_point - player.global_position
+	if aim.length() < 1.0:
+		return
+	_fingers[index] = "hook_free"
+	_hook_finger = index
+	_hook_origin = pos
+	_free_hook = true
+	_aim_vec = Vector2.ZERO
+	_fire_hook(aim.normalized())
+
+
 func _finger_up(index: int) -> void:
 	var id = _fingers[index]
+	if id == "hook_free":
+		# [GRAPPIN TACTILE 1.11] doigt relevé : on se décroche (comme le bouton)
+		_fingers.erase(index)
+		_hook_finger = -1
+		_free_hook = false
+		_aim_vec = Vector2.ZERO
+		_update_pull(0.0)
+		_release_hook_deferred()
+		return
 	_fingers.erase(index)
 	_pressed_count[id] = max(0, _pressed_count.get(id, 1) - 1)
 	var b = _get_button(id)
@@ -229,6 +280,7 @@ func _release_all() -> void:
 	_fingers.clear()
 	_pressed_count.clear()
 	_hook_finger = -1
+	_free_hook = false
 	_aim_vec = Vector2.ZERO
 	Settings.touch_aim = Vector2.ZERO
 
@@ -298,6 +350,12 @@ func _draw_buttons() -> void:
 				var w := _font.get_string_size(b.label, HORIZONTAL_ALIGNMENT_LEFT, -1, size).x
 				_canvas.draw_string(_font, c + Vector2(-w * 0.5, size * 0.35), b.label, HORIZONTAL_ALIGNMENT_LEFT, -1, size, line)
 	var hook_pos: Vector2 = _pos(_get_button("hook"))
+	if _free_hook:
+		# [GRAPPIN TACTILE 1.11] repères dessinés autour du point touché
+		hook_pos = _hook_origin
+		var target_col := Color(1, 0.95, 0.4, 0.9)
+		_canvas.draw_arc(hook_pos, 20.0, 0.0, TAU, 24, target_col, 3.0, true)
+		_canvas.draw_circle(hook_pos, 4.0, target_col)
 	# [BOUTONS v2] accroché : cercle pointillé = distance à franchir pour TIRER
 	var player = get_tree().get_first_node_in_group("player")
 	if _hook_finger != -1 and player != null and player.chain.hooked:
@@ -310,7 +368,7 @@ func _draw_buttons() -> void:
 		var tw := _font.get_string_size(t, HORIZONTAL_ALIGNMENT_LEFT, -1, 16).x
 		_canvas.draw_string(_font, hook_pos + Vector2(-tw * 0.5, -PULL_DISTANCE - 10), t, HORIZONTAL_ALIGNMENT_LEFT, -1, 16, ring_col)
 	# flèche de visée du grappin pendant le glissé (orange quand on tire)
-	if _hook_finger != -1 and _aim_vec.length() >= AIM_DEADZONE:
+	if _hook_finger != -1 and _aim_vec.length() >= AIM_DEADZONE and (not _free_hook or _aim_vec.length() >= PULL_RELEASE):
 		var col := Color(1, 0.6, 0.15, 0.95) if _pulling else Color(1, 0.95, 0.4, 0.9)
 		var tip: Vector2 = hook_pos + _aim_vec.normalized() * clampf(_aim_vec.length(), 110.0, 160.0)
 		_canvas.draw_line(hook_pos, tip, col, 5.0, true)

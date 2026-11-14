@@ -41,7 +41,9 @@ const JOY_BUTTON_NAMES = {0: "A", 1: "B", 2: "X", 3: "Y", 4: "Back", 6: "Start",
 const JOY_AXIS_NAMES = {4: "LT", 5: "RT"}
 # Noms des boutons tactiles (cf. TouchControls.gd)
 const TOUCH_NAMES = {"move_right": "▶", "move_left": "◀", "jump": "SAUT", "pump": "PUMP",
-	"hook": "GRAPPIN", "pull": "GRAPPIN en glissant le doigt loin", "trix": "FIGURE", "rotate_trigo": "↺", "rotate_horaire": "↻"}
+	"hook": "le doigt sur l'endroit visé", "pull": "le doigt et glisse-le loin", "trix": "FIGURE", "rotate_trigo": "↺", "rotate_horaire": "↻"}
+# [GRAPPIN TACTILE 1.11] en tactile, on vise maintenant en touchant l'écran
+# (avant : "GRAPPIN" / "GRAPPIN en glissant le doigt loin")
 
 
 func _ready() -> void:
