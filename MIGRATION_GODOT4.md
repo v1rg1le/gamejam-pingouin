@@ -419,3 +419,12 @@ Demande de l'équipe : plus de coupure nette du fond, une boucle infinie qui sui
   - menus : agrandis autant que possible sans que rien ne déborde (calcul sur la taille minimale du contenu, revérifié 2 fois par seconde : le salon grandit avec les joueurs). Le grand titre de la sélection des niveaux se réduit si l'écran est peu haut ;
   - en jeu : HUD, menu pause et pause de lecture agrandis via `src/ui/UiScaler.gd` (les ancrages restent justes). La vue du jeu elle-même ne change pas.
 - **Vérifié** en captures : PC 1024 × 720, fenêtre large 1900 × 700, fenêtre haute 900 × 1100, téléphone 2400 × 1080 (menus, salon, attente, flèches, pause). Course réseau à 2 et course solo inchangées.
+
+## 24. Écran de démarrage Pinpouin (14/11, version 1.15)
+
+- **Demande** : remplacer le logo Godot du lancement par une image de Pinpouin qui se prépare. Sur 4 propositions, l'équipe a gardé la n° 4 et la n° 1, **affichées à la suite** :
+  1. **pendant le chargement** (écran de démarrage du moteur, réglages `application/boot_splash/*`) : logo « Pinpouin le ninja » et Pinpouin sur fond bleu nuit (`sprites/screens/splash_boot_nuit.png`, 1920 × 1080). Fond uni de la même couleur que la bordure : il tient sur tous les formats d'écran. Filtre coupé (pixel-art net) ;
+  2. **puis l'intro** (`src/screens/SplashIntro.gd`, lancée par `MainScreen.gd`) : fondu depuis la même couleur nuit vers « Pinpouin prêt au départ » — debout sur la banquise, sa corde et son grappin à ses pieds, igloo et glaçons (`sprites/screens/splash_intro_banquise.png`) — 1,5 s, puis fondu vers l'écran titre. Un appui la passe ; jouée une seule fois par lancement.
+- Les deux images sont des **montages des sprites existants** (logo, Pinpouin, igloo, glaçons, grappin, fond) ; seuls la corde enroulée et le sol de glace sont dessinés en pixels. Aucun asset d'origine n'est modifié.
+- L'image d'intro fait 432 × 180 pixels (plus large que le 16/9) et s'affiche en « remplir l'écran » : sur un téléphone allongé (20/9), ni bandes ni logo coupé.
+- La scène principale reste `MainScreen.tscn`.

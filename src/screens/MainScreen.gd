@@ -25,6 +25,9 @@ const USEFUL_BOTTOM = 235.0                # dernière ligne utile (bas du bouto
 
 func _ready():
 	_layout()
+	# [DÉMARRAGE 1.15] intro « Pinpouin prêt au départ » au lancement du jeu
+	# (une seule fois), juste après l'écran de démarrage « logo nuit »
+	load("res://src/screens/SplashIntro.gd").play_once(self)
 	get_viewport().size_changed.connect(_layout)
 
 
