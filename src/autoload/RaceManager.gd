@@ -37,6 +37,15 @@ extends Node
 #       - les pingouins des autres (RemotePenguin) sont créés à la réception de
 #         leur premier état, et supprimés s'ils se déconnectent ;
 #       - à l'arrivée, le temps est annoncé à tous et le HUD affiche le classement.
+#
+#  5. [SCORE 1.5] SCORE = POINTS DE VITESSE + POINTS DE FIGURES
+#       - points de vitesse = SPEED_POINTS / temps (s) : 60 000 / 30 s = 2000 ;
+#         plus on arrive vite, plus on en a ;
+#       - points de figures : comptés par TrickScore.gd (figures, vrilles,
+#         combos, validés à l'atterrissage) ;
+#       - le meilleur score de chaque niveau est mémorisé dans user://pinpouin.cfg
+#         (le record de TEMPS et son fantôme restent gérés comme avant) ;
+#       - en multijoueur, le classement se fait au score.
 # =============================================================================
 
 signal race_finished(time: float, is_record: bool, previous_best: float)
@@ -45,6 +54,7 @@ const GHOST_DIR = "user://ghosts"
 const CONFIG_PATH = "user://pinpouin.cfg"
 const SAMPLE_INTERVAL = 1.0 / 30.0   # 30 échantillons par seconde
 const GHOST_FORMAT_VERSION = 1
+const SPEED_POINTS = 60000.0         # [SCORE 1.5] points de vitesse = SPEED_POINTS / temps (s)
 
 ## Courir contre son meilleur fantôme (réglable dans le menu des niveaux).
 var ghost_enabled: bool = true
@@ -71,6 +81,11 @@ var _state_timer: float = 0.0       # cadence d'envoi de l'état local (20/s)
 var _countdown: float = -1.0        # > 0 : compte à rebours en cours (s restantes)
 var _waiting_go: bool = false       # pingouin figé, en attente du "GO" de l'hôte
 
+# [SCORE 1.5]
+var trick_score = null              # nœud TrickScore de la course en cours
+var last_score := {}                # détail du dernier score : speed, tricks, score
+var _best_scores := {}              # niveau -> meilleur score (chargé depuis la config)
+
 
 func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_PAUSABLE   # le chrono s'arrête pendant la pause
@@ -92,7 +107,7 @@ func _connect_net() -> void:
 			# déjà arrivé : on met à jour le bandeau ("En attente des autres…" disparaît)
 			if NetSession.my_rank() > 0:
 				_hud.show_multi_result(NetSession.players[NetSession.my_id()].time,
-					NetSession.my_rank(), NetSession.players.size()))
+					NetSession.my_rank(), NetSession.players.size(), last_score))
 
 
 # --- 1. Seed de course --------------------------------------------------------
@@ -144,6 +159,7 @@ func _reset_race() -> void:
 	_state_timer = 0.0
 	_countdown = -1.0
 	_waiting_go = false
+	trick_score = null        # [SCORE 1.5] libéré avec l'ancienne scène
 
 
 # --- 2. Chrono + enregistrement ----------------------------------------------
@@ -185,6 +201,20 @@ func _start_race() -> void:
 	_hud = preload("res://src/ui/race/RaceHud.gd").new()
 	scene.add_child(_hud)
 	_hud.set_best(get_best_time(level_path))
+	# [SCORE 1.5] juge des figures : il observe le pingouin et prévient le HUD
+	trick_score = preload("res://src/ui/race/TrickScore.gd").new()
+	trick_score.setup(_player)
+	scene.add_child(trick_score)
+	trick_score.points_banked.connect(func(_pts, total, label):
+		if is_instance_valid(_hud):
+			_hud.set_trick_points(total)
+			_hud.show_trick_popup(label, Color(1, 0.94, 0.4)))
+	trick_score.points_lost.connect(func(reason):
+		if is_instance_valid(_hud):
+			_hud.show_trick_popup(reason, Color(1, 0.5, 0.45)))
+	trick_score.pending_changed.connect(func(text):
+		if is_instance_valid(_hud):
+			_hud.set_pending(text))
 	if _ghost_data != null:
 		_ghost_node = preload("res://src/ui/race/GhostPenguin.gd").new()
 		_ghost_node.setup(_ghost_data, _player)
@@ -220,6 +250,9 @@ func _record_sample() -> void:
 func finish_race() -> bool:
 	if not racing:
 		return false
+	# [SCORE 1.5] une figure en cours en passant la ligne compte (avant de couper le chrono)
+	if trick_score != null and is_instance_valid(trick_score):
+		trick_score.bank()
 	racing = false
 	_record_sample()  # dernière position exacte
 	var previous_best := get_best_time(level_path)
@@ -227,15 +260,23 @@ func finish_race() -> bool:
 	if is_record:
 		_rec.time = race_time
 		_save_ghost(_rec)
-	print("[COURSE] arrivée en ", format_time(race_time), " | record : ", is_record)
+	# [SCORE 1.5] calcul du score
+	var tricks: int = trick_score.total if trick_score != null and is_instance_valid(trick_score) else 0
+	var speed := speed_points(race_time)
+	var previous_best_score := get_best_score(level_path)
+	last_score = {"speed": speed, "tricks": tricks, "score": speed + tricks,
+		"best_score": previous_best_score, "is_best_score": speed + tricks > previous_best_score}
+	if last_score.is_best_score:
+		_save_best_score(level_path, speed + tricks)
+	print("[COURSE] arrivée en ", format_time(race_time), " | record : ", is_record, " | score ", last_score)
 	if NetSession.in_race:
 		# [MULTI] annonce l'arrivée à tous (appel local immédiat + envoi aux
 		# autres), puis on affiche la PLACE plutôt que le record.
-		NetSession.report_finish(race_time)
+		NetSession.report_finish(race_time, last_score.score)
 		if _hud != null and is_instance_valid(_hud):
-			_hud.show_multi_result(race_time, NetSession.my_rank(), NetSession.players.size())
+			_hud.show_multi_result(race_time, NetSession.my_rank(), NetSession.players.size(), last_score)
 	elif _hud != null and is_instance_valid(_hud):
-		_hud.show_result(race_time, is_record, previous_best)
+		_hud.show_result(race_time, is_record, previous_best, last_score)
 	emit_signal("race_finished", race_time, is_record, previous_best)
 	return is_record
 
@@ -356,6 +397,26 @@ static func format_time(t: float) -> String:
 	return "%d:%05.2f" % [m, s]
 
 
+# --- 5. [SCORE 1.5] Score ---------------------------------------------------------
+## Points de vitesse pour un temps donné (arrondis à la dizaine).
+static func speed_points(time: float) -> int:
+	return int(round(SPEED_POINTS / maxf(time, 1.0) / 10.0)) * 10
+
+
+## Meilleur score connu pour un niveau, -1 s'il n'y en a pas.
+func get_best_score(path: String) -> int:
+	return int(_best_scores.get(path.get_file().get_basename(), -1))
+
+
+func _save_best_score(path: String, score: int) -> void:
+	var key := path.get_file().get_basename()
+	_best_scores[key] = score
+	var cfg := ConfigFile.new()
+	cfg.load(CONFIG_PATH)
+	cfg.set_value("scores", key, score)
+	cfg.save(CONFIG_PATH)
+
+
 # --- Réglages -----------------------------------------------------------------
 func set_ghost_enabled(value: bool) -> void:
 	ghost_enabled = value
@@ -369,3 +430,6 @@ func _load_config() -> void:
 	var cfg := ConfigFile.new()
 	if cfg.load(CONFIG_PATH) == OK:
 		ghost_enabled = cfg.get_value("race", "ghost_enabled", true)
+		if cfg.has_section("scores"):   # [SCORE 1.5]
+			for key in cfg.get_section_keys("scores"):
+				_best_scores[key] = int(cfg.get_value("scores", key, -1))

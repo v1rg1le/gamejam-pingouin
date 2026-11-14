@@ -42,6 +42,10 @@ func _ready() -> void:
 			var best: float = RaceManager.get_best_time(b.next_scene_path)
 			if best >= 0.0:
 				b.text += "   ·   " + RaceManager.format_time(best)
+			# [SCORE 1.5] meilleur score du niveau (vitesse + figures)
+			var best_score: int = RaceManager.get_best_score(b.next_scene_path)
+			if best_score >= 0:
+				b.text += "   ·   %d pts" % best_score
 	# [FANTÔMES] interrupteur fantôme + dossier (PC uniquement : sur téléphone on
 	# ne peut pas ouvrir un dossier de l'appli dans un explorateur de fichiers)
 	ghost_toggle.button_pressed = RaceManager.ghost_enabled

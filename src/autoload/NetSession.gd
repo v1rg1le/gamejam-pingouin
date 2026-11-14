@@ -40,7 +40,7 @@ const FINISH_TIMEOUT = 45.0            # s après la 1re arrivée avant retour a
 const LOBBY_SCENE = "res://src/screens/MultiplayerLobby.tscn"
 
 var player_name: String = ""
-var players := {}            # peer_id -> {"name": String, "loaded": bool, "time": float (-1 = pas arrivé)}
+var players := {}            # peer_id -> {"name": String, "loaded": bool, "time": float (-1 = pas arrivé), "score": int}
 var found_hosts := {}        # ip -> {"name": String, "players": int, "seen": float}
 var in_race: bool = false    # une course multijoueur est en cours
 var race_seed: int = 0
@@ -110,7 +110,7 @@ func host() -> Error:
 		_peer = null
 		return err
 	multiplayer.multiplayer_peer = _peer
-	players = {1: {"name": player_name, "loaded": false, "time": -1.0}}
+	players = {1: {"name": player_name, "loaded": false, "time": -1.0, "score": 0}}
 	stop_discovery()   # l'hôte n'a pas besoin d'écouter les annonces (et libère le port)
 	_start_announce()
 	emit_signal("players_changed")
@@ -262,7 +262,7 @@ func _rpc_register(p_name: String, version: String) -> void:
 		await get_tree().create_timer(0.3).timeout
 		_peer.disconnect_peer(id)
 		return
-	players[id] = {"name": p_name.substr(0, 20), "loaded": false, "time": -1.0}
+	players[id] = {"name": p_name.substr(0, 20), "loaded": false, "time": -1.0, "score": 0}
 	_rpc_players.rpc(players)
 	emit_signal("players_changed")
 
@@ -297,6 +297,7 @@ func _rpc_start(level_path: String, seed_value: int) -> void:
 	for id in players:
 		players[id].loaded = false
 		players[id].time = -1.0
+		players[id].score = 0
 	get_tree().paused = false
 	get_tree().change_scene_to_file(level_path)
 
@@ -342,15 +343,17 @@ func _rpc_state(state: PackedFloat32Array, anim: String) -> void:
 
 
 ## Appelé par RaceManager à l'arrivée du joueur local.
-func report_finish(time: float) -> void:
-	_rpc_finished.rpc(time)
+## [SCORE 1.5] on envoie aussi le score (vitesse + figures) : le classement se fait au score.
+func report_finish(time: float, score: int) -> void:
+	_rpc_finished.rpc(time, score)
 
 
 @rpc("any_peer", "call_local", "reliable")
-func _rpc_finished(time: float) -> void:
+func _rpc_finished(time: float, score: int) -> void:
 	var id := multiplayer.get_remote_sender_id()
 	if players.has(id) and players[id].time < 0.0:
 		players[id].time = time
+		players[id].score = score
 		if _first_finish_time < 0.0:
 			_first_finish_time = Time.get_ticks_msec() / 1000.0
 	emit_signal("race_results_changed")
@@ -385,24 +388,28 @@ func _rpc_back_to_lobby() -> void:
 
 
 ## Place du joueur local parmi les arrivés (1 = premier), 0 s'il n'est pas arrivé.
+## [SCORE 1.5] au score (à score égal : au temps). Attention : un joueur encore
+## en course peut encore nous dépasser, la place affichée est provisoire.
 func my_rank() -> int:
 	var me = players.get(my_id())
 	if me == null or me.time < 0.0:
 		return 0
 	var rank := 1
 	for id in players:
-		if id != my_id() and players[id].time >= 0.0 and players[id].time < me.time:
+		var o = players[id]
+		if id != my_id() and o.time >= 0.0 and (o.score > me.score or (o.score == me.score and o.time < me.time)):
 			rank += 1
 	return rank
 
 
-## Classement : [[nom, temps], ...] trié (les non-arrivés à la fin, temps -1).
+## Classement : [[nom, temps, score], ...] trié au score (les non-arrivés à la fin, temps -1).
 func ranking() -> Array:
 	var arr := []
 	for id in players:
-		arr.append([players[id].name, players[id].time])
+		arr.append([players[id].name, players[id].time, int(players[id].get("score", 0))])
 	arr.sort_custom(func(a, b):
 		if a[1] < 0.0: return false
 		if b[1] < 0.0: return true
+		if a[2] != b[2]: return a[2] > b[2]
 		return a[1] < b[1])
 	return arr

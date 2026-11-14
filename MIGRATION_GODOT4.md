@@ -176,3 +176,36 @@ Première brique du multijoueur (étape 5 de la feuille de route). Un nouvel aut
   - Certains Wi-Fi (entreprise, école, réseau invité) isolent les appareils : ni découverte ni connexion possible. Un partage de connexion depuis un téléphone marche en général.
   - Sur certains Android, la découverte automatique peut ne rien trouver. Taper l'IP fonctionne quand même.
   - Deux jeux sur le même PC : seul le premier voit les annonces, l'autre peut rejoindre via `127.0.0.1`.
+
+## 14. Score (temps + figures) et caméra qui regarde devant (14/11, version 1.5)
+
+**Score** : `SCORE = points de vitesse + points de figures`.
+- **Points de vitesse** : 60 000 ÷ le temps en secondes (30 s → 2000 points). Plus on arrive vite, plus on en a. Constante `SPEED_POINTS` dans `RaceManager.gd`.
+- **Points de figures**, comptés par `src/ui/race/TrickScore.gd`, qui observe la machine à états du pingouin sans la modifier :
+  - **figure réussie** (son animation va jusqu'au bout) : +100 (Toupie, Boule, Étoile ninja, Carpe) ;
+  - **vrille** (un tour complet en l'air avec les touches de rotation, hors grappin) : +150 par tour ;
+  - **combo** : plusieurs éléments dans le même saut multiplient le total du saut (×2, ×3… jusqu'à ×5) ;
+  - les points d'un saut sont **en jeu** pendant le vol. On les gagne à l'atterrissage, ou en passant l'arrivée en l'air. On les perd si on touche le sol en pleine figure (« Raté ! ») ou si on tombe dans le vide (« Chute… »).
+  - Le barème est regroupé dans les constantes `TRICK_POINTS`, `SPIN_POINTS` et `MAX_COMBO`.
+- **À l'écran** :
+  - sous le chrono, le total des figures ;
+  - en bas au centre, les figures en jeu (« Boule + Vrille ×2 »), puis « +500 COMBO ×2 » en jaune ou « Raté ! » en rouge ;
+  - à l'arrivée, « Vitesse … + Figures … / SCORE … » et le meilleur score du niveau.
+- Le **meilleur score** de chaque niveau est mémorisé dans `user://pinpouin.cfg` et affiché sur les boutons de course. Le record de **temps** et son fantôme ne changent pas.
+- **Multijoueur** : le classement se fait au score (à égalité, au temps). Le temps reste affiché entre parenthèses. Une version 1.4 et une version 1.5 ne peuvent pas jouer ensemble.
+- **Tuto Bateau** : un panneau « SCORE = vitesse + figures » au départ. Le panneau des rotations explique la vrille, celui des figures leurs points et le risque de les perdre, et un nouveau panneau explique les combos.
+- **Testé en simulation** :
+  - figures validées (+100 chacune) ;
+  - figure non finie à l'atterrissage : points perdus ;
+  - vrilles et combo ×2 (+600) sur « Hook, you fool ! » ;
+  - points perdus en tombant ;
+  - score envoyé et classé en multijoueur.
+- ⚠️ **Sur le tuto, les sauts sont courts** (moins d'une seconde) : une figure passe, mais une vrille complète ou un combo demande un grand saut. Les panneaux le précisent.
+
+**Caméra** (`AdaptiveCamera.gd`, nouveaux réglages dans l'inspecteur, groupes « Regard vers l'avant » et « Dézoom au-dessus des trous ») :
+- **Regard vers l'avant** : plus le pingouin va vite, plus la vue avance. À pleine vitesse, il est à environ 25 % du bord gauche de l'écran (mesuré : 25-27 % à 1000 px/s). Avant, c'était l'inverse : le lissage de position de Godot faisait traîner la caméra, et le pingouin se retrouvait à droite. Le lissage intégré est maintenant coupé à l'horizontale, et c'est le décalage d'avance qui est lissé, avec une courbe douce et sans à-coup aux demi-tours. En chute, la vue descend un peu.
+- **Au-dessus d'un trou** (aucun atterrissage prévu sur la trajectoire) :
+  - la caméra lance 32 rayons autour du pingouin, à la portée du grappin (1200 px, `distance_max` de `Chain.gd`) ;
+  - elle se recentre et dézoome pour montrer toutes les prises trouvées, jusqu'à un palier spécial ×0,55 (×0,65 sur mobile), utilisé uniquement dans ce cas ;
+  - le pingouin reste toujours à l'écran, et le zoom garde les règles anti-nausée (paliers, re-zoom lent et retardé, rien ne bouge pendant le grappin).
+- **Correction au passage** : le décalage tactile passait par `position`, qui tournait avec le pingouin pendant les vrilles. Il passe maintenant par `offset`, qui ne tourne pas. Le petit décalage de ±20 px de `Player._process` est remplacé par le regard vers l'avant (l'ancien code est conservé si `look_ahead_enabled = false`).

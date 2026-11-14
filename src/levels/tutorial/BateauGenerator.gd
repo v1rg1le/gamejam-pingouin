@@ -40,14 +40,18 @@ var sign_script = preload("res://src/levels/tutorial/TutorialSign.gd")
 @export var finish_x: int = UNIT_SIZE * 380
 
 # Panneaux : position x sur la piste + texte ({action} = touche réelle).
+# [SCORE 1.5] 3 panneaux expliquent le score (départ, vrilles, combos) et le
+# panneau des figures annonce leurs points.
 var signs = [
 	[700,   "Bienvenue sur la banquise !\nAvancer : {move_right}    Reculer : {move_left}\nPrends de l'élan, la piste descend jusqu'à l'arrivée."],
+	[1900,  "SCORE = points de VITESSE + points de FIGURES\nPlus tu arrives vite, plus tu marques.\nLes figures en l'air rapportent des bonus !"],
 	[3200,  "Sauter : {jump}"],
 	[6000,  "PUMP : {pump} dans les DESCENTES\npour prendre de la vitesse.\nRelâche dans les montées."],
-	[8600,  "En l'air, tourne avec {rotate_trigo} / {rotate_horaire}\npour retomber bien à plat."],
+	[8600,  "En l'air, tourne avec {rotate_trigo} / {rotate_horaire}\npour retomber bien à plat.\nDans les grands sauts : un tour complet = VRILLE, +150 pts !"],
 	[10800, "GRAPPIN : vise le plafond et maintiens {hook}\npour t'accrocher. Lâche pour te décrocher."],
 	[13800, "Accroché : maintiens aussi {pull}\npour te hisser vers le plafond."],
-	[17600, "FIGURE en l'air : {trix}\nTermine-la avant de toucher le sol,\nsinon tu es sonné !"],
+	[17600, "FIGURE en l'air : {trix}  =  +100 pts\nTermine-la avant de toucher le sol,\nsinon tu es sonné et tu perds les points du saut !"],
+	[20000, "COMBO : plusieurs figures ou vrilles dans le MÊME grand saut\n= points multipliés (×2, ×3… jusqu'à ×5).\nIls ne comptent que si tu atterris bien !"],
 	[22300, "Dernière ligne droite :\nfonce sous l'arche !"],
 ]
 

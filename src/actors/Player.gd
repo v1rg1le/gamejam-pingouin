@@ -448,6 +448,11 @@ func _process(_delta): # camera follows player velocity
 		camera.zoom = Vector2(0.1, 0.1)
 		set_process(false)
 
+	# [CAMÉRA 1.5] le décalage de caméra selon la vitesse est maintenant géré
+	# par AdaptiveCamera.gd ("regard vers l'avant", bien plus ample que ces
+	# ±20 px). On ne garde l'ancien calcul que si cette option est coupée.
+	if camera.look_ahead_enabled:
+		return
 	var x = _velocity.x / 2
 	var y = _velocity.y / 3
 	x = clamp(x, -20, 20)

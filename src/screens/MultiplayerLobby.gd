@@ -160,7 +160,8 @@ func _refresh() -> void:
 		var rank := 1
 		for entry in NetSession.last_results:
 			if entry[1] >= 0.0:
-				lines.append("  %d. %s   %s" % [rank, entry[0], RaceManager.format_time(entry[1])])
+				# [SCORE 1.5] classement au score, temps entre parenthèses
+				lines.append("  %d. %s   %d pts  (%s)" % [rank, entry[0], entry[2], RaceManager.format_time(entry[1])])
 				rank += 1
 			else:
 				lines.append("  –  %s   (pas arrivé)" % entry[0])
