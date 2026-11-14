@@ -15,6 +15,9 @@ var paused: = false: set = set_paused
 #  - "Choisir un niveau" devient "Quitter la course" : on quitte la partie
 #    réseau et on revient au salon multijoueur.
 func _ready() -> void:
+	# [WEB 1.17] dans le navigateur, « Quitter le jeu » ne peut rien fermer : masqué
+	if Settings.is_web:
+		pause_overlay.get_node("VBoxContainer/QuitButton").visible = false
 	# [RESPONSIVE 1.14] le calque « UserInterface » (parent du menu pause) est
 	# agrandi sur les petits écrans (voir UiScaler.gd). Différé : on ne
 	# déplace pas un nœud pendant son propre _ready().

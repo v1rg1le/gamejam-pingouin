@@ -39,6 +39,9 @@ var controls: = KBD_MOUSE: set = set_controls
 
 ## [MOBILE] true si le jeu tourne sur un appareil mobile (Android / iOS).
 var is_mobile_device: bool = false
+# [WEB 1.17] version jouable dans le navigateur (page itch.io). Le navigateur
+# n'a ni réseau ENet (multijoueur), ni dossiers ouvrables, ni « quitter ».
+var is_web: bool = OS.has_feature("web")
 ## [MOBILE] visée du grappin en mode tactile (mise à jour par TouchControls).
 var touch_aim: Vector2 = Vector2.ZERO
 
@@ -76,6 +79,7 @@ func _ready() -> void:
 	# (ancrages), le HUD reste collé aux bords.
 	get_tree().root.content_scale_aspect = Window.CONTENT_SCALE_ASPECT_EXPAND
 	_load_options()   # [OPTIONS 1.7]
+	_add_symbol_font_fallback()   # [WEB 1.17]
 	# [RESPONSIVE 1.14] _process doit tourner même en pause (changement de
 	# scène depuis le menu pause) ; une fenêtre redimensionnée recalcule
 	# l'échelle des menus.
@@ -296,3 +300,39 @@ func _update_mouse_bindings() -> void:
 				InputMap.action_add_event(action, ev)
 		_removed_mouse_events.clear()
 		touch_aim = Vector2.ZERO
+
+
+
+# --- [WEB 1.17] Symboles ★ ◀ ▶ ⚙ ↺ ↻ … ------------------------------------------
+# Les polices du jeu (Roboto, et la police par défaut de Godot) n'ont pas ces
+# symboles. Sur PC, le système fournit une police de secours ; dans le
+# NAVIGATEUR (version itch.io) il n'y en a aucune : ils s'affichaient en
+# petits rectangles. On ajoute donc DejaVu Sans (police libre, licence dans
+# assets/font/DejaVuSans_LICENCE.txt) comme police de secours partout.
+const SYMBOL_FONT = "res://assets/font/DejaVuSans.ttf"
+const GAME_FONTS = ["res://assets/font/Roboto-Medium.ttf"]
+
+# On GARDE une référence aux polices modifiées : sinon Godot les libère dès la
+# fin de la fonction, et le prochain chargement repart sans police de secours.
+var _patched_fonts: Array = []
+
+func _add_symbol_font_fallback() -> void:
+	if not ResourceLoader.exists(SYMBOL_FONT):
+		return
+	var symbols: Font = load(SYMBOL_FONT)
+	var fonts: Array = [ThemeDB.fallback_font]
+	for path in GAME_FONTS:
+		if ResourceLoader.exists(path):
+			fonts.append(load(path))
+	for f in fonts:
+		if f == null or f == symbols or not ("fallbacks" in f):
+			continue
+		# on reconstruit un tableau typé neuf (modifier la copie renvoyée par
+		# la propriété ne suffit pas)
+		var fb: Array[Font] = []
+		for old in f.fallbacks:
+			fb.append(old)
+		if not fb.has(symbols):
+			fb.append(symbols)
+		f.set("fallbacks", fb)
+		_patched_fonts.append(f)

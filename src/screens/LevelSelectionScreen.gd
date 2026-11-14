@@ -64,7 +64,10 @@ func _ready() -> void:
 	# ne peut pas ouvrir un dossier de l'appli dans un explorateur de fichiers)
 	ghost_toggle.button_pressed = RaceManager.ghost_enabled
 	ghost_toggle.toggled.connect(RaceManager.set_ghost_enabled)
-	ghost_folder_button.visible = not Settings.is_mobile_device
+	ghost_folder_button.visible = not Settings.is_mobile_device and not Settings.is_web   # [WEB 1.17]
+	# [WEB 1.17] pas de multijoueur dans le navigateur (ENet / UDP indisponibles)
+	if Settings.is_web:
+		multi_button.visible = false
 	ghost_folder_button.pressed.connect(func():
 		OS.shell_open(ProjectSettings.globalize_path(RaceManager.GHOST_DIR)))
 	# Focus initial seulement si on joue au clavier / à la manette (en tactile,

@@ -63,7 +63,7 @@ func _ready() -> void:
 	# --- Fantômes
 	_fill_ghost_list()
 	paste_button.pressed.connect(_on_paste)
-	folder_button.visible = not Settings.is_mobile_device
+	folder_button.visible = not Settings.is_mobile_device and not Settings.is_web   # [WEB 1.17]
 	folder_button.pressed.connect(func():
 		OS.shell_open(ProjectSettings.globalize_path(RaceManager.GHOST_DIR)))
 	back_button.pressed.connect(_go_back)

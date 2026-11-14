@@ -434,3 +434,10 @@ Demande de l'équipe : plus de coupure nette du fond, une boucle infinie qui sui
 - **Options → « Flèches des joueurs (multi) »** : *Toutes* (défaut), *Devant et derrière seulement* ou *Aucune*. Mémorisé dans `user://pinpouin.cfg` (`Settings.player_arrows`).
 - **Mode « devant et derrière »** : seul le joueur le plus proche devant et le plus proche derrière ont une flèche. Cas des bords : le 1er de la course n'a personne devant, il ne voit que la flèche de son poursuivant ; le dernier ne voit que celle du joueur qui le précède. Vérifié en captures (milieu de peloton, en tête, mode Aucune).
 - Décisions de l'équipe : disposition actuelle des boutons tactiles validée par Léo ; point « banquise » clos.
+
+## 26. Version navigateur pour itch.io + jeu plus léger (14/11, version 1.17)
+
+- **Export Web** (preset « Web » ajouté, sans threads : marche sur itch.io sans réglage spécial). Dans le navigateur (`Settings.is_web`) : bouton Multijoueur masqué (ENet / UDP indisponibles), boutons « Dossier des fantômes » et « Quitter le jeu » masqués. Les fantômes et options sont gardés par le navigateur. Testé dans Chrome : démarrage, menus, course complète.
+- **Symboles ★ ◀ ▶ ⚙ ↺ ↻** : dans le navigateur, ils s'affichaient en petits rectangles (pas de police système). Ajout de la police libre **DejaVu Sans** (`assets/font/`, licence à côté) comme police de secours de Roboto et de la police par défaut (`Settings._add_symbol_font_fallback`).
+- **Jeu bien plus léger** : les 2 musiques WAV (58 Mo) sont maintenant compressées à l'import en **QOA** (réglage `compress/mode` de leur `.import`, fichiers d'origine intacts) → 11,7 Mo, qualité quasi identique. Les fichiers d'éditeur de l'extension SmartShape (thème d'interface 7,7 Mo, documentation) ne sont plus exportés dans le jeu. Données du jeu : 67 Mo → 13,7 Mo.
+- **Kit itch.io** : captures, GIF de gameplay, image de couverture 630 × 500, texte de la page (doc projet `claude/page-itch-io.md`).
