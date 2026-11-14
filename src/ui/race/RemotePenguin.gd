@@ -71,7 +71,9 @@ func push_state(state: PackedFloat32Array, anim: String) -> void:
 func _process(_delta: float) -> void:
 	if _buffer.is_empty():
 		return
-	var t := _now() - INTERP_DELAY
+	# [INTERNET 1.6] partie par Internet : paquets moins réguliers qu'en Wi-Fi,
+	# on garde un peu plus de marge (150 ms) pour rester fluide
+	var t := _now() - (INTERP_DELAY * 1.5 if NetSession.is_online_game else INTERP_DELAY)
 	# on jette les états trop vieux (on garde celui juste avant t)
 	while _buffer.size() > 2 and _buffer[1][0] <= t:
 		_buffer.pop_front()

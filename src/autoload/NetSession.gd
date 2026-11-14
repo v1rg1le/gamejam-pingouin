@@ -24,6 +24,19 @@ extends Node
 #   -> chacun signale "chargé" -> l'hôte lance le compte à rebours (3 s)
 #   -> course -> chaque arrivée est annoncée à tous (classement en direct)
 #   -> quand tout le monde est arrivé (ou 45 s après le 1er), retour au salon.
+#
+#  [INTERNET 1.6] Jouer par Internet SANS serveur (choix de l'équipe, 14/11) :
+#   - l'hôte clique "Ouvrir sur Internet" : le jeu demande à sa box d'ouvrir
+#     le port GAME_PORT (protocole UPnP, géré par la classe UPNP de Godot),
+#     et récupère l'adresse publique de la box ;
+#   - cette adresse est transformée en CODE DE PARTIE de 8 caractères
+#     (ex. "K7QM-2XPA") à envoyer aux amis : ip_to_code() / code_to_ip() ;
+#   - les amis tapent le code dans "Rejoindre" : c'est exactement la même
+#     connexion qu'en Wi-Fi, vers l'adresse publique de la box de l'hôte.
+#   - En quittant, le port est refermé sur la box.
+#   Limites : l'hôte doit être sur une box qui accepte l'UPnP (pas en 4G, pas
+#   derrière une adresse partagée "CGNAT"). Les invités, eux, peuvent être
+#   n'importe où (4G comprise). Le jeu explique quoi faire si ça échoue.
 # =============================================================================
 
 signal players_changed
@@ -31,6 +44,8 @@ signal hosts_changed
 signal session_ended(reason: String)
 signal countdown_started(seconds: float)
 signal race_results_changed
+signal internet_opened(code: String)       # [INTERNET 1.6] port ouvert, code prêt
+signal internet_failed(reason: String)     # [INTERNET 1.6] la box a refusé
 
 const GAME_PORT = 47230
 const DISCOVERY_PORT = 47231
@@ -51,6 +66,13 @@ var pending_message: String = ""  # message à afficher en arrivant au salon (ex
 var _listen_warned: bool = false
 
 const CONFIG_PATH = "user://pinpouin.cfg"   # même fichier que RaceManager
+
+# [INTERNET 1.6] codes de partie : 32 signes sans les confusions I/1, O/0
+const CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
+var internet_code: String = ""     # code de la partie ouverte sur Internet ("" = non)
+var internet_busy: bool = false    # ouverture du port en cours (prend 1 à 3 s)
+var is_online_game: bool = false   # connecté à un hôte hors du réseau local
+var _upnp: UPNP = null             # gardé pour refermer le port en quittant
 
 var _peer: ENetMultiplayerPeer = null
 var _udp_announce: PacketPeerUDP = null
@@ -119,6 +141,9 @@ func host() -> Error:
 
 func join(ip: String) -> Error:
 	leave()
+	# [INTERNET 1.6] hôte hors réseau local (code de partie / IP publique) :
+	# on affichera les autres avec un peu plus de marge (connexion moins régulière)
+	is_online_game = not _is_private_ip(ip.strip_edges())
 	_peer = ENetMultiplayerPeer.new()
 	var err := _peer.create_client(ip.strip_edges(), GAME_PORT)
 	if err != OK:
@@ -130,6 +155,8 @@ func join(ip: String) -> Error:
 
 func leave() -> void:
 	_stop_announce()
+	_close_internet()   # [INTERNET 1.6] referme le port de la box s'il était ouvert
+	is_online_game = false
 	if _peer != null:
 		_peer.close()
 	_peer = null
@@ -146,6 +173,117 @@ func local_ips() -> Array:
 		if ip.begins_with("192.168.") or ip.begins_with("10.") or (ip.begins_with("172.") and int(ip.split(".")[1]) in range(16, 32)):
 			out.append(ip)
 	return out
+
+
+# --- [INTERNET 1.6] Ouverture sur Internet + codes de partie --------------------
+## Hôte : ouvre la partie sur Internet. Résultat par les signaux
+## internet_opened(code) ou internet_failed(raison). Ne bloque pas le jeu :
+## la discussion avec la box se fait dans un fil d'exécution à part.
+func open_internet() -> void:
+	if not is_host() or internet_busy or internet_code != "":
+		return
+	internet_busy = true
+	WorkerThreadPool.add_task(_upnp_task)
+
+
+# Exécuté hors du fil principal : on n'y touche à AUCUN nœud, on renvoie le
+# résultat avec call_deferred (exécuté ensuite dans le fil principal).
+func _upnp_task() -> void:
+	var upnp := UPNP.new()
+	var err := upnp.discover(2500, 2)
+	if err != UPNP.UPNP_RESULT_SUCCESS or upnp.get_gateway() == null or not upnp.get_gateway().is_valid_gateway():
+		_upnp_done.call_deferred(null, "", "Ta box n'a pas répondu (UPnP désactivé ou absent).")
+		return
+	var public_ip := upnp.query_external_address()
+	if public_ip == "" or not public_ip.is_valid_ip_address() or public_ip.contains(":"):
+		_upnp_done.call_deferred(null, "", "Impossible de connaître l'adresse Internet de ta box.")
+		return
+	if _is_private_ip(public_ip) or public_ip.begins_with("100."):
+		_upnp_done.call_deferred(null, "", "Ta connexion partage son adresse Internet avec d'autres abonnés (4G ou « CGNAT ») : impossible d'héberger d'ici.")
+		return
+	# ENet utilise l'UDP ; durée 0 = jusqu'à ce qu'on le referme
+	err = upnp.add_port_mapping(GAME_PORT, GAME_PORT, "Pinpouin Le Ninja", "UDP", 0)
+	if err != UPNP.UPNP_RESULT_SUCCESS:
+		_upnp_done.call_deferred(null, "", "Ta box a refusé d'ouvrir le port (erreur UPnP %d)." % err)
+		return
+	_upnp_done.call_deferred(upnp, public_ip, "")
+
+
+func _upnp_done(upnp, public_ip: String, error_text: String) -> void:
+	internet_busy = false
+	if error_text != "" or not is_host():
+		# échec, ou l'hôte a quitté entre-temps : on referme si besoin
+		if upnp != null:
+			upnp.delete_port_mapping(GAME_PORT, "UDP")
+		if error_text != "":
+			# si le salon n'est plus affiché (course lancée entre-temps), le
+			# message sera montré au retour au salon
+			if get_tree().current_scene == null or get_tree().current_scene.scene_file_path != LOBBY_SCENE:
+				pending_message = error_text
+			emit_signal("internet_failed", error_text)
+		return
+	_upnp = upnp
+	is_online_game = true   # des joueurs vont arriver par Internet
+	internet_code = ip_to_code(public_ip)
+	print("[INTERNET] partie ouverte : ", public_ip, " -> code ", internet_code)
+	emit_signal("internet_opened", internet_code)
+
+
+func _close_internet() -> void:
+	if _upnp != null:
+		var upnp := _upnp
+		_upnp = null
+		# refermer le port peut prendre un instant : hors du fil principal
+		WorkerThreadPool.add_task(func(): upnp.delete_port_mapping(GAME_PORT, "UDP"))
+	internet_code = ""
+
+
+## Adresse IPv4 -> code de 8 signes "XXXX-XXXX" (7 signes pour les 32 bits de
+## l'adresse + 1 signe de contrôle qui détecte les fautes de frappe).
+static func ip_to_code(ip: String) -> String:
+	var parts := ip.split(".")
+	var n := 0
+	for p in parts:
+		n = (n << 8) | (int(p) & 255)
+	# 7 signes = 35 bits : les 3 bits en trop reçoivent une valeur au hasard
+	# (sinon tous les codes commenceraient par A, B, C ou D)
+	n |= (randi() % 8) << 32
+	var chars := ""
+	var checksum := 0
+	for i in 7:
+		var v := (n >> (5 * (6 - i))) & 31
+		checksum += v * (2 * i + 1)   # poids impairs : toute faute sur 1 signe est détectée
+		chars += CODE_ALPHABET[v]
+	chars += CODE_ALPHABET[checksum % 32]
+	return chars.substr(0, 4) + "-" + chars.substr(4, 4)
+
+
+## Code de partie -> adresse IPv4, ou "" si le code est invalide.
+static func code_to_ip(code: String) -> String:
+	var clean := code.to_upper().replace("-", "").replace(" ", "")
+	if clean.length() != 8:
+		return ""
+	var n := 0
+	var checksum := 0
+	for i in 7:
+		var v := CODE_ALPHABET.find(clean[i])
+		if v < 0:
+			return ""
+		checksum += v * (2 * i + 1)   # poids impairs : toute faute sur 1 signe est détectée
+		n = (n << 5) | v
+	if CODE_ALPHABET.find(clean[7]) != checksum % 32:
+		return ""
+	n &= 0xFFFFFFFF   # on ignore les 3 bits "au hasard"
+	return "%d.%d.%d.%d" % [(n >> 24) & 255, (n >> 16) & 255, (n >> 8) & 255, n & 255]
+
+
+static func _is_private_ip(ip: String) -> bool:
+	if ip.begins_with("192.168.") or ip.begins_with("10.") or ip.begins_with("127."):
+		return true
+	if ip.begins_with("172."):
+		var b := int(ip.split(".")[1])
+		return b >= 16 and b < 32
+	return false
 
 
 # --- Découverte sur le Wi-Fi (diffusion UDP) ------------------------------------
@@ -223,8 +361,14 @@ func _on_connected_to_server() -> void:
 
 
 func _on_connection_failed() -> void:
+	var online := is_online_game
 	leave()
-	emit_signal("session_ended", "Connexion impossible à cette partie.")
+	if online:
+		# [INTERNET 1.6] cas le plus fréquent : code mal recopié, ou l'hôte n'a
+		# pas (encore) ouvert sa partie sur Internet
+		emit_signal("session_ended", "Connexion impossible : vérifie le code, et que l'hôte a bien cliqué « Ouvrir sur Internet ».")
+	else:
+		emit_signal("session_ended", "Connexion impossible à cette partie.")
 
 
 func _on_server_disconnected() -> void:

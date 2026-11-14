@@ -12,6 +12,10 @@ extends Control
 #     (utile si le réseau bloque la diffusion, ex. Wi-Fi d'entreprise).
 #  En bas : Retour (quitte la partie et revient au choix des niveaux),
 #  "Quitter la partie" (reste dans le salon), numéro de version.
+#  [INTERNET 1.6] Dans le salon, l'hôte peut cliquer "Ouvrir sur Internet" :
+#  un CODE DE PARTIE de 8 signes s'affiche (bouton "Copier"), à envoyer aux
+#  amis qui ne sont pas sur le même Wi-Fi. Ils le tapent dans le champ de
+#  "Rejoindre" (qui accepte un code OU une adresse IP).
 #  Après une course, on revient ici, toujours connectés, avec le classement
 #  de la dernière course affiché dans le salon.
 #  Toute la logique réseau est dans l'autoload NetSession.
@@ -32,6 +36,9 @@ const RACES = [
 @onready var host_header: Label = $Margin/VBox/Columns/HostPanel/VBox/HostHeader
 @onready var host_button: Button = $Margin/VBox/Columns/HostPanel/VBox/HostButton
 @onready var ip_label: Label = $Margin/VBox/Columns/HostPanel/VBox/IpLabel
+@onready var internet_button: Button = $Margin/VBox/Columns/HostPanel/VBox/InternetButton
+@onready var copy_button: Button = $Margin/VBox/Columns/HostPanel/VBox/InternetRow/CopyButton
+@onready var internet_label: Label = $Margin/VBox/Columns/HostPanel/VBox/InternetRow/InternetLabel
 @onready var players_label: Label = $Margin/VBox/Columns/HostPanel/VBox/PlayersLabel
 @onready var level_option: OptionButton = $Margin/VBox/Columns/HostPanel/VBox/LevelOption
 @onready var start_button: Button = $Margin/VBox/Columns/HostPanel/VBox/StartButton
@@ -65,6 +72,19 @@ func _ready() -> void:
 		NetSession.leave()
 		status_label.text = "Tu as quitté la partie.")
 	back_button.pressed.connect(_go_back)
+	# [INTERNET 1.6]
+	internet_button.pressed.connect(func():
+		internet_label.text = "Ouverture du port de ta box…"
+		NetSession.open_internet()
+		_refresh())
+	copy_button.pressed.connect(func():
+		DisplayServer.clipboard_set(NetSession.internet_code)
+		status_label.text = "Code copié : envoie-le à tes amis !")
+	NetSession.internet_opened.connect(func(_code): _refresh())
+	NetSession.internet_failed.connect(func(reason):
+		internet_label.text = ""
+		status_label.text = reason + "\nSolutions : active l'UPnP dans les réglages de ta box, ou demande à un ami de créer la partie."
+		_refresh())
 
 	NetSession.players_changed.connect(_refresh)
 	NetSession.hosts_changed.connect(_refresh_hosts)
@@ -110,8 +130,12 @@ func _on_host_pressed() -> void:
 func _join(ip: String) -> void:
 	ip = ip.strip_edges()
 	if not ip.is_valid_ip_address():
-		status_label.text = "Adresse invalide : tape quelque chose comme 192.168.1.12"
-		return
+		# [INTERNET 1.6] pas une adresse IP : c'est peut-être un code de partie
+		var from_code := NetSession.code_to_ip(ip)
+		if from_code == "":
+			status_label.text = "Code invalide : vérifie les 8 signes (ex. K7QM-2XPA), ou tape une adresse comme 192.168.1.12"
+			return
+		ip = from_code
 	if NetSession.join(ip) != OK:
 		status_label.text = "Connexion impossible."
 		return
@@ -140,6 +164,8 @@ func _refresh() -> void:
 	if NetSession.is_host():
 		var ips: Array = NetSession.local_ips()
 		ip_label.text = "Partie ouverte ! Sur le même Wi-Fi, les autres la verront dans « Rejoindre ».\nAdresse : " + (", ".join(ips) if not ips.is_empty() else "inconnue")
+		if NetSession.internet_code != "":   # [INTERNET 1.6]
+			ip_label.text += "\nAmis ailleurs : envoie-leur ce code."
 	elif joined:
 		ip_label.text = "Connecté ! L'hôte choisit la course et la lance."
 	elif _connecting:
@@ -167,6 +193,16 @@ func _refresh() -> void:
 				lines.append("  –  %s   (pas arrivé)" % entry[0])
 	players_label.text = "\n".join(lines)
 	players_label.visible = not lines.is_empty()
+
+	# [INTERNET 1.6] ouverture sur Internet (hôte seulement)
+	internet_button.visible = NetSession.is_host() and NetSession.internet_code == ""
+	internet_button.disabled = NetSession.internet_busy
+	copy_button.visible = NetSession.is_host() and NetSession.internet_code != ""
+	if NetSession.is_host() and NetSession.internet_code != "":
+		internet_label.text = "Code :  " + NetSession.internet_code
+	elif not NetSession.internet_busy:
+		internet_label.text = ""
+	internet_label.get_parent().visible = internet_label.text != ""
 
 	level_option.visible = NetSession.is_host()
 	start_button.visible = NetSession.is_host()

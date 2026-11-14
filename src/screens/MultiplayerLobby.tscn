@@ -64,7 +64,7 @@ theme_override_colors/font_outline_color = Color(0.168627, 0.227451, 0.34902, 1)
 theme_override_constants/outline_size = 12
 theme_override_fonts/font = ExtResource("3")
 theme_override_font_sizes/font_size = 40
-text = "MULTIJOUEUR  ·  même Wi-Fi"
+text = "MULTIJOUEUR  ·  Wi-Fi ou Internet"
 horizontal_alignment = 1
 vertical_alignment = 1
 
@@ -123,6 +123,30 @@ theme_override_font_sizes/font_size = 16
 autowrap_mode = 3
 text = "Les autres joueurs te trouveront automatiquement s'ils sont sur le même Wi-Fi."
 
+[node name="InternetButton" type="Button" parent="Margin/VBox/Columns/HostPanel/VBox"]
+custom_minimum_size = Vector2(0, 44)
+layout_mode = 2
+text = "Ouvrir sur Internet (amis ailleurs)"
+
+[node name="InternetRow" type="HBoxContainer" parent="Margin/VBox/Columns/HostPanel/VBox"]
+layout_mode = 2
+theme_override_constants/separation = 8
+
+[node name="InternetLabel" type="Label" parent="Margin/VBox/Columns/HostPanel/VBox/InternetRow"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_colors/font_color = Color(1, 0.94, 0.4, 1)
+theme_override_colors/font_outline_color = Color(0.105882, 0.152941, 0.270588, 1)
+theme_override_constants/outline_size = 6
+theme_override_font_sizes/font_size = 22
+vertical_alignment = 1
+autowrap_mode = 3
+
+[node name="CopyButton" type="Button" parent="Margin/VBox/Columns/HostPanel/VBox/InternetRow"]
+custom_minimum_size = Vector2(110, 44)
+layout_mode = 2
+text = "Copier"
+
 [node name="PlayersLabel" type="Label" parent="Margin/VBox/Columns/HostPanel/VBox"]
 layout_mode = 2
 theme_override_colors/font_color = Color(1, 1, 1, 1)
@@ -169,7 +193,8 @@ theme_override_constants/separation = 8
 layout_mode = 2
 theme_override_colors/font_color = Color(1, 1, 1, 0.85)
 theme_override_font_sizes/font_size = 16
-text = "Ou tape l'adresse de l'hôte :"
+text = "Par Internet : tape le code de partie
+(ou l'adresse IP de l'hôte) :"
 
 [node name="IpRow" type="HBoxContainer" parent="Margin/VBox/Columns/JoinPanel/VBox"]
 layout_mode = 2
@@ -183,7 +208,7 @@ theme_override_font_sizes/font_size = 20
 custom_minimum_size = Vector2(0, 46)
 layout_mode = 2
 size_flags_horizontal = 3
-placeholder_text = "192.168.1.12"
+placeholder_text = "Code ou adresse IP"
 
 [node name="JoinButton" type="Button" parent="Margin/VBox/Columns/JoinPanel/VBox/IpRow"]
 custom_minimum_size = Vector2(130, 46)

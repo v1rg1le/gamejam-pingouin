@@ -209,3 +209,37 @@ Première brique du multijoueur (étape 5 de la feuille de route). Un nouvel aut
   - elle se recentre et dézoome pour montrer toutes les prises trouvées, jusqu'à un palier spécial ×0,55 (×0,65 sur mobile), utilisé uniquement dans ce cas ;
   - le pingouin reste toujours à l'écran, et le zoom garde les règles anti-nausée (paliers, re-zoom lent et retardé, rien ne bouge pendant le grappin).
 - **Correction au passage** : le décalage tactile passait par `position`, qui tournait avec le pingouin pendant les vrilles. Il passe maintenant par `offset`, qui ne tourne pas. Le petit décalage de ±20 px de `Player._process` est remplacé par le regard vers l'avant (l'ancien code est conservé si `look_ahead_enabled = false`).
+
+## 15. Multijoueur par Internet, sans serveur : code de partie (14/11, version 1.6)
+
+Choix de l'équipe : pas de serveur à payer ou à gérer. C'est l'hôte qui ouvre la porte de sa box.
+
+- **Côté hôte** :
+  - dans le salon, après « Créer la partie », un bouton **« Ouvrir sur Internet »** ;
+  - le jeu demande alors à la box d'ouvrir le port UDP 47230 vers cet appareil (protocole **UPnP**, classe `UPNP` de Godot) et récupère l'adresse Internet de la box ;
+  - un **code de partie** de 8 signes s'affiche (ex. `KKEA-DAHQ`), avec un bouton « Copier ». Il suffit de l'envoyer aux amis par message.
+- **Côté invités** : on tape le code dans le champ de « Rejoindre », qui accepte un code ou une adresse IP. Ensuite, tout est identique au Wi-Fi : salon, compte à rebours, pingouins en direct, score, classement.
+- **Le code** contient l'adresse Internet de la box de l'hôte.
+  - Il n'utilise que des signes sans ambiguïté (ni I/1 ni O/0) et ignore les majuscules et minuscules.
+  - Un signe de contrôle détecte toute faute de frappe sur un signe : testé sur 5000 fautes, toutes détectées.
+  - Fonctions `ip_to_code()` et `code_to_ip()` dans `NetSession.gd`.
+- **En quittant**, le port est refermé sur la box.
+- **Sans blocage** : la discussion avec la box (1 à 5 s) se fait en tâche de fond, le jeu ne se fige pas.
+- **Messages clairs en cas d'échec** :
+  - box sans UPnP, ou UPnP désactivé ;
+  - connexion 4G ou adresse partagée (« CGNAT ») ;
+  - port refusé ;
+  - côté invité : code invalide, ou connexion impossible (« vérifie le code et que l'hôte a bien ouvert la partie »).
+- **Par Internet**, les autres pingouins sont affichés avec 150 ms de marge au lieu de 100 ms, pour rester fluides malgré une connexion moins régulière.
+- **Testé ici** :
+  - codes : 20 000 adresses converties aller-retour sans erreur ;
+  - connexion par code entre deux jeux (code de 127.0.0.1), avec une course complète ;
+  - échec UPnP : message affiché, et la partie en Wi-Fi continue normalement ;
+  - non-régression du multijoueur en Wi-Fi.
+- ⚠️ **À tester en vrai** : il n'y a pas de box dans l'environnement de test. L'ouverture du port n'a donc pas pu être essayée sur une vraie box.
+- **Limites** :
+  - l'**hôte** doit être sur une box qui accepte l'UPnP. C'est souvent activé par défaut, sinon il faut l'activer dans l'interface de la box ;
+  - l'hôte ne peut pas être en 4G ni derrière un CGNAT ;
+  - les **invités** peuvent être n'importe où, 4G comprise.
+  - Si personne ne peut héberger, il faudra un relais (noray ou GD-Sync, notés dans la feuille de route).
+- **Si l'UPnP ne marche pas** mais que l'hôte ouvre lui-même le port UDP 47230 dans sa box, les invités peuvent taper directement son adresse IP publique à la place du code.
