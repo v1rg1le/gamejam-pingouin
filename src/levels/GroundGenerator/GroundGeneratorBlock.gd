@@ -39,6 +39,31 @@ var max_gap = UNIT_SIZE * 10
 @export var igloo_treshold = 0.01 #ATTENTION -igloo_treshold<...<igloo_treshold
 
 
+# [GRAPPIN 1.12] Prises d'accroche (poissons) CENTRÉES au-dessus des trous.
+# Retour de l'équipe sur « Hook, you fool ! » : « les endroits où utiliser le
+# grappin devraient être au centre des trous ; le premier est beaucoup trop à
+# gauche ». Mesure faite sur la 1.11 :
+#   trou 1 : de 19136 à 20264 (centre 19700) -> prise à 19214 (presque au bord) ;
+#   trou 2 : centre 40514 -> prise à 40328 ; trou 4 : prises décalées de ~180 px ;
+#   dernier trou (avant le half-pipe) : 2e prise posée SUR le bord du half-pipe.
+# Cause : la prise était calculée avec gap[i], alors que le trou réellement
+# creusé avant l'île i vaut gap[i-1] + 64 (sum_gap(i) n'additionne que les
+# trous 0..i-1). On garde EXACTEMENT les mêmes îles (même niveau, mêmes
+# fantômes) et on place les prises d'après les vrais bords : fin de l'île
+# précédente -> début de l'île suivante, à égale distance. Le nombre de prises
+# par trou ne change pas.
+var _last_ground_end := 0.0   # x (monde) de la fin de la dernière île posée au sol
+var _last_sol: Node2D = null  # dernier sol créé par add_sol()
+
+
+func _sol_end(sol: Node2D) -> float:
+	# fin réelle d'un sol : sa position + map_width - UNIT_SIZE (le dernier point
+	# de la courbe de sol.gd ; mesuré : île de 0 à 19136 pour map_width 19200).
+	# NB : sol.end_x n'est pas encore calculé ici (le sol n'a pas fini son
+	# _ready pendant la construction de la scène).
+	return sol.position.x + self.position.x + map_width - UNIT_SIZE
+
+
 func sum_gap(index):
 	# return sum of all gaps
 	var ss = 0
@@ -66,16 +91,21 @@ func _ready():
 #			get_parent()._set_spawn_position(next_pos)
 #			add_player(next_pos + UNIT_SIZE*Vector2(3,-5))
 			next_pos = add_sol(next_pos, i, false)
+			_last_ground_end = _sol_end(_last_sol)   # [GRAPPIN 1.12] fin de l'île au sol
 			var _nocare = add_sol(next_pos + Vector2(0, -space_btw_grd_roof[i]), i, false)  # add roof to grab on
 		else:
 #			var fuck_position = next_pos + i*gap*Vector2(1,0) + i*(map_width+UNIT_SIZE)*Vector2(1,0)+i*map_width*coeff_pente*Vector2(0,1) + i*gap_offset*UNIT_SIZE*Vector2(0,1)
 			var fuck_position = next_pos + sum_gap(i)*Vector2(1,0) + i*(map_width+UNIT_SIZE)*Vector2(1,0)+i*map_width*coeff_pente*Vector2(0,1) + i*gap_offset*UNIT_SIZE*Vector2(0,1)
+			var prev_island_end: float = _last_ground_end   # [GRAPPIN 1.12] fin de l'île précédente
 			next_pos = add_sol(fuck_position, i, is_final_map)
+			_last_ground_end = _sol_end(_last_sol)            # [GRAPPIN 1.12]
 			var _nocare = add_sol(fuck_position + Vector2(0, -space_btw_grd_roof[i]), i, is_final_map)
-			
+
 			if gap[i] >= max_gap:  # max_gap
 				# genere des blocs pour hook
-				var end_of_previous = fuck_position.x - gap[i]
+				# [GRAPPIN 1.12] avant : end_of_previous = fuck_position.x - gap[i]
+				var end_of_previous = prev_island_end
+				var hole: float = fuck_position.x - end_of_previous   # largeur RÉELLE du trou
 				# determine number of block to put
 				var space_btw_block = 1000
 				# -1 car trop facile sinon
@@ -84,7 +114,8 @@ func _ready():
 				print('Gap: ', gap[i])
 				print('Number of blocks: ', n_block)
 				for nb in range(1,n_block+1):
-					add_block(Vector2(end_of_previous,0) + Vector2(nb*gap[i]/(n_block+1), fuck_position.y-500))
+					# [GRAPPIN 1.12] réparties sur la largeur réelle du trou (avant : gap[i])
+					add_block(Vector2(end_of_previous,0) + Vector2(nb*hole/(n_block+1), fuck_position.y-500))
 			
 			if is_final_map:
 				next_pos = fuck_position + (map_width+UNIT_SIZE)*Vector2(1,0)
@@ -95,7 +126,10 @@ func _ready():
 		var last_position = (Vector2(sum_gap(number_map)-gap[0],0)*Vector2(1,0) + number_map*(map_width+UNIT_SIZE)*Vector2(1,0)
 				+number_map*map_width*coeff_pente*Vector2(0,1) + (number_map+1)*2*UNIT_SIZE*Vector2(0,1))
 		
-		gen_block(next_pos, last_position, gap[-1], -700)
+		# [GRAPPIN 1.12] dernier trou : de la fin de la dernière île au début du
+		# half-pipe (avant : depuis next_pos avec un pas de gap[-1] ; la 2e prise
+		# tombait sur le bord du half-pipe)
+		gen_block(Vector2(_last_ground_end, next_pos.y), last_position, gap[-1], -700)
 		
 #		add_half_pipe(next_pos + number_map*gap*Vector2(1,0) + number_map*(map_width+UNIT_SIZE)*Vector2(1,0)
 #				+number_map*map_width*coeff_pente*Vector2(0,1) + (number_map+1)*2*UNIT_SIZE*Vector2(0,1))
@@ -140,6 +174,7 @@ func add_sol(position:Vector2, i, is_final_map:bool):
 	sol.h = height_ground[i]
 #	print(sol.noise_period) 
 	add_child(sol)
+	_last_sol = sol   # [GRAPPIN 1.12]
 	next_pos = Vector2(0,0)
 #	print(next_pos)
 	return next_pos
@@ -188,8 +223,9 @@ func gen_block(pos_deb, pos_fin, gap, yshift):
 	# split empty space to put them
 	print('Gap: ', gap)
 	print('Number of blocks: ', n_block)
+	var hole: float = pos_fin.x - pos_deb.x   # [GRAPPIN 1.12] largeur réelle du trou
 	for nb in range(1,n_block+1):
-		add_block(Vector2(pos_deb.x,0) + Vector2(nb*gap/(n_block+1), pos_fin.y-500+yshift))
+		add_block(Vector2(pos_deb.x,0) + Vector2(nb*hole/(n_block+1), pos_fin.y-500+yshift))
 
 
 

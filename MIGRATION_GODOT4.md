@@ -366,3 +366,22 @@ Demande de l'équipe : plus de coupure nette du fond, une boucle infinie qui sui
   - visée à 20°, 60°, 70°, 100° et 110° : le grappin part dans la bonne direction, à quelques degrés près (le pingouin avance pendant le tir) ;
   - sous le plafond du tuto, il s'accroche ; doigt relevé, il se décroche.
 - **À tester sur un vrai téléphone** : le confort du geste, et vérifier qu'on ne lance pas le grappin par erreur en visant mal un bouton. Les boutons gardent une zone de toucher un peu plus large que leur dessin.
+
+## 21. « Hook, you fool ! » : prises d'accroche centrées sur les trous (14/11, version 1.12)
+
+- **Demande** : avoir les endroits où utiliser le grappin au centre des trous ; le premier était beaucoup trop à gauche.
+- **Mesure sur la 1.11** :
+
+| Trou | Bords | Centre | Prise(s) 1.11 | Prise(s) 1.12 |
+|---|---|---|---|---|
+| 1 | 19136 → 20264 | 19700 | 19214 (au bord) | **19700** |
+| 2 | 39400 → 41628 | 40514 | 40328 | **40514** |
+| 3 | 60764 → 63492 | 62128 | 62192 | **62128** |
+| 4 | 82628 → 85356 | 83992 | 83356 et 84356 | **83537 et 84447** (aux tiers) |
+| 5 (avant le half-pipe) | 104492 → 106620 | 105556 | 105620 et 106620 (sur le bord du half-pipe) | **105201 et 105911** (aux tiers) |
+
+- **Cause** (`GroundGeneratorBlock.gd`) : la position des prises était calculée avec `gap[i]`, alors que le trou réellement creusé avant l'île i vaut `gap[i-1] + 64` (`sum_gap(i)` n'additionne que les trous 0 à i-1).
+- **Correction** :
+  - les îles ne bougent pas, donc même niveau et fantômes toujours valables ;
+  - les prises sont maintenant réparties sur la largeur réelle de chaque trou, de la fin de l'île précédente au début de la suivante. Le nombre de prises par trou ne change pas.
+- **Effet de bord voulu** : la simulation qui ne fait qu'avancer, sans grappin, retombe maintenant dans le premier trou. Le niveau redemande donc le grappin, ce qui répond aussi à la remarque de la 1.10 (« on passe les trous sans grappin »).
