@@ -1,6 +1,8 @@
-[gd_scene load_steps=7 format=2]
+[gd_scene load_steps=9 format=2]
 
 [ext_resource path="res://src/levels/parallax/VerticalParallax.gd" type="Script" id=91]
+[ext_resource path="res://src/levels/ChillLoop.gd" type="Script" id=92]
+[ext_resource path="res://src/ui/UserInterface.tscn" type="PackedScene" id=93]
 [ext_resource path="res://src/levels/GroundGenerator/sol.tscn" type="PackedScene" id=1]
 [ext_resource path="res://src/actors/Player.tscn" type="PackedScene" id=14]
 [ext_resource path="res://src/levels/boost/BoostArea.tscn" type="PackedScene" id=16]
@@ -10,6 +12,11 @@
 
 [node name="LevelChill917" type="Node2D"]
 texture_repeat = 2
+
+[node name="UserInterface" parent="." instance=ExtResource( 93 )]
+
+[node name="BoucleInfinie" type="Node2D" parent="."]
+script = ExtResource( 92 )
 
 [node name="ParallaxBackground" type="ParallaxBackground" parent="."]
 script = ExtResource( 91 )

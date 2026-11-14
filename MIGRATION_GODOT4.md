@@ -290,3 +290,26 @@ Demande de l'équipe : plus de coupure nette du fond, une boucle infinie qui sui
 - **Réglages** (inspecteur du nœud `ParallaxBackground` de chaque niveau) : `infinite_horizontal`, `extend_vertically`, `follow_time`, `anchor_offset`, `extension_rows`, en plus des anciens.
 - **Vérifié** sur Spaghetti, Nice Slope et le tuto, en courant tout le niveau : composition cohérente partout, aucun vide (couleur de fond de la fenêtre) détecté à l'écran.
 - **Note** : l'ordre d'affichage des plans dépend de leur `z_index` dans les scènes (glacier -126 au fond, nuages -123, montagnes -120 devant), pas de leur ordre dans l'arbre.
+
+## 18. Corrections après les tests de la 1.8 (14/11, version 1.9)
+
+- **Menu pause absent dans Chill 917** : le niveau n'avait pas l'interface (`UserInterface.tscn`). Elle est ajoutée ; Échap, la manette et le bouton pause tactile fonctionnent.
+- **Niveaux Chill vraiment infinis** (`src/levels/ChillLoop.gd`, nœud « BoucleInfinie » dans 704 et 917) :
+  - au bout du terrain, Pinpouin tombait dans le vide ; la réapparition le relançait au même endroit, avec son élan, et il retombait en boucle ;
+  - maintenant, le terrain (sols + boosts) est recopié bout à bout, la fin de chaque copie raccordée au début de la suivante. Deux copies sont toujours prêtes devant le pingouin, et celles laissées derrière sont supprimées ;
+  - la limite de « chute infinie » suit le terrain qui descend ;
+  - testé : passage du raccord sans choc ni mort, sur 704 et 917.
+- **Pinpouin qui s'enfonce dans le sol (Chill 704)** :
+  - les sols générés n'ont qu'un contour de collision (correction du bug vitesse → 0), donc un intérieur creux ;
+  - un sol fait ~40 px d'épaisseur et le pingouin 20 px de haut. Dans 704, il apparaissait 20 px sous la surface et glissait sur le bord intérieur, dans la glace ;
+  - `Player._unstick_from_ground()` le remonte maintenant sur la surface s'il se retrouve à l'intérieur d'un sol. Sur 5 niveaux testés, le cas ne se produit qu'au départ de 704 ;
+  - au passage, la bordure texturée des sols retournés (pistes du haut de 704) dépassait de ~60 px au-dessus de la vraie surface : corrigé dans `sol.gd`.
+- **Écran d'accueil sur mobile** :
+  - les 5 images de l'écran (carrés de 256 px superposés) n'étaient pas agrandies de la même façon : le titre « couvrait » l'écran, le bouton « tenait » dans l'écran. Sur un téléphone, le bouton tombait sur le titre ;
+  - `MainScreen.gd` les place maintenant toutes au même endroit, à la même taille, pour que pingouin, titre et bouton tiennent toujours dans l'écran ;
+  - vérifié en 1024 × 720, 1280 × 720, 2400 × 1080 (téléphone 20/9) et 2048 × 1536 (tablette).
+- **Fond « veines grises qui bougent à peine »** (régression de la 1.8) :
+  - les prolongements des images étiraient une ligne de pixels : cela faisait de longues traînées. Ce sont maintenant des aplats unis de la couleur du bord ;
+  - **échelle uniforme** : les images étaient agrandies ×10 en largeur et ×5 en hauteur, ce qui écrasait le pixel-art en traînées horizontales. Elles sont maintenant agrandies ×5 dans les deux sens : vrais sommets de montagnes, falaises du glacier lisibles ;
+  - **vitesses de défilement par profondeur** : glacier au fond 0,2, nuages 0,35, montagnes devant 0,5, au lieu de 0,7 à 0,9 où les fonds défilaient presque aussi vite que la piste. L'effet vertical est un peu renforcé ;
+  - réglages `readable_parallax`, `parallax_speeds` et `readable_vertical_strength` sur le `ParallaxBackground` de chaque niveau. `readable_parallax = false` remet l'ancienne échelle.

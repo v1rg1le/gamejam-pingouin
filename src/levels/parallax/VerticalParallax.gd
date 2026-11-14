@@ -78,6 +78,21 @@ extends ParallaxBackground
 @export var infinite_horizontal: bool = true
 ## [FOND 1.8] Prolonge les images vers le haut / le bas (plus de bord net).
 @export var extend_vertically: bool = true
+## [FOND 1.9] Parallaxe « lisible » (retour de l'équipe sur la 1.8 : fond
+## dégradé, « veines grises qui bougent à peine ») :
+##  - les images sont agrandies de façon UNIFORME (×5 en largeur comme en
+##    hauteur, au lieu de ×10 en largeur et ×5 en hauteur, qui étirait le
+##    pixel-art en longues traînées horizontales) ;
+##  - les vitesses de défilement suivent la profondeur réelle des plans : le
+##    plus au fond (glacier) défile lentement, le plus en avant (montagnes)
+##    plus vite. Avant, elles étaient de 0,7 à 0,9 : les fonds défilaient
+##    presque aussi vite que la piste, sans effet de profondeur.
+@export var readable_parallax: bool = true
+## Vitesses de défilement, du plan le plus au fond au plus en avant.
+@export var parallax_speeds: Array[float] = [0.2, 0.35, 0.5]
+## Force de l'effet vertical en mode lisible (remplace vertical_strength).
+@export_range(0.0, 1.0) var readable_vertical_strength: float = 0.3
+
 ## [FOND 1.8] Décalage (px écran) de toute la composition : > 0 la descend.
 @export var anchor_offset: float = 0.0
 ## [FOND 1.8] Longueur des prolongements, en pixels de l'image d'origine
@@ -96,6 +111,8 @@ var _top_layer = null        # plan dont le haut est le plus haut (ciel)
 
 func _ready() -> void:
 	scroll_ignore_camera_zoom = ignore_zoom
+	if readable_parallax:
+		_apply_readable_parallax()   # [FOND 1.9] avant toute mesure
 	for child in get_children():
 		if child is ParallaxLayer:
 			_base_offsets[child] = child.motion_offset.y
@@ -126,6 +143,29 @@ func _ready() -> void:
 			_bottom_layer = layer
 		if _top_layer == null or _orig_y[layer] + r.position.y < _orig_y[_top_layer] + _bounds[_top_layer].position.y:
 			_top_layer = layer
+
+
+# [FOND 1.9] Échelle uniforme + vitesses de défilement selon la profondeur.
+# L'ordre de profondeur est celui des z_index des images (glacier -126 au fond,
+# nuages -123, montagnes -120 devant), pas l'ordre dans l'arbre.
+func _apply_readable_parallax() -> void:
+	var layers := []
+	for child in get_children():
+		if child is ParallaxLayer:
+			var spr = null
+			for c in child.get_children():
+				if c is Sprite2D:
+					spr = c
+					break
+			layers.append([spr.z_index if spr != null else 0, child, spr])
+	layers.sort_custom(func(a, b): return a[0] < b[0])
+	for i in layers.size():
+		var layer: ParallaxLayer = layers[i][1]
+		var spr = layers[i][2]
+		layer.motion_scale.x = parallax_speeds[mini(i, parallax_speeds.size() - 1)]
+		if spr != null and absf(spr.scale.x) != absf(spr.scale.y):
+			spr.scale.x = signf(spr.scale.x) * absf(spr.scale.y)
+	vertical_strength = readable_vertical_strength
 
 
 # [FOND 1.8] Prolonge les images de fond. L'ordre d'affichage des plans est
@@ -211,16 +251,12 @@ func _add_extension(spr: Sprite2D, reg: Rect2, row: int, edge_y: float, downward
 	ext.texture = spr.texture
 	ext.centered = false
 	ext.region_enabled = true
-	if downward:
-		# la dernière ligne étirée : les falaises du glacier continuent vers le bas
-		ext.region_rect = Rect2(reg.position.x, row, reg.size.x, 1)
-		ext.scale = Vector2(1, extension_rows)
-	else:
-		# vers le haut : un seul pixel de la couleur dominante de la ligne
-		# (une ligne étirée ferait des rayures verticales dans le ciel)
-		var x := _dominant_pixel_x(img, row)
-		ext.region_rect = Rect2(x, row, 1, 1)
-		ext.scale = Vector2(reg.size.x, extension_rows)
+	# [FOND 1.9] un seul pixel de la couleur dominante de la ligne, étiré : un
+	# aplat uni. (En 1.8, la ligne entière était étirée vers le bas : ça
+	# faisait les longues « veines grises » verticales signalées par l'équipe.)
+	var x := _dominant_pixel_x(img, row)
+	ext.region_rect = Rect2(x, row, 1, 1)
+	ext.scale = Vector2(reg.size.x, extension_rows)
 	ext.position = Vector2(rect.position.x, edge_y - (0.0 if downward else extension_rows))
 	ext.texture_repeat = CanvasItem.TEXTURE_REPEAT_ENABLED
 	ext.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST

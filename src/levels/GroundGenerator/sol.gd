@@ -100,6 +100,14 @@ func _ready() -> void:
 	$CollisionPolygon2D.polygon = curve
 	$Polygon2D.polygon = curve
 	$Line2D.points = curve
+	# [SOL 1.9] Sols retournés (scale = (-1, -1), ex. les pistes du haut de
+	# Chill 704) : la bordure texturée est décalée de +28 px « vers l'intérieur »
+	# du sol dans sol.tscn. Une fois le sol retourné, ce décalage partait vers le
+	# HAUT, hors du sol : la bordure dépassait de ~60 px au-dessus de la vraie
+	# surface et le pingouin semblait s'enfoncer dans la glace. On inverse donc
+	# le décalage pour qu'il reste toujours à l'intérieur du sol.
+	if scale.y < 0.0 and $Line2D.position.y > 0.0:
+		$Line2D.position.y = -$Line2D.position.y
 	
 	end_x = curve[curve.size()-1].x
 	end_y = coeff_pente*(map_width-UNIT_SIZE) + map_height*_noise(map_width-UNIT_SIZE)  # [RELIEF 3.4]

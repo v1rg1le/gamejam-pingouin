@@ -1,6 +1,7 @@
-[gd_scene load_steps=8 format=2]
+[gd_scene load_steps=9 format=2]
 
 [ext_resource path="res://src/levels/parallax/VerticalParallax.gd" type="Script" id=91]
+[ext_resource path="res://src/levels/ChillLoop.gd" type="Script" id=92]
 [ext_resource path="res://src/levels/GroundGenerator/sol.tscn" type="PackedScene" id=1]
 [ext_resource path="res://src/levels/parts/StaticBody2DFish.tscn" type="PackedScene" id=2]
 [ext_resource path="res://src/ui/UserInterface.tscn" type="PackedScene" id=3]
@@ -11,6 +12,9 @@
 
 [node name="LevelChill704" type="Node2D"]
 texture_repeat = 2
+
+[node name="BoucleInfinie" type="Node2D" parent="."]
+script = ExtResource( 92 )
 
 [node name="UserInterface" parent="." instance=ExtResource( 3 )]
 

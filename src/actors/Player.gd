@@ -194,6 +194,7 @@ func _physics_process(delta: float) -> void:
 	velocity = _velocity
 	move_and_slide()
 	_velocity = _apply_godot3_slide(velocity_before)
+	_unstick_from_ground()   # [SOL 1.9]
 
 	# [FIX VITESSE -> 0] diagnostic console si la vitesse s'effondre quand même
 	if debug_speed_drop:
@@ -201,6 +202,40 @@ func _physics_process(delta: float) -> void:
 
 	# [MORT / RESPAWN]
 	_update_fall_and_safe_position(delta)
+
+
+# =============================================================================
+#  [SOL 1.9] « Pinpouin s'enfonce dans le sol » (retour de l'équipe, Chill 704)
+#  Depuis la correction du bug vitesse -> 0, les sols générés n'ont plus qu'un
+#  CONTOUR de collision (segments) : leur intérieur est creux. Or un sol de
+#  sol.gd n'a que ~40 px d'épaisseur, et le pingouin seulement 20 px de haut
+#  (capsule couchée). S'il se retrouve à l'intérieur (cas de Chill 704 : il
+#  apparaissait 20 px sous la surface), il glissait sur le bord INFÉRIEUR, à
+#  l'intérieur de la glace, sans jamais remonter. En Godot 3 (sol plein), le
+#  moteur le repoussait dehors.
+#  Ici, à chaque image : si le pingouin touche un sol généré ET que son centre
+#  est à l'intérieur du polygone de ce sol, on le remonte sur la surface (rayon
+#  vertical vers le bas depuis au-dessus) et on annule sa vitesse vers le bas.
+# =============================================================================
+func _unstick_from_ground() -> void:
+	for i in get_slide_collision_count():
+		var col = get_slide_collision(i).get_collider()
+		if col == null or not col.has_method("generate_curve"):
+			continue
+		var cp: CollisionPolygon2D = col.get_node_or_null("CollisionPolygon2D")
+		if cp == null or not Geometry2D.is_point_in_polygon(cp.to_local(global_position), cp.polygon):
+			continue
+		# remonte sur la première surface de CE sol au-dessus du pingouin
+		var space := get_world_2d().direct_space_state
+		var q := PhysicsRayQueryParameters2D.create(global_position + Vector2(0, -400), global_position, collision_mask, [get_rid()])
+		var hit := space.intersect_ray(q)
+		if hit.is_empty() or hit.collider != col:
+			return
+		global_position.y = hit.position.y - 11.0   # 10 px = demi-hauteur de la capsule
+		if _velocity.y > 0.0:
+			_velocity.y = 0.0
+		print("[SOL] pingouin ressorti de l'intérieur d'un sol à ", global_position.round())
+		return
 
 
 # =============================================================================
