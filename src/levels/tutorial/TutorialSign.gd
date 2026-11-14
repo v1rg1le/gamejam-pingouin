@@ -1,4 +1,5 @@
 extends Node2D
+class_name TutorialSign
 # =============================================================================
 #  TutorialSign.gd — [MAP BATEAU] panneau d'explication posé dans le niveau
 # -----------------------------------------------------------------------------
@@ -14,6 +15,13 @@ extends Node2D
 #  - Rappel à l'écran : le pingouin passe vite devant les panneaux ; quand il
 #    franchit un panneau, son texte est aussi affiché en haut de l'écran
 #    pendant hud_duration secondes (bandeau partagé, un seul à la fois).
+#  [AIDE 1.7] Pause lecture : si l'option "Pause pour lire les panneaux du
+#  tuto" est active (Settings.tutorial_pause, activée par défaut), le jeu se
+#  met EN PAUSE quand le pingouin arrive au panneau, et le texte s'affiche en
+#  grand au centre (ReadingPause.gd) jusqu'à ce que le joueur appuie sur une
+#  touche. Pas de pause en multijoueur.
+#  resolve_text() est maintenant "static" : RaceManager s'en sert pour la
+#  carte d'aide de début de niveau (mêmes noms de touches que les panneaux).
 # =============================================================================
 
 ## Texte du panneau, avec des marqueurs {action} (jump, hook, pump...).
@@ -64,6 +72,17 @@ func _process(_delta: float) -> void:
 	var player = get_tree().get_first_node_in_group("player")
 	if player != null and player.global_position.x >= global_position.x - 250.0:
 		_shown_on_hud = true
+		# [AIDE 1.7] pause pour lire (désactivable dans les Options) : le texte
+		# s'affiche en grand au centre, jeu en pause ; le rappel en haut de
+		# l'écran n'apparaît qu'à la reprise (sinon le texte serait en double).
+		var reading = ReadingPause.open(get_tree(), "", _label.text) if Settings.tutorial_pause else null
+		if reading != null:
+			modulate.a = 0.0   # le panneau du décor disparaît tout de suite (le jeu est en pause)
+			if _hud_label != null and is_instance_valid(_hud_label):
+				_hud_label.get_parent().modulate.a = 0.0   # l'ancien rappel aussi
+			var txt := _label.text
+			reading.closed.connect(func(): _show_on_hud(txt))
+			return
 		_show_on_hud(_label.text)
 		# le texte est maintenant en haut de l'écran : on efface le panneau du
 		# décor pour ne pas afficher deux fois la même chose
@@ -107,19 +126,26 @@ func _show_on_hud(text: String) -> void:
 
 
 func _refresh() -> void:
-	var txt := sign_text
-	var regex := RegEx.new()
-	regex.compile("\\{([a-z_]+)\\}")
-	for m in regex.search_all(sign_text):
-		txt = txt.replace(m.get_string(), _binding_text(m.get_string(1)))
+	var txt := resolve_text(sign_text)
 	_label.text = txt
 	# le bandeau suit aussi un changement de périphérique
 	if _shown_on_hud and _hud_label != null and is_instance_valid(_hud_label) and _hud_label.get_parent().modulate.a > 0.0:
 		_hud_label.text = txt
 
 
+## [AIDE 1.7] Remplace les marqueurs {action} par les vraies touches (static :
+## utilisable sans panneau, ex. TutorialSign.resolve_text("Sauter : {jump}")).
+static func resolve_text(text: String) -> String:
+	var txt := text
+	var regex := RegEx.new()
+	regex.compile("\\{([a-z_]+)\\}")
+	for m in regex.search_all(text):
+		txt = txt.replace(m.get_string(), _binding_text(m.get_string(1)))
+	return txt
+
+
 # Texte de la (ou des) touche(s) associée(s) à une action, selon le mode actif.
-func _binding_text(action: String) -> String:
+static func _binding_text(action: String) -> String:
 	if Settings.controls == Settings.TOUCH:
 		return TOUCH_NAMES.get(action, action)
 	if not InputMap.has_action(action):
@@ -144,7 +170,7 @@ func _binding_text(action: String) -> String:
 	return " ou ".join(PackedStringArray(names.slice(0, 2)))
 
 
-func _key_name(code: int) -> String:
+static func _key_name(code: int) -> String:
 	match code:
 		KEY_UP: return "Flèche haut"
 		KEY_DOWN: return "Flèche bas"

@@ -1,0 +1,201 @@
+[gd_scene load_steps=5 format=3]
+
+[ext_resource type="Script" path="res://src/screens/OptionsScreen.gd" id="1"]
+[ext_resource type="Theme" path="res://src/theme_main.tres" id="2"]
+[ext_resource type="FontFile" path="res://assets/font/Roboto-Medium.ttf" id="3"]
+
+[sub_resource type="StyleBoxFlat" id="panel_style"]
+content_margin_left = 22.0
+content_margin_top = 16.0
+content_margin_right = 22.0
+content_margin_bottom = 20.0
+bg_color = Color(0.105882, 0.152941, 0.270588, 0.72)
+border_width_left = 3
+border_width_top = 3
+border_width_right = 3
+border_width_bottom = 3
+border_color = Color(1, 1, 1, 0.55)
+corner_radius_top_left = 14
+corner_radius_top_right = 14
+corner_radius_bottom_right = 14
+corner_radius_bottom_left = 14
+
+[node name="OptionsScreen" type="Control"]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+theme = ExtResource("2")
+script = ExtResource("1")
+
+[node name="Background" type="ColorRect" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+color = Color(0.4, 0.486275, 0.584314, 1)
+
+[node name="Margin" type="MarginContainer" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_constants/margin_left = 40
+theme_override_constants/margin_top = 18
+theme_override_constants/margin_right = 40
+theme_override_constants/margin_bottom = 18
+
+[node name="VBox" type="VBoxContainer" parent="Margin"]
+layout_mode = 2
+theme_override_constants/separation = 12
+
+[node name="Header" type="Label" parent="Margin/VBox"]
+custom_minimum_size = Vector2(0, 60)
+layout_mode = 2
+theme_override_colors/font_color = Color(1, 1, 1, 1)
+theme_override_colors/font_outline_color = Color(0.168627, 0.227451, 0.34902, 1)
+theme_override_constants/outline_size = 12
+theme_override_fonts/font = ExtResource("3")
+theme_override_font_sizes/font_size = 40
+text = "OPTIONS"
+horizontal_alignment = 1
+vertical_alignment = 1
+
+[node name="Columns" type="HBoxContainer" parent="Margin/VBox"]
+layout_mode = 2
+size_flags_vertical = 3
+theme_override_constants/separation = 30
+alignment = 1
+
+[node name="GamePanel" type="PanelContainer" parent="Margin/VBox/Columns"]
+custom_minimum_size = Vector2(430, 0)
+layout_mode = 2
+theme_override_styles/panel = SubResource("panel_style")
+
+[node name="VBox" type="VBoxContainer" parent="Margin/VBox/Columns/GamePanel"]
+layout_mode = 2
+theme_override_constants/separation = 12
+
+[node name="GameHeader" type="Label" parent="Margin/VBox/Columns/GamePanel/VBox"]
+layout_mode = 2
+theme_override_colors/font_color = Color(1, 0.94, 0.4, 1)
+theme_override_fonts/font = ExtResource("3")
+theme_override_font_sizes/font_size = 26
+text = "AIDE ET SON"
+horizontal_alignment = 1
+
+[node name="HelpOnStart" type="CheckButton" parent="Margin/VBox/Columns/GamePanel/VBox"]
+theme_override_colors/font_color = Color(0.168627, 0.227451, 0.34902, 1)
+theme_override_colors/font_pressed_color = Color(0.168627, 0.227451, 0.34902, 1)
+theme_override_colors/font_focus_color = Color(0.168627, 0.227451, 0.34902, 1)
+theme_override_colors/font_hover_color = Color(1, 1, 1, 1)
+theme_override_colors/font_hover_pressed_color = Color(1, 1, 1, 1)
+custom_minimum_size = Vector2(0, 46)
+layout_mode = 2
+text = "Aide en début de niveau"
+
+[node name="TutorialPause" type="CheckButton" parent="Margin/VBox/Columns/GamePanel/VBox"]
+theme_override_colors/font_color = Color(0.168627, 0.227451, 0.34902, 1)
+theme_override_colors/font_pressed_color = Color(0.168627, 0.227451, 0.34902, 1)
+theme_override_colors/font_focus_color = Color(0.168627, 0.227451, 0.34902, 1)
+theme_override_colors/font_hover_color = Color(1, 1, 1, 1)
+theme_override_colors/font_hover_pressed_color = Color(1, 1, 1, 1)
+custom_minimum_size = Vector2(0, 46)
+layout_mode = 2
+text = "Pause pour lire les panneaux du tuto"
+
+[node name="GhostEnabled" type="CheckButton" parent="Margin/VBox/Columns/GamePanel/VBox"]
+theme_override_colors/font_color = Color(0.168627, 0.227451, 0.34902, 1)
+theme_override_colors/font_pressed_color = Color(0.168627, 0.227451, 0.34902, 1)
+theme_override_colors/font_focus_color = Color(0.168627, 0.227451, 0.34902, 1)
+theme_override_colors/font_hover_color = Color(1, 1, 1, 1)
+theme_override_colors/font_hover_pressed_color = Color(1, 1, 1, 1)
+custom_minimum_size = Vector2(0, 46)
+layout_mode = 2
+text = "Courir contre mon fantôme"
+
+[node name="MusicTitle" type="Label" parent="Margin/VBox/Columns/GamePanel/VBox"]
+layout_mode = 2
+theme_override_colors/font_color = Color(1, 1, 1, 1)
+theme_override_font_sizes/font_size = 18
+text = "Volume de la musique"
+
+[node name="MusicSlider" type="HSlider" parent="Margin/VBox/Columns/GamePanel/VBox"]
+custom_minimum_size = Vector2(0, 40)
+layout_mode = 2
+max_value = 1.0
+step = 0.05
+
+[node name="GhostPanel" type="PanelContainer" parent="Margin/VBox/Columns"]
+custom_minimum_size = Vector2(430, 0)
+layout_mode = 2
+theme_override_styles/panel = SubResource("panel_style")
+
+[node name="VBox" type="VBoxContainer" parent="Margin/VBox/Columns/GhostPanel"]
+layout_mode = 2
+theme_override_constants/separation = 9
+
+[node name="GhostHeader" type="Label" parent="Margin/VBox/Columns/GhostPanel/VBox"]
+layout_mode = 2
+theme_override_colors/font_color = Color(1, 0.94, 0.4, 1)
+theme_override_fonts/font = ExtResource("3")
+theme_override_font_sizes/font_size = 26
+text = "ÉCHANGER DES FANTÔMES"
+horizontal_alignment = 1
+
+[node name="GhostHelp" type="Label" parent="Margin/VBox/Columns/GhostPanel/VBox"]
+layout_mode = 2
+theme_override_colors/font_color = Color(1, 1, 1, 0.85)
+theme_override_font_sizes/font_size = 15
+autowrap_mode = 3
+text = "Copie ton record, envoie-le par message à un ami : il le colle dans son jeu et court contre toi."
+
+[node name="GhostList" type="VBoxContainer" parent="Margin/VBox/Columns/GhostPanel/VBox"]
+layout_mode = 2
+theme_override_constants/separation = 6
+
+[node name="PasteButton" type="Button" parent="Margin/VBox/Columns/GhostPanel/VBox"]
+custom_minimum_size = Vector2(0, 46)
+layout_mode = 2
+text = "Coller le fantôme d'un ami"
+
+[node name="FolderButton" type="Button" parent="Margin/VBox/Columns/GhostPanel/VBox"]
+custom_minimum_size = Vector2(0, 40)
+layout_mode = 2
+text = "Dossier des fantômes"
+
+[node name="StatusLabel" type="Label" parent="Margin/VBox"]
+layout_mode = 2
+theme_override_colors/font_color = Color(1, 0.94, 0.4, 1)
+theme_override_colors/font_outline_color = Color(0.168627, 0.227451, 0.34902, 1)
+theme_override_constants/outline_size = 6
+theme_override_font_sizes/font_size = 18
+horizontal_alignment = 1
+autowrap_mode = 3
+
+[node name="Bottom" type="HBoxContainer" parent="Margin/VBox"]
+layout_mode = 2
+theme_override_constants/separation = 18
+
+[node name="BackButton" type="Button" parent="Margin/VBox/Bottom"]
+custom_minimum_size = Vector2(150, 44)
+layout_mode = 2
+text = "◀  Retour"
+
+[node name="Spacer" type="Control" parent="Margin/VBox/Bottom"]
+layout_mode = 2
+size_flags_horizontal = 3
+mouse_filter = 2
+
+[node name="VersionLabel" type="Label" parent="Margin/VBox/Bottom"]
+layout_mode = 2
+size_flags_vertical = 8
+theme_override_colors/font_color = Color(1, 1, 1, 0.6)
+theme_override_font_sizes/font_size = 15

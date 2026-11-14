@@ -45,7 +45,8 @@ func music_onoff():
 		AudioServer.set_bus_volume_db(AudioServer.get_bus_index("Music"), -80)
 		music_on = false
 	else:
-		AudioServer.set_bus_volume_db(AudioServer.get_bus_index("Music"), -6)
+		# [OPTIONS 1.7] on revient au volume choisi dans les Options (au lieu de -6 dB fixe)
+		Settings.apply_music_volume()
 		music_on = true
 
 func is_playing_main_theme():

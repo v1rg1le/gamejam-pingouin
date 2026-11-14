@@ -115,6 +115,10 @@ func _on_node_added(node: Node) -> void:
 	if node.get_parent() != get_tree().root:
 		return
 	var path := node.scene_file_path
+	# [AIDE 1.7] un nœud ajouté à la racine par code (ex. la pause lecture,
+	# ReadingPause) n'est pas une nouvelle scène : on l'ignore
+	if path == "":
+		return
 	if path.begins_with("res://src/levels/"):
 		_prepare_level(path)
 	else:
@@ -190,6 +194,7 @@ func _physics_process(delta: float) -> void:
 
 func _start_race() -> void:
 	has_finish = not get_tree().get_nodes_in_group("finish_gate").is_empty()
+	_show_start_help()   # [AIDE 1.7] carte d'aide (jeu en pause) si l'option est active
 	if not has_finish and not NetSession.in_race:
 		return  # niveau "Chill" : pas de chrono
 	racing = true
@@ -279,6 +284,18 @@ func finish_race() -> bool:
 		_hud.show_result(race_time, is_record, previous_best, last_score)
 	emit_signal("race_finished", race_time, is_record, previous_best)
 	return is_record
+
+
+# --- [AIDE 1.7] Carte d'aide en début de niveau ------------------------------------
+const START_HELP_TEXT = "Avancer : {move_right}    Reculer : {move_left}\nSauter : {jump}    PUMP : {pump}  (dans les descentes)\nGrappin : {hook}    Tirer : {pull}\nFigure : {trix}    Rotation : {rotate_trigo} / {rotate_horaire}"
+const START_HELP_SCORE = "\n\nSCORE = points de vitesse + points de figures\nFigures et vrilles comptent si tu atterris bien !"
+
+func _show_start_help() -> void:
+	# Pas dans le tuto (ses panneaux expliquent déjà tout), pas en multijoueur
+	if not Settings.help_on_start or NetSession.in_race or level_path.ends_with("LevelBateau.tscn"):
+		return
+	var text := TutorialSign.resolve_text(START_HELP_TEXT + (START_HELP_SCORE if has_finish else ""))
+	ReadingPause.open(get_tree(), "C'EST PARTI !" if has_finish else "GLISSE TRANQUILLE", text)
 
 
 # --- 4. [MULTI] Course en réseau ----------------------------------------------
@@ -379,6 +396,71 @@ func load_best_ghost(path: String):
 		if data != null and data.level == path and (best == null or data.time < best.time):
 			best = data
 	return best
+
+
+# --- [PARTAGE 1.7] Fantômes en texte (copier-coller, PC ET téléphone) ---------------
+# Sur téléphone, on ne peut pas ouvrir le dossier des fantômes. On transforme
+# donc un fantôme en TEXTE (compressé puis encodé en base64) : on le copie, on
+# l'envoie par message (WhatsApp, SMS, Discord…) et l'ami le colle dans son
+# jeu (écran Options). ~10 à 25 Ko de texte pour une course de 30 s.
+const GHOST_TEXT_PREFIX = "PINPOUIN-FANTOME:1:"
+
+## Texte à partager pour le meilleur fantôme d'un niveau ("" s'il n'y en a pas).
+func export_ghost_text(path: String) -> String:
+	var data = load_best_ghost(path)
+	if data == null:
+		return ""
+	var raw := var_to_bytes(data)
+	var packed := raw.compress(FileAccess.COMPRESSION_ZSTD)
+	# ":FIN" marque la fin : on peut coller le fantôme au milieu d'un message
+	return GHOST_TEXT_PREFIX + str(raw.size()) + ":" + Marshalls.raw_to_base64(packed) + ":FIN"
+
+
+## Importe un fantôme collé. Renvoie un message à afficher au joueur.
+func import_ghost_text(text: String) -> String:
+	text = text.strip_edges()
+	var start := text.find(GHOST_TEXT_PREFIX)
+	if start < 0:
+		return "Ce texte n'est pas un fantôme Pinpouin."
+	var rest := text.substr(start + GHOST_TEXT_PREFIX.length())
+	var end := rest.find(":FIN")
+	if end < 0:
+		return "Fantôme incomplet : le texte a été coupé (il doit finir par :FIN)."
+	rest = rest.substr(0, end)
+	# certaines messageries ajoutent des retours à la ligne : on les enlève
+	for ws in [" ", "\n", "\r", "\t"]:
+		rest = rest.replace(ws, "")
+	var sep := rest.find(":")
+	if sep < 0:
+		return "Fantôme incomplet (texte coupé ?)."
+	var size := int(rest.substr(0, sep))
+	var b64 := rest.substr(sep + 1)
+	var b64_check := RegEx.create_from_string("^[A-Za-z0-9+/]+=*$")
+	if b64_check.search(b64) == null:
+		return "Fantôme abîmé (caractères en trop ?)."
+	var packed := Marshalls.base64_to_raw(b64)
+	if size <= 0 or size > 8_000_000 or packed.is_empty():
+		return "Fantôme incomplet (texte coupé ?)."
+	var raw := packed.decompress(size, FileAccess.COMPRESSION_ZSTD)
+	if raw.size() != size:
+		return "Fantôme abîmé (texte coupé ?)."
+	# bytes_to_var refuse les objets par défaut : un texte piégé ne peut pas
+	# exécuter de code, au pire il donne une donnée invalide (vérifiée ci-dessous)
+	var data = bytes_to_var(raw)
+	if typeof(data) != TYPE_DICTIONARY or not data.has("samples") or not data.has("level") \
+			or int(data.get("version", 0)) != GHOST_FORMAT_VERSION or typeof(data.samples) != TYPE_PACKED_FLOAT32_ARRAY:
+		return "Fantôme d'une autre version du jeu, ou abîmé."
+	var level: String = str(data.level)
+	if not level.begins_with("res://src/levels/") or not ResourceLoader.exists(level):
+		return "Ce fantôme est pour un niveau inconnu."
+	var file := GHOST_DIR.path_join("%s_ami_%d.ghost" % [level.get_file().get_basename(), Time.get_unix_time_from_system()])
+	var f := FileAccess.open_compressed(file, FileAccess.WRITE, FileAccess.COMPRESSION_ZSTD)
+	if f == null:
+		return "Impossible d'enregistrer le fantôme."
+	f.store_var(data)
+	f.close()
+	_best_cache.erase(level)
+	return "Fantôme ajouté : %s en %s.\nS'il est plus rapide que le tien, c'est lui qui courra contre toi." % [level.get_file().get_basename().replace("Level", ""), format_time(float(data.time))]
 
 
 ## Meilleur temps connu pour un niveau (en secondes), -1 s'il n'y en a pas.

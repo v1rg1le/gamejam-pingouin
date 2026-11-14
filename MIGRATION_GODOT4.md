@@ -243,3 +243,30 @@ Choix de l'équipe : pas de serveur à payer ou à gérer. C'est l'hôte qui ouv
   - les **invités** peuvent être n'importe où, 4G comprise.
   - Si personne ne peut héberger, il faudra un relais (noray ou GD-Sync, notés dans la feuille de route).
 - **Si l'UPnP ne marche pas** mais que l'hôte ouvre lui-même le port UDP 47230 dans sa box, les invités peuvent taper directement son adresse IP publique à la place du code.
+
+## 16. Aide, options, tremplins et partage de fantômes (14/11, version 1.7)
+
+- **Pause pour lire dans le tuto** (demande de l'équipe) :
+  - quand le pingouin arrive à un panneau, le jeu se met en pause et le texte s'affiche en grand au centre ;
+  - on repart avec n'importe quelle touche, bouton de manette, clic ou toucher. Les appuis des 0,4 premières secondes sont ignorés pour éviter de fermer par erreur, et les touches maintenues (avancer) restent maintenues ;
+  - le chrono s'arrête pendant la lecture : lire ne coûte pas de temps ;
+  - à la reprise, le texte reste 6 s en haut de l'écran, comme avant ;
+  - c'est `src/ui/ReadingPause.gd`. Il n'y a jamais de pause en multijoueur.
+- **Aide en début de niveau** :
+  - au départ de chaque niveau, une carte « C'EST PARTI ! » rappelle les commandes, avec les vraies touches du périphérique utilisé, et le principe du score, jeu en pause ;
+  - pas sur le tuto, dont les panneaux expliquent déjà tout ;
+  - désactivable : « Aide en début de niveau » dans les Options.
+- **Écran Options** (bouton « Options » dans la sélection des niveaux, `src/screens/OptionsScreen.tscn`) :
+  - aide en début de niveau, pause de lecture du tuto, course contre son fantôme, volume de la musique ;
+  - tout est mémorisé dans `user://pinpouin.cfg` (`Settings.set_option`).
+- **Échanger des fantômes, téléphone compris** :
+  - « Copier » transforme son record en texte (environ 19 Ko pour 25 s) à coller dans un message (WhatsApp, SMS, Discord…) ;
+  - l'ami copie le message en entier et clique sur « Coller le fantôme d'un ami » : le fantôme est vérifié puis ajouté (`RaceManager.export_ghost_text` / `import_ghost_text`) ;
+  - un texte coupé, abîmé ou d'une autre version est refusé avec un message clair ;
+  - le texte collé ne peut contenir que des données, jamais de code.
+- **Tuto : 2 tremplins d'entraînement** après le plafond du grappin :
+  - ils donnent environ 2 s de vol, assez pour une vrille ou un combo ; le sol continue dessous, donc aucun risque ;
+  - un panneau les annonce et explique les combos ;
+  - en simulation : une vrille validée à chaque saut (+150).
+- **Bouton manette pour la figure** : croix directionnelle haut. Les panneaux et l'aide l'affichent tout seuls.
+- **Corrigé au passage** : un nœud ajouté par code à la racine de l'arbre était pris pour un changement de scène par `RaceManager`, ce qui coupait le chrono. Seules les vraies scènes comptent maintenant.

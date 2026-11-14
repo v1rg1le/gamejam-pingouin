@@ -22,6 +22,14 @@ extends Node
 #     grappin via le clic émulé. Ils sont remis dès qu'on revient au PC.
 #   - `touch_aim` : direction de visée du grappin fournie par les contrôles
 #     tactiles (Vector2.ZERO = visée par défaut, vers l'avant et le haut).
+#
+#  [OPTIONS 1.7] Réglages du joueur (écran Options), mémorisés dans
+#  user://pinpouin.cfg (section "options") :
+#   - help_on_start  : carte d'aide (commandes + score) en début de niveau,
+#                      jeu en pause jusqu'à ce qu'on appuie sur une touche ;
+#   - tutorial_pause : dans le tuto, le jeu se met en pause à chaque panneau
+#                      pour laisser le temps de lire ;
+#   - music_volume   : volume de la musique (0 à 1, bus audio "Music").
 # =============================================================================
 
 signal controls_changed(new_scheme)
@@ -38,6 +46,13 @@ var touch_aim: Vector2 = Vector2.ZERO
 const MOUSE_ACTIONS_DISABLED_IN_TOUCH = ["hook", "pull"]
 var _removed_mouse_events := {}   # action -> Array[InputEvent] retirés
 
+# [OPTIONS 1.7]
+signal options_changed
+const OPTIONS_PATH = "user://pinpouin.cfg"   # même fichier que les records / fantômes
+var help_on_start: bool = true
+var tutorial_pause: bool = true
+var music_volume: float = 0.8
+
 
 func _ready() -> void:
 	# [MOBILE] détection de la plateforme au lancement
@@ -50,6 +65,36 @@ func _ready() -> void:
 		# sur les côtés) ; on voit simplement un peu plus de niveau en largeur.
 		# Sur PC on garde le réglage du projet (keep_width).
 		get_tree().root.content_scale_aspect = Window.CONTENT_SCALE_ASPECT_EXPAND
+	_load_options()   # [OPTIONS 1.7]
+
+
+# --- [OPTIONS 1.7] -------------------------------------------------------------
+func _load_options() -> void:
+	var cfg := ConfigFile.new()
+	if cfg.load(OPTIONS_PATH) == OK:
+		help_on_start = cfg.get_value("options", "help_on_start", true)
+		tutorial_pause = cfg.get_value("options", "tutorial_pause", true)
+		music_volume = clampf(float(cfg.get_value("options", "music_volume", 0.8)), 0.0, 1.0)
+	apply_music_volume()
+
+
+## Change un réglage, l'applique et le mémorise.
+func set_option(key: String, value) -> void:
+	set(key, value)
+	if key == "music_volume":
+		apply_music_volume()
+	var cfg := ConfigFile.new()
+	cfg.load(OPTIONS_PATH)   # on garde les autres sections (records, fantôme, nom…)
+	cfg.set_value("options", key, value)
+	cfg.save(OPTIONS_PATH)
+	emit_signal("options_changed")
+
+
+## Volume de la musique : bus "Music" (cf. default_bus_layout.tres).
+func apply_music_volume() -> void:
+	var bus := AudioServer.get_bus_index("Music")
+	if bus >= 0:
+		AudioServer.set_bus_volume_db(bus, linear_to_db(maxf(music_volume, 0.0001)))
 
 
 # [FINITION 13/11] Touche "retour" d'Android : par défaut Godot FERME l'appli

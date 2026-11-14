@@ -12,6 +12,10 @@ extends Node2D
 #   - des panneaux (TutorialSign) qui expliquent chaque commande avec les
 #     touches du périphérique utilisé (clavier, manette ou tactile) ;
 #   - une ligne d'arrivée posée sur la piste, bien visible.
+#   - [TUTO 1.7] deux TREMPLINS d'entraînement après le plafond : les sauts de
+#     la piste sont trop courts (< 1 s) pour une vrille ou un combo ; un
+#     tremplin donne ~1,2 à 1,6 s de vol. Le sol continue dessous : aucun
+#     risque de chute.
 #  Tous les réglages sont exportés pour pouvoir ajuster le niveau dans l'éditeur.
 # =============================================================================
 
@@ -36,6 +40,10 @@ var sign_script = preload("res://src/levels/tutorial/TutorialSign.gd")
 @export var roof_start: int = UNIT_SIZE * 160
 @export var roof_length: int = UNIT_SIZE * 120
 @export var roof_height: int = 450  # visible à l'écran, mais hors de portée d'un simple saut
+## [TUTO 1.7] Tremplins : positions (début de la rampe), hauteur et angle du bord.
+@export var ramp_positions: Array[int] = [18900, 20900]
+@export var ramp_height: float = 170.0
+@export var ramp_lip_angle_deg: float = 35.0
 ## Position de la ligne d'arrivée (px depuis le début de la piste).
 @export var finish_x: int = UNIT_SIZE * 380
 
@@ -51,7 +59,7 @@ var signs = [
 	[10800, "GRAPPIN : vise le plafond et maintiens {hook}\npour t'accrocher. Lâche pour te décrocher."],
 	[13800, "Accroché : maintiens aussi {pull}\npour te hisser vers le plafond."],
 	[17600, "FIGURE en l'air : {trix}  =  +100 pts\nTermine-la avant de toucher le sol,\nsinon tu es sonné et tu perds les points du saut !"],
-	[20000, "COMBO : plusieurs figures ou vrilles dans le MÊME grand saut\n= points multipliés (×2, ×3… jusqu'à ×5).\nIls ne comptent que si tu atterris bien !"],
+	[18300, "TREMPLINS droit devant ! Prends de l'élan avec {pump}\net saute au bord ({jump}) pour un GRAND SAUT.\nCOMBO : plusieurs figures ou vrilles dans le même saut\n= points multipliés (×2, ×3… jusqu'à ×5), si tu atterris bien !"],
 	[22300, "Dernière ligne droite :\nfonce sous l'arche !"],
 ]
 
@@ -76,6 +84,10 @@ func _ready() -> void:
 		sign_node.sign_text = s[1]
 		sign_node.position = Vector2(s[0], surface_y(s[0]) - 170)
 		add_child(sign_node)
+
+	# 4 bis. [TUTO 1.7] Tremplins d'entraînement (vrilles, combos)
+	for rx in ramp_positions:
+		_add_ramp(rx)
 
 	# 5. Ligne d'arrivée posée sur la piste
 	var gate = finish_gate_res.instantiate()
@@ -110,6 +122,46 @@ func _add_sol(pos: Vector2, width: int, height: int, thickness: int, seed_text: 
 	sol.position = pos
 	add_child(sol)
 	return sol
+
+
+# [TUTO 1.7] Tremplin posé sur la piste : profil en arc de parabole (pente 0 au
+# pied, ramp_lip_angle_deg au bord) pour ne pas « casser » la vitesse à
+# l'entrée ; bord vertical à l'arrivée. Même rendu que les sols (corps bleu
+# glace + bordure texturée tile_ice_up_long1, aucun nouvel asset). Collision
+# en SEGMENTS (contour seul), comme les sols générés : pas de collision
+# « fantôme » sur les arêtes internes (cf. bug vitesse -> 0).
+func _add_ramp(x0: float) -> void:
+	var slope := tan(deg_to_rad(ramp_lip_angle_deg))
+	var w := 2.0 * ramp_height / slope   # longueur pour atteindre l'angle voulu au bord
+	var top := PackedVector2Array()
+	var steps := 16
+	for i in steps + 1:
+		var t := float(i) / steps
+		var x := x0 + t * w
+		top.append(Vector2(x, surface_y(x) - ramp_height * t * t))
+	# contour fermé : dessus de la rampe, bord vertical, puis retour sous la piste
+	var poly := PackedVector2Array(top)
+	poly.append(Vector2(x0 + w, surface_y(x0 + w) + 60))
+	poly.append(Vector2(x0, surface_y(x0) + 60))
+	var body := StaticBody2D.new()
+	body.collision_layer = 2   # calque "ground" : le grappin s'y accroche aussi
+	var col := CollisionPolygon2D.new()
+	col.build_mode = CollisionPolygon2D.BUILD_SEGMENTS
+	col.polygon = poly
+	body.add_child(col)
+	var fill := Polygon2D.new()
+	fill.color = Color(0.694118, 0.862745, 0.956863, 1)   # même bleu que sol.tscn
+	fill.polygon = poly
+	body.add_child(fill)
+	var edge := Line2D.new()
+	edge.texture = preload("res://sprites/levels/tiles/tile_ice_up_long1.png")
+	edge.texture_mode = Line2D.LINE_TEXTURE_TILE
+	edge.texture_repeat = CanvasItem.TEXTURE_REPEAT_ENABLED
+	edge.width = 64.0
+	edge.position = Vector2(0, 28)   # comme la bordure de sol.tscn
+	edge.points = top
+	body.add_child(edge)
+	add_child(body)
 
 
 func _add_wall(pos: Vector2, size: Vector2) -> void:
