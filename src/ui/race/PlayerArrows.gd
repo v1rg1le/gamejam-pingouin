@@ -20,6 +20,8 @@ extends Control
 # =============================================================================
 
 ## N'afficher que le joueur juste devant et celui juste derrière.
+## [FLÈCHES 1.16] forcé par le réglage « Flèches des joueurs » des Options
+## (Settings.player_arrows) : Toutes / Devant et derrière / Aucune.
 @export var only_neighbours: bool = false
 ## Distance (px) entre la flèche et le bord de l'écran.
 @export var edge_margin: float = 34.0
@@ -46,6 +48,13 @@ func _process(_delta: float) -> void:
 
 
 func _draw() -> void:
+	# [FLÈCHES 1.16] réglage des Options. En mode « devant et derrière », le
+	# 1er de la course n'a personne devant : il ne voit QUE la flèche de celui
+	# qui le suit ; le dernier ne voit que celle de celui qui le précède (géré
+	# par ahead_id / behind_id = -1 ci-dessous).
+	if Settings.player_arrows == Settings.ARROWS_NONE:
+		return
+	var neighbours_only: bool = only_neighbours or Settings.player_arrows == Settings.ARROWS_NEIGHBOURS
 	var me = RaceManager._player
 	if me == null or not is_instance_valid(me):
 		return
@@ -84,7 +93,7 @@ func _draw() -> void:
 		if not is_instance_valid(node) or not node.visible:
 			continue
 		var neighbour: bool = id == ahead_id or id == behind_id
-		if only_neighbours and not neighbour:
+		if neighbours_only and not neighbour:
 			continue
 		# position du pingouin à l'écran (coordonnées de la fenêtre), puis dans
 		# les unités de ce nœud

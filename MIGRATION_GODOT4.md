@@ -428,3 +428,9 @@ Demande de l'équipe : plus de coupure nette du fond, une boucle infinie qui sui
 - Les deux images sont des **montages des sprites existants** (logo, Pinpouin, igloo, glaçons, grappin, fond) ; seuls la corde enroulée et le sol de glace sont dessinés en pixels. Aucun asset d'origine n'est modifié.
 - L'image d'intro fait 432 × 180 pixels (plus large que le 16/9) et s'affiche en « remplir l'écran » : sur un téléphone allongé (20/9), ni bandes ni logo coupé.
 - La scène principale reste `MainScreen.tscn`.
+
+## 25. Choix des flèches en multi (14/11, version 1.16)
+
+- **Options → « Flèches des joueurs (multi) »** : *Toutes* (défaut), *Devant et derrière seulement* ou *Aucune*. Mémorisé dans `user://pinpouin.cfg` (`Settings.player_arrows`).
+- **Mode « devant et derrière »** : seul le joueur le plus proche devant et le plus proche derrière ont une flèche. Cas des bords : le 1er de la course n'a personne devant, il ne voit que la flèche de son poursuivant ; le dernier ne voit que celle du joueur qui le précède. Vérifié en captures (milieu de peloton, en tête, mode Aucune).
+- Décisions de l'équipe : disposition actuelle des boutons tactiles validée par Léo ; point « banquise » clos.

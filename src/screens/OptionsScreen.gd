@@ -59,6 +59,7 @@ func _ready() -> void:
 	music_slider.value = Settings.music_volume
 	music_slider.value_changed.connect(func(v): Settings.set_option("music_volume", v))
 	_add_ui_size_slider()   # [RESPONSIVE 1.14]
+	_add_arrows_choice()    # [FLÈCHES 1.16]
 	# --- Fantômes
 	_fill_ghost_list()
 	paste_button.pressed.connect(_on_paste)
@@ -154,3 +155,21 @@ func _add_ui_size_slider() -> void:
 	slider.focus_exited.connect(func():
 		if absf(slider.value - Settings.ui_size) > 0.001:
 			Settings.set_option("ui_size", slider.value))
+
+
+# [FLÈCHES 1.16] Choix « Flèches des joueurs (multi) » : Toutes / Devant et
+# derrière / Aucune. Liste déroulante créée par code sous la taille de
+# l'interface, appliquée et mémorisée tout de suite (Settings.player_arrows).
+func _add_arrows_choice() -> void:
+	var box: VBoxContainer = music_slider.get_parent()
+	var title: Label = box.get_node("MusicTitle").duplicate()
+	title.text = "Flèches des joueurs (multi)"
+	var choice := OptionButton.new()
+	choice.custom_minimum_size = Vector2(0, 40)
+	choice.add_item("Toutes", Settings.ARROWS_ALL)
+	choice.add_item("Devant et derrière seulement", Settings.ARROWS_NEIGHBOURS)
+	choice.add_item("Aucune", Settings.ARROWS_NONE)
+	choice.select(choice.get_item_index(Settings.player_arrows))
+	choice.item_selected.connect(func(index): Settings.set_option("player_arrows", choice.get_item_id(index)))
+	box.add_child(title)
+	box.add_child(choice)
