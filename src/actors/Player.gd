@@ -94,6 +94,43 @@ var direction: Vector2
 @export var running_speed = 500
 
 # =============================================================================
+#  [PHYSIQUE 1.10] Réglages de vitesse (retours de test de la 1.8)
+#  Constats mesurés en simulation (pingouin lancé à 1500 px/s sur le tuto) :
+#   - maintenir « avancer » FREINAIT : la vitesse était ramenée vers
+#     running_speed (500), au sol comme en l'air : 1500 -> 700 px/s en 3 s ;
+#   - le pump PLAFONNAIT la vitesse à max_speed × 1,4 = 980 px/s : atterrir
+#     vite puis pumper faisait perdre d'un coup 500 px/s ;
+#   - au-delà de 980, le pump ne donnait plus aucun boost.
+#  => il valait mieux rester en l'air sans rien toucher. Nouvelles règles :
+#   - « avancer » accélère jusqu'à running_speed, mais ne freine JAMAIS un
+#     pingouin plus rapide qui va dans le même sens ;
+#   - le pump accélère le long de la pente (beaucoup en descente, un peu en
+#     montée) jusqu'à pump_max_speed, et ne fait jamais perdre de vitesse ;
+#     chaque nouvel appui donne une petite impulsion (sensation de boost) ;
+#   - au-dessus de ground_max_speed (sol) / air_max_speed (air), un léger
+#     frottement ramène doucement la vitesse : plus de plafond brutal.
+#  Toutes ces valeurs se règlent en jeu (panneau F2, cf. PhysicsTuner.gd).
+# =============================================================================
+## Accélération du pump (px/s²), sur terrain plat.
+@export var pump_accel: float = 450.0
+## Bonus en descente : × la composante de la gravité le long de la pente.
+@export var pump_slope_bonus: float = 1.5
+## Efficacité du pump en montée (0 = aucun effet, 1 = comme sur le plat).
+@export var pump_uphill_factor: float = 0.35
+## Impulsion (px/s) à chaque nouvel appui sur pump.
+@export var pump_impulse: float = 90.0
+## Le pump n'accélère plus au-delà de cette vitesse (sans jamais freiner).
+@export var pump_max_speed: float = 1450.0
+## Au sol, au-delà de cette vitesse, frottement doux.
+@export var ground_max_speed: float = 1450.0
+## En l'air (hors grappin), au-delà de cette vitesse, frottement doux.
+@export var air_max_speed: float = 1750.0
+## Part de l'excédent de vitesse perdue par seconde au-dessus des plafonds.
+@export var over_speed_drag: float = 1.5
+## Traînée visuelle derrière le pingouin à partir de cette vitesse (0 = jamais).
+@export var speed_trail_from: float = 1200.0
+
+# =============================================================================
 #  [FIX VITESSE -> 0] Réglages du filtre anti-collision-fantôme
 # =============================================================================
 ## Active le filtre qui ignore les normales "fantômes" des arêtes internes.
@@ -141,6 +178,8 @@ var _respawning: bool = false
 
 
 func _ready():
+	# [PHYSIQUE 1.10] réglages de glisse choisis dans le panneau F2 (s'il y en a)
+	PhysicsTuner.apply_to(self)
 	# [MIGRATION GODOT 4.7] Reproduire la physique de Godot 3 :
 	# - MOTION_MODE_FLOATING = pas de notion de "sol" moteur (le jeu utilise ses
 	#   propres raycasts), exactement comme move_and_slide(v) sans up_direction en G3.
@@ -181,6 +220,7 @@ func _physics_process(delta: float) -> void:
 
 	_velocity.y += gravity * delta
 
+	_apply_soft_speed_caps(delta)   # [PHYSIQUE 1.10]
 	_velocity.x = clamp(_velocity.x, -SUPER_MAX_SPEED.x, SUPER_MAX_SPEED.x)
 	_velocity.y = clamp(_velocity.y, -SUPER_MAX_SPEED.y, SUPER_MAX_SPEED.y)
 	# HookinInAirState clamp la _velocity avec player.MAX_SPEED_HOOKED
@@ -195,6 +235,7 @@ func _physics_process(delta: float) -> void:
 	move_and_slide()
 	_velocity = _apply_godot3_slide(velocity_before)
 	_unstick_from_ground()   # [SOL 1.9]
+	_update_speed_trail()    # [PHYSIQUE 1.10]
 
 	# [FIX VITESSE -> 0] diagnostic console si la vitesse s'effondre quand même
 	if debug_speed_drop:
@@ -202,6 +243,50 @@ func _physics_process(delta: float) -> void:
 
 	# [MORT / RESPAWN]
 	_update_fall_and_safe_position(delta)
+
+
+# [PHYSIQUE 1.10] Plafonds « doux » : au-dessus de la vitesse max (sol ou air),
+# on retire chaque seconde over_speed_drag de l'EXCÉDENT. Pas de coupure nette.
+# Le grappin garde son propre réglage (MAX_SPEED_HOOKED, dans HookingInAirState).
+func _apply_soft_speed_caps(delta: float) -> void:
+	if _states == null or _states.current == null or _states.current.sub_state_name == "HOOKING":
+		return
+	var cap := ground_max_speed if is_on_ground else air_max_speed
+	var speed := _velocity.length()
+	if speed > cap:
+		var new_speed := cap + (speed - cap) * (1.0 - clampf(over_speed_drag * delta, 0.0, 1.0))
+		_velocity = _velocity * (new_speed / speed)
+
+
+# [PHYSIQUE 1.10] Traînée blanche derrière le pingouin à grande vitesse :
+# donne la sensation de vitesse (surtout après un pump). Dessinée en code.
+var _trail: Line2D = null
+
+func _update_speed_trail() -> void:
+	if _trail == null:
+		_trail = Line2D.new()
+		_trail.top_level = true
+		_trail.z_index = -1
+		_trail.width = 14.0
+		_trail.joint_mode = Line2D.LINE_JOINT_ROUND
+		var g := Gradient.new()
+		g.set_color(0, Color(1, 1, 1, 0.0))
+		g.set_color(1, Color(1, 1, 1, 0.55))
+		_trail.gradient = g
+		var curve := Curve.new()
+		curve.add_point(Vector2(0, 0.1))
+		curve.add_point(Vector2(1, 1))
+		_trail.width_curve = curve
+		add_child(_trail)
+	var speed := _velocity.length()
+	if speed_trail_from <= 0.0 or speed < speed_trail_from:
+		if _trail.get_point_count() > 0:
+			_trail.remove_point(0)   # la traînée s'efface en douceur
+		return
+	_trail.add_point(global_position + Vector2(0, 4))
+	var max_points := int(clampf((speed - speed_trail_from) / 60.0, 3.0, 14.0))
+	while _trail.get_point_count() > max_points:
+		_trail.remove_point(0)
 
 
 # =============================================================================

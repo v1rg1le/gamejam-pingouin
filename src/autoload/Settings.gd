@@ -52,6 +52,7 @@ const OPTIONS_PATH = "user://pinpouin.cfg"   # même fichier que les records / f
 var help_on_start: bool = true
 var tutorial_pause: bool = true
 var music_volume: float = 0.8
+var physics_panel: bool = false   # [PHYSIQUE 1.10] bouton ⚙ du panneau de réglage en tactile
 
 
 func _ready() -> void:
@@ -75,6 +76,7 @@ func _load_options() -> void:
 		help_on_start = cfg.get_value("options", "help_on_start", true)
 		tutorial_pause = cfg.get_value("options", "tutorial_pause", true)
 		music_volume = clampf(float(cfg.get_value("options", "music_volume", 0.8)), 0.0, 1.0)
+		physics_panel = cfg.get_value("options", "physics_panel", false)
 	apply_music_volume()
 
 

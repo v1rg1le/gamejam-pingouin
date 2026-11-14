@@ -9,7 +9,9 @@ extends Control
 #   - Pause pour lire les panneaux du tuto (Settings.tutorial_pause) ;
 #   - Courir contre mon fantôme (RaceManager.ghost_enabled, même réglage que
 #     l'interrupteur du menu des niveaux) ;
-#   - Volume de la musique (Settings.music_volume).
+#   - Volume de la musique (Settings.music_volume) ;
+#   - [PHYSIQUE 1.10] Panneau de réglage physique : bouton ⚙ en jeu en mode
+#     tactile (au clavier, F2 ouvre le panneau dans tous les cas).
 #  Colonne droite "ÉCHANGER DES FANTÔMES" (marche aussi sur téléphone) :
 #   - une ligne par course où l'on a un record : bouton "Copier" -> le
 #     fantôme est mis dans le presse-papiers sous forme de texte, à envoyer
@@ -32,6 +34,7 @@ const RACES = [
 @onready var help_on_start: CheckButton = $Margin/VBox/Columns/GamePanel/VBox/HelpOnStart
 @onready var tutorial_pause: CheckButton = $Margin/VBox/Columns/GamePanel/VBox/TutorialPause
 @onready var ghost_enabled: CheckButton = $Margin/VBox/Columns/GamePanel/VBox/GhostEnabled
+@onready var physics_panel: CheckButton = $Margin/VBox/Columns/GamePanel/VBox/PhysicsPanel   # [PHYSIQUE 1.10]
 @onready var music_slider: HSlider = $Margin/VBox/Columns/GamePanel/VBox/MusicSlider
 @onready var ghost_list: VBoxContainer = $Margin/VBox/Columns/GhostPanel/VBox/GhostList
 @onready var paste_button: Button = $Margin/VBox/Columns/GhostPanel/VBox/PasteButton
@@ -50,6 +53,9 @@ func _ready() -> void:
 	tutorial_pause.toggled.connect(func(v): Settings.set_option("tutorial_pause", v))
 	ghost_enabled.button_pressed = RaceManager.ghost_enabled
 	ghost_enabled.toggled.connect(RaceManager.set_ghost_enabled)
+	# [PHYSIQUE 1.10] affiche le bouton ⚙ en jeu (tactile) ; F2 marche toujours au clavier
+	physics_panel.button_pressed = Settings.physics_panel
+	physics_panel.toggled.connect(func(v): Settings.set_option("physics_panel", v))
 	music_slider.value = Settings.music_volume
 	music_slider.value_changed.connect(func(v): Settings.set_option("music_volume", v))
 	# --- Fantômes

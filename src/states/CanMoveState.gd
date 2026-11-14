@@ -12,7 +12,16 @@ func _handle_input(player: CharacterBody2D, delta: float) -> void:
 	if input_speed != 0:
 #		player.direction.x = input_speed
 #		player.running_speed * input_speed
-		player._velocity.x = lerp(player._velocity.x, player.running_speed * input_speed, 0.01)  #_get_h_weight(player, input_speed))
+		# [PHYSIQUE 1.10] avant : la vitesse était TOUJOURS ramenée vers
+		# running_speed × input, donc maintenir « avancer » à 1500 px/s freinait
+		# jusqu'à 500 px/s (mesuré : 1500 -> 700 en 3 s). Maintenant :
+		#  - si on va déjà plus vite que running_speed DANS LE SENS demandé, on
+		#    ne touche à rien (avancer ne freine jamais) ;
+		#  - sinon (plus lent, ou sens opposé = freinage) : comme avant.
+		var target: float = player.running_speed * input_speed
+		var same_direction: bool = signf(player._velocity.x) == signf(input_speed)
+		if not (same_direction and absf(player._velocity.x) >= absf(target)):
+			player._velocity.x = lerp(player._velocity.x, target, 0.01)  #_get_h_weight(player, input_speed))
 
 #	var input_speed = Input.get_action_strength("move_right") - Input.get_action_strength("move_left")
 #	player.direction.x = input_speed

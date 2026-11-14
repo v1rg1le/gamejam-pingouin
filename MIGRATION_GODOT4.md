@@ -313,3 +313,39 @@ Demande de l'équipe : plus de coupure nette du fond, une boucle infinie qui sui
   - **échelle uniforme** : les images étaient agrandies ×10 en largeur et ×5 en hauteur, ce qui écrasait le pixel-art en traînées horizontales. Elles sont maintenant agrandies ×5 dans les deux sens : vrais sommets de montagnes, falaises du glacier lisibles ;
   - **vitesses de défilement par profondeur** : glacier au fond 0,2, nuages 0,35, montagnes devant 0,5, au lieu de 0,7 à 0,9 où les fonds défilaient presque aussi vite que la piste. L'effet vertical est un peu renforcé ;
   - réglages `readable_parallax`, `parallax_speeds` et `readable_vertical_strength` sur le `ParallaxBackground` de chaque niveau. `readable_parallax = false` remet l'ancienne échelle.
+
+## 19. Physique : pump, vitesses max, panneau de réglage (14/11, version 1.10)
+
+**Ce que les mesures ont montré** (pingouin lancé à 1500 px/s sur le tuto, 3 s) :
+
+| Touches | 1.9 | 1.10 |
+|---|---|---|
+| rien | 1500 → 1600 | identique |
+| avancer | 1500 → **700** | 1500 → 1600 |
+| pump (après un atterrissage rapide) | 1500 → **980 d'un coup** | ~1480, entretenu |
+| pump depuis 600 | plafonne à 980 | 1450 en 1,5 s |
+
+- **« Avancer » freinait.** `CanMoveState` ramenait toujours la vitesse vers `running_speed` (500), au sol comme en l'air. Maintenant, avancer accélère jusqu'à 500 mais ne freine jamais un pingouin plus rapide dans le même sens. Appuyer dans le sens opposé freine toujours.
+- **Le pump plafonnait à 980 px/s** (`max_speed × 1,4`, dans `PumpState`), d'où la perte de vitesse après un saut. Le nouveau pump (l'ancien calcul est gardé en commentaire) :
+  - il accélère le long du mouvement : `pump_accel` (450 px/s²) sur le plat, plus `gravité × pente × pump_slope_bonus` en descente, et seulement `pump_uphill_factor` (35 %) en montée ;
+  - il s'arrête d'accélérer à `pump_max_speed` (1450), mais ne fait jamais perdre de vitesse ;
+  - chaque nouvel appui donne une impulsion de `pump_impulse` (+90 px/s) : c'est la sensation de boost.
+- **Vitesses max « douces »** : au-delà de `ground_max_speed` (1450) au sol et de `air_max_speed` (1750) en l'air, on perd chaque seconde une part de l'excédent (`over_speed_drag`). Il n'y a plus de coupure brutale. Le grappin garde son propre plafond (`MAX_SPEED_HOOKED`).
+- **Sensation de vitesse** : une traînée blanche apparaît derrière le pingouin au-delà de 1200 px/s (`speed_trail_from`, 0 = jamais).
+- **Résultat sur un parcours type** (avancer + pump 1 s sur 2 + sauts, 20 s) :
+
+| Niveau | Vitesse moyenne 1.9 | Vitesse moyenne 1.10 |
+|---|---|---|
+| Tuto | 759 px/s | 1233 px/s |
+| Nice Slope | 925 px/s | 1504 px/s |
+| Spaghetti | 821 px/s | 1227 px/s |
+
+  Les réglages ont été choisis parmi 4 jeux d'essai, pour aller environ 1,6 fois plus vite sans dépasser ~2000 px/s. Graphique : `vitesse_avant_apres_1.10.png`.
+- **Panneau de réglage** (`src/autoload/PhysicsTuner.gd`) :
+  - **F2** en jeu ; en tactile, le bouton ⚙ s'active dans Options (« Panneau de réglage physique ») ;
+  - 12 curseurs appliqués tout de suite et mémorisés (`user://pinpouin.cfg`, section « physique ») ;
+  - courbe de vitesse des 10 dernières secondes ;
+  - « Par défaut » remet les valeurs d'origine, « Copier » met tous les réglages en texte, à partager avec l'équipe pour les mettre par défaut dans le jeu.
+- **Non-régression** : 7 niveaux × 2 modes de jeu automatiques, aucune chute brutale de vitesse et aucune mort inattendue. Le multijoueur est OK.
+- ⚠️ **Équilibrage à vérifier** : sur « Hook, you fool ! », la simulation qui ne fait qu'avancer passe maintenant les trous sans grappin (avant : 3 morts au premier trou). Si ce niveau doit obliger à utiliser le grappin, il faudra élargir les trous ou baisser les vitesses max.
+- Les records et fantômes faits avec l'ancienne physique restent rejouables, mais ils seront faciles à battre.
