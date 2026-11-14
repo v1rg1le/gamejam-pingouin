@@ -97,6 +97,7 @@ func _label(size: int, color: Color) -> Label:
 
 
 func _ready() -> void:
+	UiScaler.apply(self)   # [RESPONSIVE 1.14] texte plus gros sur téléphone
 	_was_paused = get_tree().paused
 	get_tree().paused = true
 	_opened_at = Time.get_ticks_msec() / 1000.0
@@ -112,10 +113,10 @@ func _set_text(title: String, text: String) -> void:
 
 
 func _input(event: InputEvent) -> void:
-	var is_press: bool = (event is InputEventKey and event.pressed and not event.echo) \
-		or (event is InputEventJoypadButton and event.pressed) \
-		or (event is InputEventMouseButton and event.pressed) \
-		or (event is InputEventScreenTouch and event.pressed)
+	# [ENTRÉES 1.14] tri commun (Settings.is_continue_press) : les touches de
+	# volume ne ferment plus la pause de lecture, et sur téléphone seul un
+	# toucher compte. On laisse passer les autres événements (ex. volume).
+	var is_press: bool = Settings.is_continue_press(event)
 	if not is_press:
 		return
 	# on « mange » l'appui : il ne doit ni ouvrir le menu pause (Échap), ni

@@ -407,3 +407,15 @@ Demande de l'équipe : plus de coupure nette du fond, une boucle infinie qui sui
 
   Des figures qui ne coûtent presque pas de temps rapportent gros ; des figures qui font perdre 28 s font perdre la course.
 - **Bug trouvé au passage (Nice Slope)** : sans grappin, le pingouin pouvait rester collé en haut du mur vertical du half-pipe final, à 274 px de l'arche posée sur le deck. `FinishGate.trigger_offset_x` (nouveau, 0 par défaut) permet de décaler la ligne de détection : `HalfPipe` la descend au milieu de la courbe de droite et allonge la bande vers le bas. L'arche ne bouge pas.
+
+## 23. Écran titre, multijoueur et interface responsive (14/11, version 1.14)
+
+- **Écran titre « appuie pour jouer »** : sur téléphone, les boutons de volume le faisaient passer (Android les envoie comme des touches). Nouveau tri commun `Settings.is_continue_press()` : sur téléphone, seul un toucher (ou un bouton de manette) compte ; sur PC, toute touche sauf volume / média. Utilisé par l'écran titre, l'écran de fin et la pause de lecture du tuto. Au passage, une touche de volume en pleine course faisait passer en mode « clavier » et **cachait les boutons tactiles** : corrigé (`Settings.is_system_key`).
+- **Attente avant le décompte** (multi) : Pinpouin était figé en l'air au départ, la corde du grappin plantée dans le sol (le grappin ne se cache que dans son propre `_process`, qui ne tournait pas). Il est maintenant posé sur la piste, incliné comme la pente, grappin caché (`RaceManager._freeze_player_for_start`), et un panneau « En attente des autres joueurs — 1 / 2 prêts — on attend Léo » s'affiche. L'hôte renvoie la liste à chaque joueur prêt.
+- **Flèches vers les autres joueurs** (`src/ui/race/PlayerArrows.gd`) : chaque joueur hors écran a une flèche à sa couleur sur le bord gauche ou droit, à sa hauteur, avec son nom et l'écart en mètres (+ devant, − derrière). Le joueur juste devant et celui juste derrière ont une flèche plus grosse. `only_neighbours = true` n'affiche que ces deux-là. En tactile, les flèches restent dans la moitié haute (au-dessus des boutons).
+- **Interface responsive** :
+  - plus de bandes noires sur PC : l'écran s'étend dans les deux sens (`aspect = expand`, comme sur téléphone) ;
+  - taille de l'interface automatique selon la hauteur physique de l'écran (`Settings.auto_ui_scale` : ×1 sur PC et tablette, jusqu'à ×1,4 sur un petit téléphone), multipliée par le nouveau réglage **« Taille de l'interface »** des Options (80 à 150 %) ;
+  - menus : agrandis autant que possible sans que rien ne déborde (calcul sur la taille minimale du contenu, revérifié 2 fois par seconde : le salon grandit avec les joueurs). Le grand titre de la sélection des niveaux se réduit si l'écran est peu haut ;
+  - en jeu : HUD, menu pause et pause de lecture agrandis via `src/ui/UiScaler.gd` (les ancrages restent justes). La vue du jeu elle-même ne change pas.
+- **Vérifié** en captures : PC 1024 × 720, fenêtre large 1900 × 700, fenêtre haute 900 × 1100, téléphone 2400 × 1080 (menus, salon, attente, flèches, pause). Course réseau à 2 et course solo inchangées.

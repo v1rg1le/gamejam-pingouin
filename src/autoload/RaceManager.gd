@@ -246,8 +246,10 @@ func _start_race() -> void:
 	if NetSession.in_race:
 		racing = false
 		_waiting_go = true
+		_freeze_player_for_start()   # [ATTENTE 1.14] posé au sol, grappin rangé
 		_player.process_mode = Node.PROCESS_MODE_DISABLED
 		_hud.set_best(-2.0)   # -2 = "en attente des autres joueurs"
+		_hud.show_waiting(true)   # [ATTENTE 1.14] grand panneau « En attente… »
 		_hud.set_ranking(NetSession.ranking())
 		NetSession.notify_loaded()
 
@@ -319,6 +321,39 @@ func _show_start_help() -> void:
 # --- 4. [MULTI] Course en réseau ----------------------------------------------
 func _on_countdown_started(seconds: float) -> void:
 	_countdown = seconds
+	# [ATTENTE 1.14] tout le monde est prêt : on retire le panneau d'attente
+	if _hud != null and is_instance_valid(_hud):
+		_hud.show_waiting(false)
+
+
+# [ATTENTE 1.14] Retour de test : pendant l'attente des autres joueurs, on
+# voyait Pinpouin figé EN L'AIR au point de départ, avec la corde du grappin
+# plantée dans le sol. Raisons :
+#  - le pingouin est figé dès sa 1re image (process_mode DISABLED), avant même
+#    d'être tombé sur la piste ;
+#  - le grappin (Chain.gd) ne se cache que dans son propre _process(), qui
+#    n'a jamais tourné : il restait visible, tendu vers le bas.
+# Correction : avant de le figer, on POSE le pingouin sur la piste juste en
+# dessous (un rayon vers le bas), incliné comme la pente, vitesse nulle, et
+# on cache le grappin. Tous les joueurs ayant le même terrain (même seed),
+# tout le monde part exactement du même endroit.
+func _freeze_player_for_start() -> void:
+	if _player == null or not is_instance_valid(_player):
+		return
+	if "chain" in _player and _player.chain != null:
+		_player.chain.visible = false
+	var space: PhysicsDirectSpaceState2D = _player.get_world_2d().direct_space_state
+	var from: Vector2 = _player.global_position
+	var query := PhysicsRayQueryParameters2D.create(from, from + Vector2(0, 4000), _player.collision_mask, [_player.get_rid()])
+	var hit: Dictionary = space.intersect_ray(query)
+	if hit.is_empty() or hit.normal.y > -0.5:
+		return   # pas de sol raisonnable dessous : on laisse tel quel
+	# le bas de la capsule (20 px de haut, centrée sur l'origine) touche le sol
+	_player.global_position = hit.position + hit.normal * 11.0
+	_player.rotation = hit.normal.angle() + PI / 2.0
+	_player.velocity = Vector2.ZERO
+	if "_velocity" in _player:
+		_player._velocity = Vector2.ZERO
 
 
 func _update_countdown(delta: float) -> void:

@@ -94,6 +94,13 @@ func _ready() -> void:
 	_ranking_label.offset_top = 84
 	_ranking_label.visible = false
 	add_child(_ranking_label)
+	# [FLÈCHES 1.14] flèches vers les autres joueurs hors écran (multi seulement)
+	if NetSession.in_race:
+		add_child(preload("res://src/ui/race/PlayerArrows.gd").new())
+	# [RESPONSIVE 1.14] tout le HUD est agrandi sur les petits écrans
+	# (téléphone) : voir UiScaler.gd. Les nœuds créés plus tard vont dans
+	# _ui_root, et les positions se calculent sur _ui_root.size.
+	_ui_root = UiScaler.apply(self)
 
 
 func _make_label(size: int, color: Color) -> Label:
@@ -108,6 +115,7 @@ func _make_label(size: int, color: Color) -> Label:
 
 func _process(_delta: float) -> void:
 	_time_label.text = RaceManager.format_time(RaceManager.race_time)
+	_update_waiting(_delta)   # [ATTENTE 1.14]
 	# [MULTI] le "GO !" reste affiché 0,8 s puis disparaît
 	if _go_timer > 0.0:
 		_go_timer -= _delta
@@ -117,6 +125,59 @@ func _process(_delta: float) -> void:
 	if _popup_timer > 0.0:
 		_popup_timer -= _delta
 		_popup_label.modulate.a = clampf(_popup_timer / 0.4, 0.0, 1.0)
+
+
+# --- [ATTENTE 1.14] Panneau « En attente des autres joueurs » -----------------
+# Retour de test : avant le décompte, seule une petite ligne jaune sous le
+# chrono disait qu'on attendait. On affiche maintenant un panneau au centre
+# avec le nombre de joueurs prêts et le nom de ceux qu'on attend (liste mise
+# à jour par l'hôte à chaque joueur prêt, cf. NetSession._rpc_loaded).
+var _waiting_panel: PanelContainer = null
+var _ui_root: Control = null   # [RESPONSIVE 1.14] racine agrandie du HUD (UiScaler)
+var _waiting_label: Label = null
+var _waiting_dots := 0.0
+
+func show_waiting(on: bool) -> void:
+	if on and _waiting_panel == null:
+		_waiting_panel = PanelContainer.new()
+		var sb := StyleBoxFlat.new()
+		sb.bg_color = Color(0.05, 0.1, 0.2, 0.75)
+		sb.set_corner_radius_all(16)
+		sb.content_margin_left = 40; sb.content_margin_right = 40
+		sb.content_margin_top = 22; sb.content_margin_bottom = 22
+		_waiting_panel.add_theme_stylebox_override("panel", sb)
+		_waiting_panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		_waiting_label = _make_label(34, Color(1, 0.94, 0.4))
+		_waiting_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		_waiting_panel.add_child(_waiting_label)
+		_ui_root.add_child(_waiting_panel)   # [RESPONSIVE 1.14] dans la racine agrandie
+		_update_waiting(0.0)
+	elif not on and _waiting_panel != null:
+		_waiting_panel.queue_free()
+		_waiting_panel = null
+		_waiting_label = null
+
+
+func _update_waiting(delta: float) -> void:
+	if _waiting_panel == null:
+		return
+	_waiting_dots = fmod(_waiting_dots + delta * 2.0, 4.0)
+	var ready := 0
+	var missing := PackedStringArray()
+	for id in NetSession.players:
+		if NetSession.players[id].loaded:
+			ready += 1
+		else:
+			missing.append(NetSession.players[id].name)
+	var text := "En attente des autres joueurs" + ".".repeat(int(_waiting_dots))
+	text += "\n%d / %d prêts" % [ready, NetSession.players.size()]
+	if missing.size() > 0 and missing.size() <= 3:
+		text += "  —  on attend " + ", ".join(missing)
+	_waiting_label.text = text
+	# centré, un peu au-dessus du milieu (le pingouin est au centre)
+	var view: Vector2 = _ui_root.size   # [RESPONSIVE 1.14] taille en unités du HUD
+	_waiting_panel.reset_size()
+	_waiting_panel.position = Vector2((view.x - _waiting_panel.size.x) * 0.5, view.y * 0.22)
 
 
 func set_best(best: float) -> void:
@@ -217,5 +278,5 @@ func show_multi_result(time: float, rank: int, total: int, score := {}) -> void:
 
 
 func _center_result() -> void:
-	var vs: Vector2 = _result_panel.get_viewport_rect().size
+	var vs: Vector2 = _ui_root.size if _ui_root != null else _result_panel.get_viewport_rect().size   # [RESPONSIVE 1.14]
 	_result_panel.position = (vs - _result_panel.size) * 0.5 - Vector2(0, 80)

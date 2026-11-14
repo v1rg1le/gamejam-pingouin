@@ -15,6 +15,11 @@ var paused: = false: set = set_paused
 #  - "Choisir un niveau" devient "Quitter la course" : on quitte la partie
 #    réseau et on revient au salon multijoueur.
 func _ready() -> void:
+	# [RESPONSIVE 1.14] le calque « UserInterface » (parent du menu pause) est
+	# agrandi sur les petits écrans (voir UiScaler.gd). Différé : on ne
+	# déplace pas un nœud pendant son propre _ready().
+	if get_parent() is CanvasLayer:
+		UiScaler.apply.call_deferred(get_parent())
 	if not NetSession.in_race:
 		return
 	var box := pause_overlay.get_node("VBoxContainer")

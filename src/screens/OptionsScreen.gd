@@ -58,6 +58,7 @@ func _ready() -> void:
 	physics_panel.toggled.connect(func(v): Settings.set_option("physics_panel", v))
 	music_slider.value = Settings.music_volume
 	music_slider.value_changed.connect(func(v): Settings.set_option("music_volume", v))
+	_add_ui_size_slider()   # [RESPONSIVE 1.14]
 	# --- Fantômes
 	_fill_ghost_list()
 	paste_button.pressed.connect(_on_paste)
@@ -125,3 +126,31 @@ func _unhandled_input(_event: InputEvent) -> void:
 
 func _go_back() -> void:
 	get_tree().change_scene_to_file("res://src/screens/LevelSelectionScreen.tscn")
+
+
+# [RESPONSIVE 1.14] Réglage « Taille de l'interface » (80 % à 150 %).
+# L'interface est déjà agrandie automatiquement sur les petits écrans
+# (Settings.auto_ui_scale) ; ce curseur la multiplie, au goût de chacun.
+# Créé par code sous le curseur de musique (même style), pour ne pas
+# toucher à la scène. Appliqué au relâchement du curseur (sinon l'écran
+# changerait de taille sous le doigt pendant qu'on le fait glisser).
+func _add_ui_size_slider() -> void:
+	var box: VBoxContainer = music_slider.get_parent()
+	var title: Label = box.get_node("MusicTitle").duplicate()
+	var slider := HSlider.new()
+	slider.custom_minimum_size = music_slider.custom_minimum_size
+	slider.min_value = 0.8
+	slider.max_value = 1.5
+	slider.step = 0.05
+	slider.value = Settings.ui_size
+	box.add_child(title)
+	box.add_child(slider)
+	var refresh := func(v: float):
+		title.text = "Taille de l'interface : %d %%" % int(round(v * 100.0))
+	refresh.call(slider.value)
+	slider.value_changed.connect(refresh)
+	slider.drag_ended.connect(func(_changed): Settings.set_option("ui_size", slider.value))
+	# clavier / manette : pas de « drag », on applique quand on quitte le curseur
+	slider.focus_exited.connect(func():
+		if absf(slider.value - Settings.ui_size) > 0.001:
+			Settings.set_option("ui_size", slider.value))

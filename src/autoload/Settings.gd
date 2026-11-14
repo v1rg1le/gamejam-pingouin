@@ -53,6 +53,7 @@ var help_on_start: bool = true
 var tutorial_pause: bool = true
 var music_volume: float = 0.8
 var physics_panel: bool = false   # [PHYSIQUE 1.10] bouton ⚙ du panneau de réglage en tactile
+var ui_size: float = 1.0          # [RESPONSIVE 1.14] réglage « Taille de l'interface » (0,8 à 1,5)
 
 
 func _ready() -> void:
@@ -66,7 +67,17 @@ func _ready() -> void:
 		# sur les côtés) ; on voit simplement un peu plus de niveau en largeur.
 		# Sur PC on garde le réglage du projet (keep_width).
 		get_tree().root.content_scale_aspect = Window.CONTENT_SCALE_ASPECT_EXPAND
+	# [RESPONSIVE 1.14] … et maintenant sur PC aussi : une fenêtre plus large
+	# ou plus haute que 1024 × 720 montre simplement plus de jeu, au lieu
+	# d'ajouter des bandes noires. Les menus se recentrent tout seuls
+	# (ancrages), le HUD reste collé aux bords.
+	get_tree().root.content_scale_aspect = Window.CONTENT_SCALE_ASPECT_EXPAND
 	_load_options()   # [OPTIONS 1.7]
+	# [RESPONSIVE 1.14] _process doit tourner même en pause (changement de
+	# scène depuis le menu pause) ; une fenêtre redimensionnée recalcule
+	# l'échelle des menus.
+	process_mode = Node.PROCESS_MODE_ALWAYS
+	get_tree().root.size_changed.connect(func(): _last_scene_path = "?")
 
 
 # --- [OPTIONS 1.7] -------------------------------------------------------------
@@ -77,6 +88,7 @@ func _load_options() -> void:
 		tutorial_pause = cfg.get_value("options", "tutorial_pause", true)
 		music_volume = clampf(float(cfg.get_value("options", "music_volume", 0.8)), 0.0, 1.0)
 		physics_panel = cfg.get_value("options", "physics_panel", false)
+		ui_size = clampf(float(cfg.get_value("options", "ui_size", 1.0)), 0.8, 1.5)
 	apply_music_volume()
 
 
@@ -85,6 +97,8 @@ func set_option(key: String, value) -> void:
 	set(key, value)
 	if key == "music_volume":
 		apply_music_volume()
+	if key == "ui_size":   # [RESPONSIVE 1.14] appliqué tout de suite aux menus
+		_last_scene_path = ""
 	var cfg := ConfigFile.new()
 	cfg.load(OPTIONS_PATH)   # on garde les autres sections (records, fantôme, nom…)
 	cfg.set_value("options", key, value)
@@ -117,7 +131,125 @@ func _notification(what: int) -> void:
 			Input.parse_input_event(ev)
 
 
+# --- [RESPONSIVE 1.14] Taille de l'interface ---------------------------------
+# L'écran du jeu fait toujours au moins 1024 × 720 « unités », quelle que soit
+# la machine. Sur un PC, 720 unités font ~25 cm de haut ; sur un téléphone en
+# paysage, ~6 à 7 cm : tout le texte est 4 fois plus petit. On agrandit donc
+# l'interface selon la hauteur PHYSIQUE de l'écran (pouces = pixels ÷ dpi) :
+#   écran de 5 pouces de haut ou plus (tablette, PC) -> × 1
+#   téléphone (~2,7 pouces)                           -> × 1,4 (maximum)
+# multiplié par le réglage « Taille de l'interface » des Options.
+
+## Échelle automatique (1 sur PC, jusqu'à 1,4 sur un petit téléphone).
+func auto_ui_scale() -> float:
+	if not is_mobile_device:
+		return 1.0
+	var screen := DisplayServer.screen_get_size()
+	var dpi := float(DisplayServer.screen_get_dpi())
+	if dpi <= 0.0:
+		return 1.25
+	var inches := float(mini(screen.x, screen.y)) / dpi
+	return clampf(1.0 + (5.0 - inches) * 0.17, 1.0, 1.4)
+
+
+## Échelle du HUD et des menus EN JEU (calques agrandis par UiScaler).
+func hud_scale() -> float:
+	return clampf(auto_ui_scale() * ui_size, 0.7, 2.0)
+
+
+## Échelle des écrans de MENU (titre, sélection, salon, options…) : on
+## agrandit autant que hud_scale() le demande, mais jamais au point que le
+## contenu de l'écran (taille minimale de ses conteneurs) ne tienne plus.
+func menu_scale(scene: Node) -> float:
+	var root := get_tree().root
+	# taille de l'écran en unités, SANS agrandissement
+	var view: Vector2 = root.get_visible_rect().size * root.content_scale_factor
+	var need := Vector2(320, 240)
+	for c in scene.get_children():
+		if c is Container and c.visible:
+			var m: Vector2 = c.get_combined_minimum_size()
+			need = Vector2(maxf(need.x, m.x), maxf(need.y, m.y))
+	var fit: float = minf(view.x / (need.x + 8.0), view.y / (need.y + 8.0))
+	return clampf(hud_scale(), 0.7, maxf(fit, 0.7))
+
+
+# Les écrans de menu utilisent l'agrandissement global de la fenêtre
+# (content_scale_factor) ; dans les niveaux il reste à 1 pour ne pas changer
+# la vue du jeu (le HUD, lui, est agrandi par UiScaler). On surveille donc la
+# scène courante.
+var _last_scene_path := "?"
+var _menu_check_timer := 0.0
+
+func _process(delta: float) -> void:
+	var scene = get_tree().current_scene
+	var path: String = scene.scene_file_path if scene != null else ""
+	var is_menu: bool = path.begins_with("res://src/screens/")
+	if path == _last_scene_path:
+		# un menu peut grandir (salon : liste des joueurs, parties trouvées…) :
+		# on revérifie 2 fois par seconde que tout tient encore à l'écran
+		if not is_menu:
+			return
+		_menu_check_timer -= delta
+		if _menu_check_timer > 0.0:
+			return
+	_menu_check_timer = 0.5
+	_last_scene_path = path
+	var factor := 1.0
+	if is_menu:
+		factor = menu_scale(scene)
+	var root := get_tree().root
+	if absf(root.content_scale_factor - factor) < 0.02:
+		return
+	root.content_scale_factor = factor
+	# Godot ne recale pas toujours les Control « plein écran » quand
+	# l'agrandissement change : on le fait à la main, une image plus tard
+	# (le temps que la nouvelle taille de l'écran soit prise en compte).
+	await get_tree().process_frame
+	if is_instance_valid(scene) and scene is Control and scene.anchor_right == 1.0 and scene.anchor_bottom == 1.0:
+		scene.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+		scene.size = root.get_visible_rect().size
+		if scene.has_method("_layout"):
+			scene._layout()
+
+
+# --- [ENTRÉES 1.14] « Appuie pour continuer » --------------------------------
+# Retour de test : sur téléphone, l'écran titre « appuie sur une touche »
+# partait aussi avec les boutons de VOLUME (Android les envoie au jeu comme des
+# touches de clavier). Ces deux fonctions servent à tous les écrans
+# « appuie pour continuer » (titre, fin, pause de lecture du tuto).
+
+## Touches « système » que le joueur n'utilise jamais pour jouer : volume,
+## muet, touches média, touche retour Android (gérée à part, cf. plus haut).
+const SYSTEM_KEYS = [KEY_VOLUMEUP, KEY_VOLUMEDOWN, KEY_VOLUMEMUTE,
+	KEY_MEDIAPLAY, KEY_MEDIASTOP, KEY_MEDIANEXT,
+	KEY_MEDIAPREVIOUS, KEY_BACK]
+
+func is_system_key(event: InputEvent) -> bool:
+	return event is InputEventKey and (event.keycode in SYSTEM_KEYS or event.physical_keycode in SYSTEM_KEYS)
+
+## Vrai si `event` est un appui qui doit faire « continuer ».
+## - Sur TÉLÉPHONE / TABLETTE : uniquement un toucher de l'écran, ou un bouton
+##   de manette si une manette est branchée (geste toujours volontaire).
+##   Les touches (volume…) et les clics souris « émulés » sont ignorés.
+## - Sur PC : touche du clavier (sauf touches système), clic, bouton de
+##   manette ou toucher (écran tactile de PC).
+func is_continue_press(event: InputEvent) -> bool:
+	if not event.is_pressed() or event.is_echo():
+		return false
+	if is_mobile_device:
+		return event is InputEventScreenTouch or event is InputEventJoypadButton
+	if event is InputEventKey:
+		return not is_system_key(event)
+	if event is InputEventMouseButton:
+		return event.device != InputEvent.DEVICE_ID_EMULATION or not DisplayServer.is_touchscreen_available()
+	return event is InputEventJoypadButton or event is InputEventScreenTouch
+
+
 func _input(event: InputEvent) -> void:
+	# [ENTRÉES 1.14] une touche de volume ne doit pas faire passer en mode
+	# « clavier » (ce qui cachait les boutons tactiles en pleine course !)
+	if is_system_key(event):
+		return
 	if event is InputEventScreenTouch or event is InputEventScreenDrag:
 		self.controls = TOUCH
 	elif event is InputEventJoypadButton or event is InputEventJoypadMotion:

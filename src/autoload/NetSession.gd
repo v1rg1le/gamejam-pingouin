@@ -458,6 +458,9 @@ func _rpc_loaded() -> void:
 	var id := multiplayer.get_remote_sender_id()
 	if players.has(id):
 		players[id].loaded = true
+		# [ATTENTE 1.14] on renvoie la liste à tous : chacun peut afficher
+		# « 2/3 prêts — on attend Léo » pendant l'attente avant le décompte
+		_rpc_players.rpc(players)
 	_check_all_loaded()
 
 

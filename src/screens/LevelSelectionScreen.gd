@@ -34,6 +34,16 @@ extends Control
 
 
 func _ready() -> void:
+	# [RESPONSIVE 1.14] le grand titre « Pinpouin le ninja » se réduit quand
+	# l'écran est peu haut (téléphone en paysage, interface agrandie) : il
+	# prend la place qui reste au-dessus des listes, sans déborder.
+	var title: TextureRect = $Margin/VBox/Title
+	title.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	title.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	title.custom_minimum_size = Vector2(486, 70)
+	title.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	$Margin/VBox/Columns.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
+	title.size_flags_stretch_ratio = 1.0
 	version_label.text = "v" + str(ProjectSettings.get_setting("application/config/version", "?"))
 	back_button.pressed.connect(_go_back)
 	multi_button.pressed.connect(func():   # [MULTI] vers le salon multijoueur

@@ -48,8 +48,10 @@ func _layout() -> void:
 
 func _unhandled_input(event: InputEvent) -> void:
 	# [MOBILE] un toucher d'écran compte aussi comme "appuyer sur une touche"
-	if event is InputEventKey or event is InputEventJoypadButton or event is InputEventMouseButton or event is InputEventScreenTouch :
-		if event.pressed:
+	# [ENTRÉES 1.14] tri commun dans Settings.is_continue_press : sur téléphone
+	# seul un toucher (ou une manette) compte, plus les boutons de volume.
+	if Settings.is_continue_press(event):
+		if true:  # (bloc conservé tel quel : même indentation qu'avant)
 			var error = get_tree().change_scene_to_file("res://src/screens/LevelSelectionScreen.tscn")
 			if error != 0:
 					print("ERROR: ", error)
