@@ -302,6 +302,31 @@ func add_end(position :Vector2):#, rotation_degrees): #point_a:Vector2,point_b:V
 #	var normal = Vector2(dvec.y, -dvec.x)
 	end.global_position = position
 	add_child(end)
+	_add_finish_at_arch(position)   # [ARRIVÉE 1.18]
+
+
+# [ARRIVÉE 1.18] Retour de l'équipe : « le niveau finit dans le half-pipe et
+# pas dans la zone d'arrivée (la petite arche à la fin prévue à cet effet) ».
+# Jusqu'ici, l'arche du bout de la dernière île (Arche.tscn) n'était qu'un
+# décor, et la vraie ligne d'arrivée (FinishGate) était posée plus loin, sur
+# le deck du half-pipe. On pose maintenant la ligne d'arrivée SUR l'arche :
+#  - une FinishGate au même endroit, ses propres sprites d'arche cachés (c'est
+#    l'arche d'origine, Arche.tscn, qui reste affichée : aucun visuel changé) ;
+#  - son faisceau lumineux « ARRIVÉE » reste visible de loin ;
+#  - une seule par niveau : le plafond de la dernière île (sol « toit », lui
+#    aussi marqué is_final_map) garde son arche décorative sans 2e arrivée ;
+#  - HalfPipe.gd ne pose plus sa propre arrivée si celle-ci existe déjà. Le
+#    half-pipe reste en fin de niveau, comme zone de décélération / figures.
+const FINISH_GATE_RES = "res://src/levels/FinishGate.tscn"
+
+func _add_finish_at_arch(position: Vector2) -> void:
+	if not is_inside_tree() or not get_tree().get_nodes_in_group("finish_gate").is_empty():
+		return
+	var gate = load(FINISH_GATE_RES).instantiate()
+	gate.global_position = position
+	gate.get_node("SpriteBackground").visible = false
+	gate.get_node("SpriteForeground").visible = false
+	add_child(gate)
 #	return deco
 
 func get_random_decoration_instance():

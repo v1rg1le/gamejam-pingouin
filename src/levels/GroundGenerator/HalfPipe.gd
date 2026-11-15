@@ -265,6 +265,11 @@ func add_finish_podium(position :Vector2):#, rotation_degrees): #point_a:Vector2
 #	return deco
 
 func add_finish_gate(position :Vector2):#, rotation_degrees): #point_a:Vector2,point_b:Vector2):
+	# [ARRIVÉE 1.18] l'arrivée est désormais sur l'arche de la dernière île
+	# (voir sol.gd, _add_finish_at_arch) : pas de 2e arrivée dans le half-pipe.
+	# (Un half-pipe utilisé seul, sans île avant, garde la sienne.)
+	if is_inside_tree() and not get_tree().get_nodes_in_group("finish_gate").is_empty():
+		return
 	var finish_gate = finish_gate_res.instantiate()
 #	var dvec = (point_b - point_a).normalized()
 #	var normal = Vector2(dvec.y, -dvec.x)

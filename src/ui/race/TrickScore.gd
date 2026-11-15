@@ -32,6 +32,12 @@ signal pending_changed(text: String)
 
 const TRICK_POINTS = 100
 const SPIN_POINTS = 150
+## [VRILLE 1.18] tolérance (degrés) pour valider un tour complet. Retour de
+## l'équipe : un salto n'était parfois pas compté car il ne faisait que ~350°,
+## notamment en partant d'une pente montante (le pingouin décolle déjà
+## incliné, puis atterrit à plat sur une pente différente). Un tour compte
+## désormais à partir de 360° - SPIN_TOLERANCE_DEG (320°), le 2e à 680°, etc.
+const SPIN_TOLERANCE_DEG = 40.0
 const MAX_COMBO = 5
 
 # Noms affichés des 4 animations de figure existantes (Player.tscn)
@@ -92,7 +98,7 @@ func _physics_process(_delta: float) -> void:
 	var rot: float = player.rotation
 	if st.super_state_name == "IN AIR" and st.sub_state_name != "HOOKING":
 		_spin_accum += angle_difference(_prev_rotation, rot)
-		var turns := int(absf(_spin_accum) / TAU)
+		var turns := int((absf(_spin_accum) + deg_to_rad(SPIN_TOLERANCE_DEG)) / TAU)   # [VRILLE 1.18] avec tolérance
 		while _spins_counted < turns:
 			_spins_counted += 1
 			_add("Vrille", SPIN_POINTS)
