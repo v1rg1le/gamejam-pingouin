@@ -468,3 +468,9 @@ Demande de l'équipe : plus de coupure nette du fond, une boucle infinie qui sui
 - **Deux sécurités ajoutées pour le bonus** :
   - un **mur invisible** au bout du deck de droite du half-pipe (`HalfPipe._add_end_wall`) : lancé à pleine vitesse, le pingouin sortait du half-pipe et tombait dans le vide au bout du niveau ;
   - pendant le bonus, une chute (par exemple dans le trou entre la dernière île et le half-pipe) fait **réapparaître sur le deck de gauche du half-pipe** (`RaceManager.bonus_respawn_point`), pas avant l'arrivée.
+
+## 30. Panneau à l'envers dans Chill 704 (15/11, version 1.21)
+
+- **Retour de l'équipe** : dans Chill 704, après la première boucle, un panneau « attention » apparaissait à l'envers sur la piste.
+- **Cause** : les pistes du haut de 704 sont des sols retournés (`scale = (-1, -1)`). Leurs décors (panneau, igloo, glaçons…) sont posés sur la face d'origine, qui se retrouve dessous, tête en bas. Dans le niveau d'origine ces sols partent vers la gauche, hors de vue ; recopiés par la boucle infinie (`ChillLoop.gd`), ils arrivent devant le pingouin.
+- **Correction** (`sol.gd`, `_is_flipped`) : un sol retourné ne pose plus ni décor ni panneau. Le tirage au hasard des décors est conservé (décor tiré puis libéré) pour que les autres sols gardent exactement les mêmes décors. Seul Chill 704 a des sols retournés ; aucun asset supprimé.

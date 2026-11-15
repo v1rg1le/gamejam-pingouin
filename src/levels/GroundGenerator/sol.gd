@@ -281,6 +281,12 @@ func add_decoration(position:Vector2, rotation_degrees): #point_a:Vector2,point_
 #	decoration_res = decorations[randi() % 6]
 #	var deco = decoration_res.instance()
 	var deco = get_random_decoration_instance()
+	# [CHILL 1.21] sol retourné : décor non posé (voir _is_flipped plus bas).
+	# Il est quand même tiré au hasard puis libéré, pour ne pas décaler le
+	# hasard des sols suivants (mêmes décors qu'avant ailleurs).
+	if _is_flipped():
+		deco.free()
+		return
 #	var dvec = (point_b - point_a).normalized()
 #	var normal = Vector2(dvec.y, -dvec.x)
 	deco.global_position = position
@@ -288,7 +294,22 @@ func add_decoration(position:Vector2, rotation_degrees): #point_a:Vector2,point_
 	add_child(deco)
 #	return deco
 
+# [CHILL 1.21] Retour de l'équipe : dans Chill 704, après la première boucle,
+# un panneau « attention » apparaissait À L'ENVERS sur la piste.
+# Cause : les pistes du haut de 704 sont des sols retournés (scale = (-1, -1)).
+# Leurs décors (panneau, igloo, glaçons…) sont posés sur la face d'origine du
+# sol, qui se retrouve dessous, tête en bas. Dans le niveau d'origine, ces sols
+# partent vers la gauche, hors de vue ; recopiés par la boucle infinie
+# (ChillLoop.gd), ils arrivent devant le pingouin et leurs décors se voient.
+# Correction : un sol retourné ne pose ni décor ni panneau (aucun asset
+# supprimé, simplement plus de copie à l'envers).
+func _is_flipped() -> bool:
+	return scale.y < 0.0
+
+
 func add_warning(position :Vector2):#, rotation_degrees): #point_a:Vector2,point_b:Vector2):
+	if _is_flipped():   # [CHILL 1.21] pas de panneau tête en bas
+		return
 	var warning = warning_res.instantiate()
 #	var dvec = (point_b - point_a).normalized()
 #	var normal = Vector2(dvec.y, -dvec.x)
