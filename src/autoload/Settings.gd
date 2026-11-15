@@ -56,6 +56,7 @@ var help_on_start: bool = true
 var tutorial_pause: bool = true
 var music_volume: float = 0.8
 var physics_panel: bool = false   # [PHYSIQUE 1.10] bouton ⚙ du panneau de réglage en tactile
+var master_wink: bool = true      # [MAÎTRE 1.19] clin d'œil du maître ninja à chaque figure réussie
 var ui_size: float = 1.0          # [RESPONSIVE 1.14] réglage « Taille de l'interface » (0,8 à 1,5)
 # [FLÈCHES 1.16] flèches vers les autres joueurs en multi (choix dans Options)
 enum { ARROWS_ALL, ARROWS_NEIGHBOURS, ARROWS_NONE }
@@ -95,6 +96,7 @@ func _load_options() -> void:
 		tutorial_pause = cfg.get_value("options", "tutorial_pause", true)
 		music_volume = clampf(float(cfg.get_value("options", "music_volume", 0.8)), 0.0, 1.0)
 		physics_panel = cfg.get_value("options", "physics_panel", false)
+		master_wink = cfg.get_value("options", "master_wink", true)
 		ui_size = clampf(float(cfg.get_value("options", "ui_size", 1.0)), 0.8, 1.5)
 		player_arrows = clampi(int(cfg.get_value("options", "player_arrows", ARROWS_ALL)), ARROWS_ALL, ARROWS_NONE)
 	apply_music_volume()

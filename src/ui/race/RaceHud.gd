@@ -180,6 +180,17 @@ func _update_waiting(delta: float) -> void:
 	_waiting_panel.position = Vector2((view.x - _waiting_panel.size.x) * 0.5, view.y * 0.22)
 
 
+# [MAÎTRE 1.19] clin d'œil du maître ninja (voir MasterWink.gd). Créé à la
+# première figure réussie, puis réutilisé.
+var _master: Control = null
+
+func show_master_wink() -> void:
+	if _master == null or not is_instance_valid(_master):
+		_master = preload("res://src/ui/race/MasterWink.gd").new()
+		(_ui_root if _ui_root != null else self).add_child(_master)
+	_master.play()
+
+
 func set_best(best: float) -> void:
 	if best == -2.0:   # [MULTI] code spécial envoyé par RaceManager avant le départ
 		_best_label.text = "En attente des autres joueurs…"

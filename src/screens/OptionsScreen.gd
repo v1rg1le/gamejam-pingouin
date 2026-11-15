@@ -56,6 +56,15 @@ func _ready() -> void:
 	# [PHYSIQUE 1.10] affiche le bouton ⚙ en jeu (tactile) ; F2 marche toujours au clavier
 	physics_panel.button_pressed = Settings.physics_panel
 	physics_panel.toggled.connect(func(v): Settings.set_option("physics_panel", v))
+	# [MAÎTRE 1.19] « Clin d'œil du maître » : même style que les autres
+	# interrupteurs (copie du bouton « Aide en début de niveau »), juste après lui
+	var wink: CheckButton = help_on_start.duplicate(Node.DUPLICATE_GROUPS | Node.DUPLICATE_SCRIPTS)   # sans copier ses signaux
+	wink.name = "MasterWink"
+	wink.text = "Clin d'œil du maître ninja"
+	help_on_start.get_parent().add_child(wink)
+	help_on_start.get_parent().move_child(wink, help_on_start.get_index() + 1)
+	wink.button_pressed = Settings.master_wink
+	wink.toggled.connect(func(v): Settings.set_option("master_wink", v))
 	music_slider.value = Settings.music_volume
 	music_slider.value_changed.connect(func(v): Settings.set_option("music_volume", v))
 	_add_ui_size_slider()   # [RESPONSIVE 1.14]

@@ -230,7 +230,10 @@ func _start_race() -> void:
 	trick_score.points_banked.connect(func(_pts, total, label):
 		if is_instance_valid(_hud):
 			_hud.set_trick_points(total)
-			_hud.show_trick_popup(label, Color(1, 0.94, 0.4)))
+			_hud.show_trick_popup(label, Color(1, 0.94, 0.4))
+			# [MAÎTRE 1.19] le maître ninja passe la tête et fait un clin d'œil
+			if Settings.master_wink:
+				_hud.show_master_wink())
 	trick_score.points_lost.connect(func(reason):
 		if is_instance_valid(_hud):
 			_hud.show_trick_popup(reason, Color(1, 0.5, 0.45)))

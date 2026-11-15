@@ -36,8 +36,8 @@ const SPIN_POINTS = 150
 ## l'équipe : un salto n'était parfois pas compté car il ne faisait que ~350°,
 ## notamment en partant d'une pente montante (le pingouin décolle déjà
 ## incliné, puis atterrit à plat sur une pente différente). Un tour compte
-## désormais à partir de 360° - SPIN_TOLERANCE_DEG (320°), le 2e à 680°, etc.
-const SPIN_TOLERANCE_DEG = 40.0
+## désormais à partir de 360° - SPIN_TOLERANCE_DEG (340°), le 2e à 700°, etc. (20° validés par l'équipe ; 40° était trop généreux)
+const SPIN_TOLERANCE_DEG = 20.0
 const MAX_COMBO = 5
 
 # Noms affichés des 4 animations de figure existantes (Player.tscn)
