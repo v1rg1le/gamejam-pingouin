@@ -132,6 +132,16 @@ func _input(event: InputEvent) -> void:
 	# _should_show() (et pas `visible`, mis à jour seulement dans _process).
 	if event is InputEventScreenTouch or event is InputEventScreenDrag:
 		Settings.controls = Settings.TOUCH
+	# [TEST ENFANT 1.22] BUG trouvé par le bot « enfant » : un doigt posé
+	# (grappin lancé, ▶ tenu…) au moment où le jeu se met en pause (carte
+	# d'aide, panneau du tuto, menu pause) était relevé PENDANT la pause.
+	# Ce relâchement était ignoré (boutons cachés) : à la reprise, le grappin
+	# ou la flèche restait « tenu » tout seul. Désormais, un doigt qu'on
+	# connaît est TOUJOURS relâché, même boutons cachés. On ne « mange » pas
+	# l'événement : la carte d'aide / le menu pause le reçoivent quand même.
+	if event is InputEventScreenTouch and not event.pressed and _fingers.has(event.index) and not _should_show():
+		_finger_up(event.index)
+		return
 	if not _should_show():
 		return
 	if event is InputEventScreenTouch:
@@ -158,7 +168,11 @@ func _input(event: InputEvent) -> void:
 			_update_pull(_aim_vec.length())
 		elif event.index == _hook_finger:
 			_update_hook_aim(pos)
-		elif held.slide:
+		# [TEST ENFANT 1.22] BUG trouvé par le bot « enfant » : un doigt
+		# « grappin libre » dont le rôle a été repris par un 2e doigt posé sur
+		# le bouton GRAPPIN n'a pas de bouton (dictionnaire vide) -> l'accès à
+		# .slide plantait (des centaines d'erreurs par partie). get() = sûr.
+		elif held.get("slide", false):
 			# glisser d'un bouton à l'autre (ex. de ◀ à ▶) sans relever le doigt
 			var b = _button_at(pos)
 			if b != null and b.slide and b.id != held.id:
@@ -178,6 +192,7 @@ func _finger_down(index: int, b: Dictionary, pos: Vector2) -> void:
 		Input.parse_input_event(ev)
 	elif b.id == "hook":
 		_hook_finger = index
+		_free_hook = false   # [TEST ENFANT 1.22] le bouton reprend la main sur un éventuel « grappin libre »
 		_hook_origin = pos
 		_hook_time = 0.0
 		_hook_fired = false
@@ -211,6 +226,11 @@ func _finger_up(index: int) -> void:
 	if id == "hook_free":
 		# [GRAPPIN TACTILE 1.11] doigt relevé : on se décroche (comme le bouton)
 		_fingers.erase(index)
+		# [TEST ENFANT 1.22] si un autre doigt a repris le grappin (bouton
+		# GRAPPIN posé pendant ce temps), c'est lui qui commande désormais :
+		# relever l'ancien doigt ne doit pas le décrocher.
+		if _hook_finger != index:
+			return
 		_hook_finger = -1
 		_free_hook = false
 		_aim_vec = Vector2.ZERO

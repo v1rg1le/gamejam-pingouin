@@ -296,6 +296,14 @@ func _update_mouse_bindings() -> void:
 					removed.append(ev)
 					InputMap.action_erase_event(action, ev)
 			_removed_mouse_events[action] = removed
+			# [TEST ENFANT 1.22] BUG trouvé par le bot « enfant » : sur un PC
+			# tactile (ou une tablette Windows), le tout premier toucher génère
+			# aussi un clic souris « émulé ». Ce clic appuie sur "hook" AVANT
+			# qu'on retire les clics souris de l'action… et le relâchement du
+			# clic n'est plus reconnu ensuite => "hook" restait appuyé pour
+			# toujours et le grappin ne pouvait plus jamais s'accrocher.
+			# On relâche donc l'action au moment où on lui retire la souris.
+			Input.action_release(action)
 	else:
 		for action in _removed_mouse_events:
 			for ev in _removed_mouse_events[action]:

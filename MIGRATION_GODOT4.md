@@ -474,3 +474,29 @@ Demande de l'équipe : plus de coupure nette du fond, une boucle infinie qui sui
 - **Retour de l'équipe** : dans Chill 704, après la première boucle, un panneau « attention » apparaissait à l'envers sur la piste.
 - **Cause** : les pistes du haut de 704 sont des sols retournés (`scale = (-1, -1)`). Leurs décors (panneau, igloo, glaçons…) sont posés sur la face d'origine, qui se retrouve dessous, tête en bas. Dans le niveau d'origine ces sols partent vers la gauche, hors de vue ; recopiés par la boucle infinie (`ChillLoop.gd`), ils arrivent devant le pingouin.
 - **Correction** (`sol.gd`, `_is_flipped`) : un sol retourné ne pose plus ni décor ni panneau. Le tirage au hasard des décors est conservé (décor tiré puis libéré) pour que les autres sols gardent exactement les mêmes décors. Seul Chill 704 a des sols retournés ; aucun asset supprimé.
+
+## 31. « Test enfant » : 4 bugs trouvés en jouant n'importe comment (16/11, version 1.22)
+
+- **Demande** : tester le jeu « comme un enfant ».
+- **Méthode** : un bot pose de vrais doigts virtuels sur un écran de téléphone simulé (2400 × 1080, paysage). Il tapote partout, garde le doigt collé, appuie sur les boutons au hasard, ne fait plus rien, martèle la pause… 2 profils (« petit » au hasard, « grand » qui a compris ▶) × 5 parties de 4 min sur les 6 courses + 2 parties sur Chill 704/917, soit 68 parties. Outil hors projet (`child_test.gd`).
+- **Bugs trouvés et corrigés** :
+  1. **L'appli se fermait toute seule** : en tapotant, l'enfant ouvrait le menu pause puis touchait « Quitter le jeu » dans plus d'une partie sur deux (37 parties sur 68). Désormais (`MenuPause.gd`) :
+     - « Quitter le jeu » est masqué sur téléphone et tablette (on quitte avec le geste retour / accueil ; iOS interdit d'ailleurs aux applis de se fermer seules) ;
+     - « Recommencer », « Choisir un niveau » / « Quitter la course » et « Quitter le jeu » (PC) demandent **deux touchers** : le 1er affiche « Sûr ? Touche encore » en orange pendant 3 s. Les scripts des boutons ne changent pas : leur signal est seulement rebranché derrière la confirmation. En multi, on ne quitte la session réseau qu'à la confirmation.
+  2. **Erreur de script à chaque SAUT en l'air** (migration Godot 4) : en Godot 3, le `_ready()` de la classe parente était appelé automatiquement ; en Godot 4 non. `JumpingState`, `TrixState` et `HookingInAirState` n'appelaient pas `InAirState._ready()`, donc `coyote_timer` restait vide : appuyer sur SAUT dans ces états plantait la lecture des commandes de la frame (pump en l'air ignoré). Ajout de `super._ready()` comme dans les états au sol.
+  3. **Doigt relevé pendant une pause ignoré** (`TouchControls.gd`) : un doigt posé (grappin lancé, ▶ tenu) au moment où une carte d'aide, un panneau du tuto ou le menu pause apparaît, puis relevé pendant la pause, n'était pas vu : à la reprise le grappin restait « tenu » tout seul. Un doigt connu est maintenant toujours relâché.
+  4. **Centaines d'erreurs « slide »** (`TouchControls.gd`) : poser un doigt sur le bouton GRAPPIN pendant qu'un « grappin libre » (toucher dans le décor) était actif faisait planter le glissé de l'autre doigt. Le bouton reprend proprement la main, et relever l'ancien doigt ne décroche plus.
+  - Bonus, PC tactile seulement (`Settings.gd`) : le tout premier toucher sur un PC à écran tactile pouvait laisser l'action « hook » appuyée pour toujours (clic souris émulé). L'action est relâchée quand le jeu passe en mode tactile.
+- **Résultat après corrections** : 0 erreur de script, plus aucune fermeture d'appli, 116 fichiers OK.
+- **Ce qu'un enfant arrive à faire (4 min, après corrections)** :
+
+  | Niveau | « Petit » (au hasard) | « Grand » (a compris ▶) |
+  |---|---|---|
+  | Tuto Bateau | 3 / 5 finis | 5 / 5 |
+  | Nice Slope | 3 / 5 | 4 / 5 |
+  | Spaghetti | 1 / 5 | 3 / 5 |
+  | Hook you fool ! | 0 / 5 | 1 / 5 |
+  | Flat and fun | 0 / 5 | 0 / 5 |
+  | Corridor | 0 / 5 | 0 / 5 |
+
+  Le « grand » meurt plus (jusqu'à 6 chutes par partie) et reste parfois plus de 2 min sans avancer, souvent arrêté sur du plat ou dans un creux. Pistes possibles (non faites) : une bulle « Appuie sur ▶ / PUMP » après ~8 s sans avancer, ou un mode « enfant » avec une petite poussée automatique.

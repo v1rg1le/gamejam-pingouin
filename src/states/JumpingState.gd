@@ -26,3 +26,10 @@ func enter(player: CharacterBody2D, _previous_state: PlayerState) -> void:
 
 func _ready():
 	sub_state_name = "JUMPING"
+	# [TEST ENFANT 1.22] MIGRATION GODOT 4 : en Godot 3, le _ready() de la
+	# classe parente (InAirState) était appelé AUTOMATIQUEMENT ; en Godot 4 il
+	# faut l'appeler soi-même. Sans ça, `coyote_timer` restait vide dans cet
+	# état : appuyer sur SAUT ici provoquait une erreur de script qui
+	# interrompait la lecture des commandes (pump en l'air ignoré, etc.).
+	# Trouvé par le bot « enfant » qui tape sur SAUT n'importe quand.
+	super._ready()
