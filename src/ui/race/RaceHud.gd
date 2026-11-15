@@ -191,6 +191,38 @@ func show_master_wink() -> void:
 	_master.play()
 
 
+# --- [BONUS 1.20] Bandeau « BONUS HALF-PIPE » après l'arrivée ------------------
+var _bonus_label: Label = null
+
+func show_bonus(time: float, is_record: bool, previous_best: float, seconds: float) -> void:
+	if _bonus_label == null:
+		_bonus_label = _make_label(30, Color(1, 0.94, 0.4))
+		_bonus_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		(_ui_root if _ui_root != null else self).add_child(_bonus_label)
+	var head := "ARRIVÉE !  " + RaceManager.format_time(time)
+	if is_record:
+		head += "  ·  NOUVEAU RECORD !"
+	set_meta("bonus_head", head)
+	if is_record:
+		set_best(time)
+	set_bonus_left(seconds)
+
+
+func set_bonus_left(seconds: float) -> void:
+	if _bonus_label == null:
+		return
+	_bonus_label.text = "%s\nBONUS HALF-PIPE : %d s  —  tes figures comptent encore !" % [get_meta("bonus_head", ""), int(ceil(maxf(seconds, 0.0)))]
+	var view: Vector2 = _ui_root.size if _ui_root != null else get_viewport().get_visible_rect().size
+	_bonus_label.reset_size()
+	_bonus_label.position = Vector2((view.x - _bonus_label.size.x) * 0.5, 70.0)
+
+
+func show_bonus_end() -> void:
+	if _bonus_label != null:
+		_bonus_label.queue_free()
+		_bonus_label = null
+
+
 func set_best(best: float) -> void:
 	if best == -2.0:   # [MULTI] code spécial envoyé par RaceManager avant le départ
 		_best_label.text = "En attente des autres joueurs…"

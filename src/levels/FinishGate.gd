@@ -117,6 +117,16 @@ func _finish() -> void:
 	_finished = true
 	print("yay")
 	RaceManager.finish_race()  # [FANTÔMES] arrête le chrono, sauve le record + le fantôme
+	# [BONUS 1.20] figures bonus dans le half-pipe : pas de ralenti, on laisse
+	# jouer ; on attend le score final, on le laisse lire, puis retour au menu.
+	if RaceManager.bonus_active:
+		await RaceManager.race_completed
+		if NetSession.in_race:
+			return
+		await get_tree().create_timer(4.0, true, false, true).timeout
+		if is_inside_tree():
+			get_tree().change_scene_to_file(next_scene_path)
+		return
 	# 5. Petit ralenti de victoire (le timer ignore le ralenti : 4e argument)
 	Engine.time_scale = 0.3
 	# [FANTÔMES] un peu plus long pour lire le temps / le record

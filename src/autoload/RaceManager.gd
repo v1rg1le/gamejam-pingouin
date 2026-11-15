@@ -176,6 +176,7 @@ func _reset_race() -> void:
 	_state_timer = 0.0
 	_countdown = -1.0
 	_waiting_go = false
+	bonus_active = false      # [BONUS 1.20] pas de bonus en cours dans une nouvelle scène
 	trick_score = null        # [SCORE 1.5] libéré avec l'ancienne scène
 
 
@@ -196,6 +197,14 @@ func _physics_process(delta: float) -> void:
 		if _state_timer <= 0.0 and not _waiting_go:
 			_state_timer += NetSession.STATE_INTERVAL
 			_send_state()
+	# [BONUS 1.20] compte à rebours des figures bonus (chrono déjà arrêté)
+	if bonus_active:
+		bonus_left -= delta
+		if _hud != null and is_instance_valid(_hud):
+			_hud.set_bonus_left(bonus_left)
+		if bonus_left <= 0.0:
+			_complete_race()
+		return
 	if not racing:
 		return
 	race_time += delta
@@ -287,6 +296,76 @@ func finish_race() -> bool:
 	if is_record:
 		_rec.time = race_time
 		_save_ghost(_rec)
+	_finish_record = {"is_record": is_record, "previous_best": previous_best}
+	# [BONUS 1.20] le chrono est arrêté (temps, record et fantôme ci-dessus ne
+	# changent plus), mais s'il y a un half-pipe après l'arrivée, on laisse
+	# BONUS_TIME secondes pour y faire des figures qui comptent encore.
+	if _has_bonus_half_pipe():
+		bonus_active = true
+		bonus_left = BONUS_TIME
+		print("[COURSE] arrivée en ", format_time(race_time), " | figures à l'arrivée ", trick_score.total if trick_score != null else 0, " | bonus half-pipe ", BONUS_TIME, " s")
+		if _hud != null and is_instance_valid(_hud):
+			_hud.show_bonus(race_time, is_record, previous_best, bonus_left)
+		return is_record
+	_complete_race()
+	return is_record
+
+
+# --- [BONUS 1.20] Figures bonus dans le half-pipe d'arrivée ---------------------
+# Demande de l'équipe : « à l'arrivée, avoir encore 30 s pour faire des tricks
+# dans le half-pipe à la fin du niveau, et que ces points comptent encore pour
+# le score final ».
+# Déroulé :
+#  1. la ligne d'arrivée (l'arche) arrête le chrono : temps, record et fantôme
+#     sont fixés tout de suite (finish_race ci-dessus) ;
+#  2. pendant BONUS_TIME secondes, TrickScore continue de compter (il regarde
+#     `bonus_active`) ; un bandeau en haut de l'écran affiche le compte à
+#     rebours ;
+#  3. à la fin, une figure encore en l'air est validée comme sur la ligne
+#     d'arrivée, puis on calcule le score (vitesse + TOUTES les figures), on
+#     l'enregistre et on l'affiche (_complete_race) ;
+#  4. FinishGate attend le signal race_completed pour revenir au menu.
+# Seulement sur les niveaux qui ont un half-pipe (niveaux générés) : le tuto
+# et Spaghetti se terminent comme avant. En multijoueur aussi : l'arrivée et
+# le score sont annoncés aux autres à la fin du bonus.
+const BONUS_TIME = 30.0           # s de figures bonus après l'arrivée
+signal race_completed             # émis quand le score final est connu
+var bonus_active := false         # vrai pendant le bonus (chrono arrêté, figures comptées)
+var bonus_left := 0.0             # s restantes de bonus
+var _finish_record := {}          # {is_record, previous_best} mémorisés à l'arrivée
+
+
+## Vrai si le niveau a un half-pipe (zone de figures) APRÈS la ligne d'arrivée.
+func _has_bonus_half_pipe() -> bool:
+	var gate = get_tree().get_first_node_in_group("finish_gate")
+	if gate == null:
+		return false
+	for hp in get_tree().get_nodes_in_group("half_pipe"):
+		if hp.global_position.x > gate.global_position.x - 200.0:
+			return true
+	return false
+
+
+## [BONUS 1.20] Point de réapparition pendant le bonus : sur le deck de gauche
+## du half-pipe d'arrivée (un quart de sa longueur, à côté du podium).
+func bonus_respawn_point():
+	var gate = get_tree().get_first_node_in_group("finish_gate")
+	for hp in get_tree().get_nodes_in_group("half_pipe"):
+		if gate == null or hp.global_position.x > gate.global_position.x - 200.0:
+			var poly: PackedVector2Array = hp.get_node("CollisionPolygon2D").polygon
+			if poly.size() > 1:
+				# poly[1] = coin haut-gauche du deck de gauche
+				return hp.to_global(poly[1]) + Vector2(hp.deck_length * 0.25, -20.0)
+	return null
+
+
+## Fin du bonus (ou arrivée sans bonus) : score final, sauvegarde, affichage.
+func _complete_race() -> void:
+	bonus_active = false
+	if trick_score != null and is_instance_valid(trick_score):
+		trick_score.bank()   # une figure en l'air à la fin du bonus compte
+	var is_record: bool = _finish_record.get("is_record", false)
+	var previous_best: float = _finish_record.get("previous_best", -1.0)
 	# [SCORE 1.5] calcul du score
 	var tricks: int = trick_score.total if trick_score != null and is_instance_valid(trick_score) else 0
 	var speed := speed_points(race_time, ref_time)
@@ -301,11 +380,13 @@ func finish_race() -> bool:
 		# autres), puis on affiche la PLACE plutôt que le record.
 		NetSession.report_finish(race_time, last_score.score)
 		if _hud != null and is_instance_valid(_hud):
+			_hud.show_bonus_end()
 			_hud.show_multi_result(race_time, NetSession.my_rank(), NetSession.players.size(), last_score)
 	elif _hud != null and is_instance_valid(_hud):
+		_hud.show_bonus_end()
 		_hud.show_result(race_time, is_record, previous_best, last_score)
 	emit_signal("race_finished", race_time, is_record, previous_best)
-	return is_record
+	emit_signal("race_completed")
 
 
 # --- [AIDE 1.7] Carte d'aide en début de niveau ------------------------------------
@@ -318,6 +399,9 @@ func _show_start_help() -> void:
 	if not Settings.help_on_start or NetSession.in_race or level_path.ends_with("LevelBateau.tscn"):
 		return
 	var text := TutorialSign.resolve_text(START_HELP_TEXT + (START_HELP_SCORE if has_finish else ""))
+	# [BONUS 1.20] on prévient qu'il y a des figures bonus après l'arrivée
+	if has_finish and _has_bonus_half_pipe():
+		text += "\nAprès l'arrivée : %d s de figures BONUS dans le half-pipe !" % int(BONUS_TIME)
 	ReadingPause.open(get_tree(), "C'EST PARTI !" if has_finish else "GLISSE TRANQUILLE", text)
 
 

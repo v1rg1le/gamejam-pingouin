@@ -69,7 +69,8 @@ func setup(p) -> void:
 
 
 func _physics_process(_delta: float) -> void:
-	if player == null or not is_instance_valid(player) or not RaceManager.racing:
+	# [BONUS 1.20] on compte aussi pendant le bonus du half-pipe d'arrivée
+	if player == null or not is_instance_valid(player) or not (RaceManager.racing or RaceManager.bonus_active):
 		return
 	var sm = player._states
 	var st = sm.current

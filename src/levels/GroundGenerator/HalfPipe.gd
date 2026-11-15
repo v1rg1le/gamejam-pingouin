@@ -50,6 +50,7 @@ var end_x = 0
 var end_y = 0
 
 func _ready() -> void:
+	add_to_group("half_pipe")   # [BONUS 1.20] RaceManager repère le half-pipe d'arrivée (figures bonus)
 #	print("b=")
 #	print(b)
 	randomize()
@@ -96,6 +97,7 @@ func _ready() -> void:
 	
 	end_x = curve[curve.size()-2].x
 	end_y = curve[curve.size()-2].y
+	_add_end_wall()   # [BONUS 1.20]
 	
 #func f(x): #HALF_PIPE 1
 #	var y
@@ -316,3 +318,20 @@ func add_end(position :Vector2):#, rotation_degrees): #point_a:Vector2,point_b:V
 	add_child(end)
 #	return deco
 
+
+
+
+# [BONUS 1.20] Mur invisible au bout du deck de droite.
+# Avec le bonus de figures après l'arrivée, on reste ~30 s dans le half-pipe :
+# en tests, un pingouin lancé à pleine vitesse sortait par le haut du mur de
+# droite, survolait le deck et tombait dans le vide au bout du niveau (morts à
+# répétition, figures perdues). Ce mur, haut de 4000 px, ferme le niveau
+# après le deck de droite : on rebondit et on revient dans le half-pipe.
+# Invisible (aucun nouveau visuel), même couche de collision que le sol.
+func _add_end_wall() -> void:
+	var wall := CollisionShape2D.new()
+	var rect := RectangleShape2D.new()
+	rect.size = Vector2(64, 4000)
+	wall.shape = rect
+	wall.position = Vector2(end_x + 32.0, end_y - 2000.0)
+	add_child(wall)

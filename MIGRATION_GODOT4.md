@@ -455,3 +455,16 @@ Demande de l'équipe : plus de coupure nette du fond, une boucle infinie qui sui
   - Le code d'une ancienne version n'a pas été retrouvé dans l'historique git (aucune branche du dépôt ne le contient). Le dessin du maître, lui, existait : `sprites/screens/bad_penguin_1/2/3.png` (64 × 64, bandeau animé), utilisé par l'écran titre des toutes premières versions puis abandonné. Il est réutilisé tel quel.
   - Une image **ajoutée** : `bad_penguin_wink.png`, copie de `bad_penguin_1` avec un œil fermé.
 - **Captures itch.io supplémentaires** : colisée, podium d'arrivée, pump, grappin, figure en l'air, clin d'œil du maître.
+
+## 29. Figures bonus dans le half-pipe d'arrivée (15/11, version 1.20)
+
+- **Demande** : à l'arrivée, avoir encore ~30 s pour faire des figures dans le half-pipe de fin, et que ces points comptent dans le score final.
+- **Déroulé** (`RaceManager.finish_race` / `_complete_race`, constante `BONUS_TIME = 30`) :
+  1. passer l'arche arrête le chrono : temps, record et fantôme sont fixés tout de suite ;
+  2. un bandeau « ARRIVÉE ! 1:02.43 — BONUS HALF-PIPE : 30 s, tes figures comptent encore ! » affiche le compte à rebours ; `TrickScore` continue de compter ;
+  3. à 0 s, une figure encore en l'air est validée, puis le score final (vitesse + toutes les figures) est calculé, enregistré et affiché ; retour au menu 4 s plus tard.
+- Seulement sur les niveaux avec un half-pipe après l'arrivée (Flat, Corridor, Nice Slope, Hook you fool !, SlightOffset). Tuto et Spaghetti : comme avant. En multijoueur aussi : le score est annoncé aux autres à la fin du bonus (le classement au temps n'est pas touché).
+- L'aide de début de niveau le signale (« Après l'arrivée : 30 s de figures BONUS dans le half-pipe ! »).
+- **Deux sécurités ajoutées pour le bonus** :
+  - un **mur invisible** au bout du deck de droite du half-pipe (`HalfPipe._add_end_wall`) : lancé à pleine vitesse, le pingouin sortait du half-pipe et tombait dans le vide au bout du niveau ;
+  - pendant le bonus, une chute (par exemple dans le trou entre la dernière île et le half-pipe) fait **réapparaître sur le deck de gauche du half-pipe** (`RaceManager.bonus_respawn_point`), pas avant l'arrivée.

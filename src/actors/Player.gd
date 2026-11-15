@@ -509,6 +509,14 @@ func die() -> void:
 # Choisit l'échantillon "sûr" pris environ respawn_rewind_time secondes avant
 # la dernière glisse au sol (ou le plus ancien disponible).
 func _pick_respawn_sample():
+	# [BONUS 1.20] pendant les figures bonus après l'arrivée, une chute (par
+	# exemple dans le trou entre la dernière île et le half-pipe) fait
+	# réapparaître directement sur le deck de gauche du half-pipe, sans élan :
+	# on ne repart pas avant la ligne d'arrivée et on ne perd pas le bonus.
+	if RaceManager.bonus_active:
+		var p = RaceManager.bonus_respawn_point()
+		if p != null:
+			return {"pos": p, "vel": Vector2(300, 0), "time": _last_ground_time}
 	if _safe_history.is_empty():
 		return null
 	var limit := _last_ground_time - respawn_rewind_time
