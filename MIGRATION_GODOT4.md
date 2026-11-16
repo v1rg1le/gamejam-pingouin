@@ -632,3 +632,17 @@ Demande de l'équipe : plus de coupure nette du fond, une boucle infinie qui sui
 
 - **À savoir** : une figure ratée (atterrissage pendant la figure) arrête net le pingouin 2 s (comportement d'origine, `StaggeredState`). Le boost rend donc les figures intéressantes mais risquées sur les petits sauts.
 - **Testé** : 118 fichiers OK ; boost vérifié dans le half-pipe et dans les courses.
+
+## 40. Gerbe de neige et de glace au sol (16/11, version 1.31)
+
+- **Demande de Manu** : une traînée de neige ou de glace derrière Pinpouin, de plus en plus grosse avec la vitesse, au sol ; garder la traînée actuelle en l'air.
+- **Au sol** (`Player._update_snow_spray`) : 3 gerbes de grains (`CPUParticles2D`, marche aussi dans la version navigateur) s'allument l'une après l'autre à 220, 650 et 1100 px/s (`snow_spray_speeds`).
+  - 28, 56, puis 84 grains par gerbe (`snow_spray_amount`).
+  - Grains carrés, pour coller au pixel art : blancs (neige) à bleus (éclats de glace).
+  - Projetés vers l'arrière et vers le haut, en panache. Ils retombent avec la gravité et s'effacent.
+  - Taille et vitesse de projection augmentent en continu avec la vitesse.
+  - Roses pendant un boost de figure.
+  - Seulement quand le pingouin glisse au sol : pas en l'air, pas accroché au grappin, pas sonné.
+- **En l'air** : la traînée d'avant (blanche, rose pendant un boost) reste ; au sol elle s'efface.
+- Aucun asset ajouté : le grain est une texture de 1 pixel créée en code.
+- **Testé** : 118 fichiers OK ; captures à 500, 1370 et 1620 px/s ; temps du bot des médailles inchangé.

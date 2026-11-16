@@ -149,6 +149,22 @@ var _trick_boost_left: float = 0.0     # temps restant du boost en cours
 var _trick_boost_extra: float = 0.0    # px/s ajoutés aux plafonds pendant le boost
 
 # =============================================================================
+#  [NEIGE 1.31] Gerbe de neige et d'éclats de glace derrière Pinpouin AU SOL
+#  (demande de Manu). Elle grossit avec la vitesse : 3 gerbes empilées
+#  s'allument l'une après l'autre (légère, moyenne, forte) aux vitesses
+#  snow_spray_speeds, et la taille / la projection des grains augmentent en
+#  continu. Grains blancs (neige) et bleu clair (glace), carrés de quelques
+#  pixels pour coller au pixel art. Rose pendant un boost de figure.
+#  En l'air, c'est la traînée (Line2D) d'avant qui reste.
+#  Dessinée en code (CPUParticles2D : marche aussi dans la version navigateur).
+# =============================================================================
+## Vitesses (px/s) où s'allument les gerbes légère, moyenne et forte ([] = jamais).
+@export var snow_spray_speeds: Array[float] = [220.0, 650.0, 1100.0]
+## Grains par gerbe (chaque gerbe en émet autant par durée de vie).
+@export var snow_spray_amount: int = 28
+var _sprays: Array = []                 # les 3 CPUParticles2D
+
+# =============================================================================
 #  [FIX VITESSE -> 0] Réglages du filtre anti-collision-fantôme
 # =============================================================================
 ## Active le filtre qui ignore les normales "fantômes" des arêtes internes.
@@ -267,7 +283,8 @@ func _physics_process(delta: float) -> void:
 	move_and_slide()
 	_velocity = _apply_godot3_slide(velocity_before)
 	_unstick_from_ground()   # [SOL 1.9]
-	_update_speed_trail()    # [PHYSIQUE 1.10]
+	_update_speed_trail()    # [PHYSIQUE 1.10] (en l'air seulement depuis 1.31)
+	_update_snow_spray()     # [NEIGE 1.31] gerbe de neige et de glace au sol
 
 	# [FIX VITESSE -> 0] diagnostic console si la vitesse s'effondre quand même
 	if debug_speed_drop:
@@ -315,6 +332,12 @@ func _update_speed_trail() -> void:
 		_trail.width_curve = curve
 		add_child(_trail)
 	var speed := _velocity.length()
+	# [NEIGE 1.31] au sol, c'est la gerbe de neige qui montre la vitesse :
+	# la traînée (blanche, ou rose pendant un boost) ne s'affiche qu'en l'air
+	if is_on_ground:
+		if _trail.get_point_count() > 0:
+			_trail.remove_point(0)   # elle s'efface en douceur à l'atterrissage
+		return
 	# [BOOST FIGURE 1.30] traînée rose pendant un boost de figure (et visible
 	# même un peu en dessous de la vitesse habituelle de la traînée)
 	var boosting := _trick_boost_left > 0.0
@@ -679,3 +702,74 @@ func trick_boost(combo: int) -> void:
 	_velocity += dir * amount
 	_trick_boost_left = trick_boost_time
 	_trick_boost_extra = amount
+
+
+
+# [NEIGE 1.31] Crée les 3 gerbes (une seule fois) puis les règle à chaque image.
+func _make_snow_spray() -> void:
+	# couleurs tirées au hasard pour chaque grain : neige blanche → glace bleue
+	var colors := Gradient.new()
+	colors.set_color(0, Color(1, 1, 1))
+	colors.set_color(1, Color(0.30, 0.62, 0.98))      # éclat de glace bien bleu
+	colors.add_point(0.45, Color(0.92, 0.97, 1.0))    # neige
+	colors.add_point(0.75, Color(0.55, 0.80, 1.0))    # glace claire
+	# fondu : opaque au départ, transparent en fin de vie
+	# un grain = un carré blanc de 1 px (agrandi par scale_amount) : sans
+	# texture, un CPUParticles2D ne dessine rien
+	var img := Image.create(1, 1, false, Image.FORMAT_RGBA8)
+	img.fill(Color.WHITE)
+	var grain := ImageTexture.create_from_image(img)
+	var fade := Gradient.new()
+	fade.set_color(0, Color(1, 1, 1, 0.95))
+	fade.set_color(1, Color(1, 1, 1, 0.0))
+	for i in snow_spray_speeds.size():
+		var p := CPUParticles2D.new()
+		p.top_level = true             # les grains restent là où ils sont tombés
+		p.z_index = -1                 # derrière le pingouin
+		p.emitting = false
+		p.amount = snow_spray_amount * (i + 1)   # 28 / 56 / 84 : de plus en plus dense
+		p.lifetime = 0.45 + 0.1 * i
+		p.local_coords = false
+		p.emission_shape = CPUParticles2D.EMISSION_SHAPE_SPHERE
+		p.emission_sphere_radius = 6.0
+		p.spread = 22.0 + 6.0 * i
+		p.gravity = Vector2(0, 980)
+		p.damping_min = 20.0
+		p.damping_max = 60.0
+		p.angular_velocity_min = -180.0
+		p.angular_velocity_max = 180.0
+		p.texture = grain
+		p.color_initial_ramp = colors
+		p.color_ramp = fade
+		add_child(p)
+		_sprays.append(p)
+
+
+func _update_snow_spray() -> void:
+	if _sprays.is_empty():
+		_make_snow_spray()
+	var speed := _velocity.length()
+	# sens de la projection : vers l'arrière et un peu vers le haut
+	var back := -_velocity.normalized() if speed > 1.0 else Vector2.LEFT
+	var dir := (back + Vector2(0, -1.3)).normalized()   # en panache, vers le haut
+	# point de départ : sous les pattes (le pingouin suit la pente)
+	var feet := global_position + Vector2(-back.x * 6.0, 14.0).rotated(rotation)
+	# le pingouin bouge APRÈS ce réglage (move_and_slide) : on vise là où il
+	# sera, sinon à grande vitesse la gerbe démarre loin derrière les pattes
+	feet += _velocity * get_physics_process_delta_time()
+	var t := clampf(speed / ground_max_speed, 0.0, 1.5)   # 0 à l'arrêt, 1 à la vitesse max
+	var boosting := _trick_boost_left > 0.0
+	# gerbe active seulement au sol et hors grappin / chute (pas en mode « sonné »)
+	var on_snow: bool = is_on_ground and _states != null and _states.current != null \
+		and _states.current.super_state_name == "ON_GROUND"
+	for i in _sprays.size():
+		var p: CPUParticles2D = _sprays[i]
+		p.emitting = on_snow and speed >= snow_spray_speeds[i]
+		p.global_position = feet
+		p.direction = dir
+		p.initial_velocity_min = 80.0 + 300.0 * t
+		p.initial_velocity_max = 180.0 + 620.0 * t
+		# taille des grains en pixels du monde (la caméra dézoome souvent ~×0,5)
+		p.scale_amount_min = 5.0 + 4.0 * t + 2.0 * i
+		p.scale_amount_max = 9.0 + 9.0 * t + 3.0 * i
+		p.modulate = Color(1.0, 0.6, 0.9) if boosting else Color.WHITE
