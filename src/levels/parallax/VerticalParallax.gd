@@ -99,6 +99,43 @@ extends ParallaxBackground
 ## (× l'échelle du sprite : 2000 × 5 = 10 000 px à l'écran).
 @export var extension_rows: float = 2000.0
 
+# --- [FOND 1.26] Mise en page « à la Alto's Odyssey » (lot 3, retour de Léo) ---
+# Constat (captures sur Nice Slope, Spaghetti, Corridor) : les 3 images
+# glissaient en hauteur à des vitesses différentes, et la grande bande sombre
+# du bas de l'image des nuages apparaissait entre les montagnes et la brume
+# (« bande noire » à bord droit) ; le cadrage calé sur le bas du glacier
+# cachait aussi presque toutes les montagnes.
+# Nouvelle mise en page (alto_layout = true) :
+#  - COMPOSITION FIXE À L'ÉCRAN : chaque image est placée à une hauteur
+#    choisie (en lignes de pixels de l'image, alto_rows) dans un écran de
+#    180 lignes, centré verticalement ; le décor ne suit plus les pentes ;
+#  - ORDRE DES PLANS : nuages au fond, glacier (brume + falaises) au milieu,
+#    montagnes devant -> la brume passe au pied des montagnes et la bande
+#    sombre des nuages reste cachée derrière ;
+#  - ÉCHELLE ENTIÈRE ×4 (art_scale) : 180 lignes d'image = 720 px d'écran,
+#    pixels nets, et tout le dessin tient à l'écran (nuages, sommets, brume,
+#    falaises) ;
+#  - à peine de mouvement vertical : un léger décalage selon la profondeur
+#    pendant les sauts et les chutes (alto_vertical_strength, plafonné à
+#    alto_max_shift px), qui revient en douceur (alto_follow_time) ;
+#  - prolongements : ciel vers le haut (nuages), falaises vers le bas
+#    (glacier) : jamais de vide, même sur un écran très haut ;
+#  - légère « brume de profondeur » sur le plan le plus lointain (alto_haze).
+# Aucune image n'est modifiée. alto_layout = false remet la version 1.9.
+@export var alto_layout: bool = true
+@export var art_scale: float = 4.0
+## Ligne d'écran (sur 180) où se place le HAUT de chaque image.
+@export var alto_rows := {"clouds": -10.0, "glacier": -100.0, "mountains": -78.0}
+## Ordre d'affichage (z_index) : du plus lointain au plus proche.
+@export var alto_z := {"clouds": -126, "glacier": -123, "mountains": -120}
+@export var alto_vertical_strength: float = 0.06
+@export var alto_max_shift: float = 40.0
+@export var alto_follow_time: float = 0.8
+@export_range(0.0, 1.0) var alto_haze: float = 0.12
+const ALTO_SCREEN_ROWS := 180.0
+var _alto_sprites := {}      # ParallaxLayer -> [Sprite2D, nom, profondeur 0..1]
+var _alto_follow = null
+
 var _follow_y = null         # [FOND 1.8] hauteur de caméra moyenne (suit les pentes)
 
 var _ref_cam_y = null        # = reference_camera_y (gardé en variable pour lisibilité)
@@ -111,6 +148,9 @@ var _top_layer = null        # plan dont le haut est le plus haut (ciel)
 
 func _ready() -> void:
 	scroll_ignore_camera_zoom = ignore_zoom
+	if alto_layout:
+		_setup_alto()   # [FOND 1.26]
+		return
 	if readable_parallax:
 		_apply_readable_parallax()   # [FOND 1.9] avant toute mesure
 	for child in get_children():
@@ -327,6 +367,9 @@ func _layer_bounds(layer: Node) -> Rect2:
 
 
 func _process(_delta: float) -> void:
+	if alto_layout:
+		_process_alto(_delta)   # [FOND 1.26]
+		return
 	var cam := get_viewport().get_camera_2d()
 	if cam == null:
 		return
@@ -380,3 +423,89 @@ func _process(_delta: float) -> void:
 			correction = -top                     # on remonte le décor
 	for layer in offsets:
 		layer.motion_offset.y = _base_offsets[layer] + offsets[layer] + correction
+
+
+
+# --- [FOND 1.26] Mise en page « à la Alto » ------------------------------------
+func _alto_name(spr: Sprite2D) -> String:
+	var path: String = spr.texture.resource_path.get_file().to_lower()
+	for key in alto_rows:
+		if path.contains(key):
+			return key
+	return ""
+
+
+func _setup_alto() -> void:
+	var found := []
+	for layer in get_children():
+		if not layer is ParallaxLayer:
+			continue
+		layer.texture_repeat = CanvasItem.TEXTURE_REPEAT_ENABLED
+		for c in layer.get_children():
+			if c is Sprite2D and c.texture != null:
+				var key := _alto_name(c)
+				if key != "":
+					found.append([layer, c, key])
+				break
+	# vitesse horizontale selon la profondeur (du plus lointain au plus proche)
+	found.sort_custom(func(a, b): return alto_z[a[2]] < alto_z[b[2]])
+	for i in found.size():
+		var layer: ParallaxLayer = found[i][0]
+		var spr: Sprite2D = found[i][1]
+		var key: String = found[i][2]
+		var h: float = spr.texture.get_size().y
+		# image entière en hauteur (lignes 0..h), répétée en largeur comme avant
+		spr.region_enabled = true
+		spr.region_rect = Rect2(spr.region_rect.position.x, 0.0, spr.region_rect.size.x, h)
+		spr.centered = false
+		spr.scale = Vector2(signf(spr.scale.x) * art_scale, art_scale)
+		spr.position = Vector2(spr.position.x, 0.0)
+		spr.z_index = alto_z[key]
+		layer.motion_scale = Vector2(parallax_speeds[mini(i, parallax_speeds.size() - 1)], 0.0)
+		if infinite_horizontal:
+			var period := _layer_period(layer)
+			if period > 0.0:
+				layer.motion_mirroring.x = period
+		var depth: float = float(i + 1) / float(found.size())   # 0 = loin, 1 = proche
+		_alto_sprites[layer] = [spr, key, depth]
+		var img: Image = spr.texture.get_image()
+		if img != null and img.is_compressed():
+			img = img.duplicate()
+			img.decompress()
+		if img == null:
+			continue
+		var used := img.get_used_rect()
+		var reg: Rect2 = spr.region_rect
+		var rect: Rect2 = spr.get_rect()
+		# prolongements : ciel vers le haut (nuages), falaises vers le bas (glacier)
+		if key == "clouds":
+			_add_extension(spr, reg, used.position.y, rect.position.y + used.position.y, false, rect, img)
+			# brume de profondeur : le plan le plus lointain tire vers le ciel
+			spr.modulate = Color(1, 1, 1).lerp(Color(0.80, 0.86, 1.0), alto_haze)
+		elif key == "glacier":
+			_add_extension(spr, reg, used.end.y - 1, rect.position.y + used.end.y, true, rect, img)
+
+
+func _process_alto(delta: float) -> void:
+	var cam := get_viewport().get_camera_2d()
+	var view_h: float = get_viewport().get_visible_rect().size.y
+	# composition de 180 lignes × art_scale, centrée verticalement
+	var top: float = (view_h - ALTO_SCREEN_ROWS * art_scale) * 0.5
+	# léger mouvement vertical pendant les sauts / chutes, qui revient tout seul
+	var dy := 0.0
+	if cam != null:
+		var cy: float = cam.get_screen_center_position().y
+		if _alto_follow == null:
+			_alto_follow = cy
+		_alto_follow = lerpf(_alto_follow, cy, 1.0 - exp(-delta / maxf(alto_follow_time, 0.01)))
+		dy = cy - _alto_follow
+	for layer in _alto_sprites:
+		var spr: Sprite2D = _alto_sprites[layer][0]
+		var key: String = _alto_sprites[layer][1]
+		var depth: float = _alto_sprites[layer][2]
+		var limit: float = alto_max_shift * depth
+		var shift: float = limit * tanh(-dy * alto_vertical_strength * depth / maxf(limit, 0.01))
+		var target: float = top + float(alto_rows[key]) * art_scale + shift
+		# position réelle du haut de l'image à l'écran -> on corrige l'écart
+		var actual: float = spr.get_global_transform_with_canvas().origin.y
+		layer.motion_offset.y += target - actual

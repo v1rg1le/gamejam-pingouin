@@ -562,3 +562,18 @@ Demande de l'équipe : plus de coupure nette du fond, une boucle infinie qui sui
   - multi à 2 dans les deux modes (Score : classement et retour au salon ; Chill : pas de classement, retour au salon après la dernière arrivée) ;
   - bot enfant en Chill avec mode enfant ;
   - 0 erreur de script, 118 fichiers OK.
+
+## 35. Fond « à la Alto's Odyssey » (16/11, version 1.26)
+
+- **Retour de Léo** : sur les longues pentes, le fond « pète » encore ; proposition de Manu : garder nos images mais les afficher comme dans Alto's Odyssey.
+- **Cause trouvée** (captures sur Nice Slope, Spaghetti et Corridor) : les 3 images glissaient en hauteur à des vitesses différentes. La grande bande sombre du bas de l'image des nuages apparaissait alors entre les montagnes et la brume (bande noire à bord droit). Et le cadrage calé sur le bas du glacier cachait presque toutes les montagnes.
+- **Nouvelle mise en page** (`VerticalParallax.gd`, `alto_layout = true`) :
+  - **composition fixe à l'écran** : le décor ne suit plus les pentes. Chaque image est placée à une hauteur choisie (`alto_rows`, en lignes de pixels de l'image) dans un écran de 180 lignes, centré verticalement ;
+  - **nouvel ordre des plans** (z_index changés par le script, scènes intactes) : nuages au fond, glacier au milieu (sa brume passe au pied des montagnes), montagnes devant. La bande sombre des nuages reste toujours cachée ;
+  - **échelle entière ×4** (`art_scale`, avant ×5) : 180 lignes d'image = 720 px. Pixels nets, et tout le dessin tient à l'écran : nuages, sommets, brume, falaises ;
+  - **à peine de mouvement vertical** : léger décalage selon la profondeur pendant les sauts et les chutes, au plus 40 px, qui revient en 0,8 s (`alto_vertical_strength`, `alto_max_shift`, `alto_follow_time`) ;
+  - **prolongements** : ciel vers le haut, falaises vers le bas, en aplats de couleur. Aucun vide, même sur un écran très haut (vérifié en 900 × 1100) ;
+  - **légère brume de profondeur** sur les nuages, teintés à 12 % vers la couleur du ciel (`alto_haze`) ;
+  - défilement horizontal inchangé : 0,2 / 0,35 / 0,5 selon la profondeur.
+- **Vérifié** en captures toutes les 3 s sur toute la descente de Nice Slope et de Corridor : composition identique du haut en bas des pentes, plus de bande noire. Même rendu sur le Tutoriel, Chill 704, Chill 917, Flat, Hook you fool ! et Spaghetti.
+- Aucune image modifiée ni supprimée. `alto_layout = false` (sur le `ParallaxBackground` d'un niveau) remet le fond de la 1.9.
