@@ -26,7 +26,7 @@ extends CharacterBody2D
 #        la normale du sol à la place.
 #     3. Amorti d'atterrissage : retomber "contre" une pente (fond de vallée)
 #        effaçait toute la vitesse qui rentrait dans le sol (900 -> 60 px/s
-#        en une frame). Une partie (landing_speed_keep = 50 %) est rendue le
+#        en une frame). Une partie (landing_speed_keep = 75 %, 50 % avant la 1.24) est rendue le
 #        long de la pente. Mettre landing_speed_keep à 0 = comportement d'origine.
 #     4. Garde anti-NaN (le swing du grappin pouvait produire des NaN).
 #     5. Diagnostic : si la vitesse s'effondre quand même, un message
@@ -145,7 +145,10 @@ var direction: Vector2
 var _ghost_filter_blocked_frames: int = 0
 ## Fraction (0..1) de la vitesse "écrasée" contre le sol lors d'un atterrissage
 ## qui est rendue le long de la pente. 0 = comportement Godot 3 d'origine.
-@export_range(0.0, 1.0) var landing_speed_keep: float = 0.5
+# [1.24] 0,5 -> 0,75 (retour de Léo) : à 0,5 le pingouin perdait la moitié de
+# la vitesse « écrasée » contre le sol à chaque bosse, ce qui faisait un petit
+# « freeze » à répétition qui ressemblait à un bug. 0 = comportement Godot 3.
+@export_range(0.0, 1.0) var landing_speed_keep: float = 0.75
 ## Vitesse d'impact minimale (px/s, perpendiculaire au sol) pour appliquer l'amorti.
 @export var landing_impact_min: float = 250.0
 const GHOST_FILTER_MAX_BLOCKED_FRAMES = 6

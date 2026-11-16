@@ -24,7 +24,7 @@ extends Control
 # Courses proposées en multijoueur (les niveaux avec arrivée ; les niveaux
 # Chill n'ont pas de fin, donc pas de classement).
 const RACES = [
-	["Tuto : Bateau", "res://src/levels/LevelBateau.tscn"],
+	["Tutoriel", "res://src/levels/LevelBateau.tscn"],   # [1.24] « Tuto : Bateau » -> « Tutoriel » (Léo)
 	["Flat and fun", "res://src/levels/LevelRandomFlat.tscn"],
 	["Corridor", "res://src/levels/LevelRandomCorridor.tscn"],
 	["Nice Slope", "res://src/levels/LevelRandomNiceSlope.tscn"],

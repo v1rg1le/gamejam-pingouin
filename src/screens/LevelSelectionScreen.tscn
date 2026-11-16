@@ -107,7 +107,7 @@ vertical_alignment = 1
 custom_minimum_size = Vector2(0, 46)
 layout_mode = 2
 size_flags_vertical = 0
-text = "★  Tuto : Bateau  ★"
+text = "★  Tutoriel  ★"
 next_scene_path = "res://src/levels/LevelBateau.tscn"
 
 [node name="ButtonFlat" parent="Margin/VBox/Columns/RacesPanel/VBox" instance=ExtResource("5")]

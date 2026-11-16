@@ -15,6 +15,12 @@ var play_stopped = false
 var music_on = true # false #  true
 
 func _ready():
+	# [1.24] BUG « le volume de la musique dans les Options ne fait rien » (Léo) :
+	# le lecteur de musique n'était branché sur aucun bus, donc sur « Master »,
+	# alors que le curseur des Options règle le bus « Music »
+	# (Settings.apply_music_volume, default_bus_layout.tres). On le branche
+	# sur « Music » : le curseur agit maintenant pour de vrai.
+	_music_player.bus = "Music"
 	# non, pour l'instant musique se lance avec WelcomeScreen
 	# a decommenter pour que la musique se lance avec le jeu
 	play(main_theme)

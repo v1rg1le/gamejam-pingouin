@@ -517,3 +517,12 @@ Demande de l'équipe : plus de coupure nette du fond, une boucle infinie qui sui
 
   Sans le mode, l'enfant ouvre la pause en tapotant, et finit souvent par toucher deux fois « Choisir un niveau » ou « Recommencer » malgré la confirmation. Les 4 sorties restantes du profil « grand » viennent d'un doigt gardé plus d'1 s sur le bouton pause. Hook you fool ! reste le plus dur : le pont magique aide, mais l'enfant tombe encore souvent (le niveau est long).
 - **À noter** : les records, temps et fantômes faits en mode enfant comptent comme les autres (le mode est pensé pour les petits, pas pour battre des records).
+
+## 33. Retours de Léo, lot 1 (16/11, version 1.24)
+
+- **Volume de la musique** (Options) : il ne faisait rien. Le lecteur de musique (`MusicController`) n'était branché sur aucun bus, donc sur « Master », alors que le curseur règle le bus « Music ». Il est maintenant branché sur « Music » (vérifié : curseur à 20 % = −14 dB sur ce bus).
+- **« Vitesse gardée à l'atterrissage »** (`landing_speed_keep`, panneau F2) : 0,5 → **0,75** par défaut. Ce réglage date de la correction du bug vitesse → 0 (section 2) : à l'atterrissage contre une pente, Godot 3 effaçait toute la vitesse « écrasée » contre le sol. À 0,5, le pingouin en perdait encore la moitié à chaque bosse, d'où un petit « freeze » à répétition. Mesure (bot avance + pump, 30 s) : vitesse moyenne +3 à +12 % selon le niveau, aucune chute brutale. ⚠️ Un réglage déjà changé avec le panneau F2 reste prioritaire : bouton « Par défaut » du panneau pour prendre la nouvelle valeur.
+- **Tutoriel** :
+  - le bouton s'appelle « ★ Tutoriel ★ » (au lieu de « Tuto : Bateau ») ; même nom dans le salon multi et l'échange de fantômes. Le fichier du niveau ne change pas (`LevelBateau.tscn`) : records et fantômes conservés ;
+  - nouvel ordre des panneaux : avancer → PUMP → SAUT → rotation en l'air → SCORE → grappin… (avant : avancer → SCORE → saut → pump → rotation). Les panneaux restent aux mêmes endroits, seuls les textes changent de place.
+- **Un seul écran de démarrage** : le logo nuit (tête de Pinpouin masquée dans le rond du « i »). L'image « Pinpouin prêt au départ » n'est plus montrée ; il reste un fondu de 0,35 s de la couleur nuit vers l'écran titre. Image conservée, `SplashIntro.SHOW_INTRO_IMAGE = true` pour la remettre.

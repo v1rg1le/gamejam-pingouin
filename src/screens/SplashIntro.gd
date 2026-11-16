@@ -27,6 +27,13 @@ const HOLD := 1.5          # s : image affichée
 const FADE_OUT := 0.5      # s : disparition, on découvre l'écran titre
 
 static var already_shown := false   # une seule fois par lancement
+# [1.24] « 1 splash screen ça suffit » (Léo, qui préfère le 1er : le logo nuit
+# avec la tête de Pinpouin masquée dans le rond du « i »). L'image « Pinpouin
+# prêt au départ » n'est plus montrée : il ne reste qu'un fondu doux de la
+# couleur nuit du démarrage vers l'écran titre (sans lui, le passage serait
+# brutal). L'image est conservée dans le projet : remettre true pour la revoir.
+const SHOW_INTRO_IMAGE := false
+const FADE_ONLY := 0.35    # s : fondu nuit -> écran titre quand l'image est masquée
 
 var _tween: Tween
 var _leaving := false
@@ -50,6 +57,13 @@ func _ready() -> void:
 	back.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	back.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(back)
+	if not SHOW_INTRO_IMAGE:
+		# [1.24] simple fondu depuis la couleur du démarrage, sans image
+		_leaving = true
+		var t := create_tween()
+		t.tween_property(self, "modulate:a", 0.0, FADE_ONLY)
+		t.tween_callback(queue_free)
+		return
 	var pic := TextureRect.new()
 	pic.texture = load("res://sprites/screens/splash_intro_banquise.png")
 	pic.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
