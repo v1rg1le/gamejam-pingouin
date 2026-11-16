@@ -145,6 +145,13 @@ size_flags_vertical = 0
 text = "Spaghetti"
 next_scene_path = "res://src/levels/LevelRandomSpaghetti.tscn"
 
+[node name="ButtonSansFin" parent="Margin/VBox/Columns/RacesPanel/VBox" instance=ExtResource("5")]
+custom_minimum_size = Vector2(0, 46)
+layout_mode = 2
+size_flags_vertical = 0
+text = "∞  Sans fin  ∞"
+next_scene_path = "res://src/levels/LevelEndless.tscn"
+
 [node name="ChillPanel" type="PanelContainer" parent="Margin/VBox/Columns"]
 custom_minimum_size = Vector2(300, 0)
 layout_mode = 2
@@ -189,7 +196,7 @@ custom_minimum_size = Vector2(0, 46)
 layout_mode = 2
 size_flags_vertical = 0
 text = "Sans fin"
-next_scene_path = "res://src/levels/LevelEndless.tscn"
+next_scene_path = "res://src/levels/LevelEndlessChill.tscn"
 
 [node name="ChillInfo" type="Label" parent="Margin/VBox/Columns/ChillPanel/VBox"]
 layout_mode = 2

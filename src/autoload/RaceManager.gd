@@ -531,7 +531,9 @@ func _show_start_help() -> void:
 	if Settings.is_chill() and has_finish and _has_half_pipe():
 		text += "\n\nMode Chill : pas de chrono. Après l'arrivée,\nreste dans le half-pipe faire des figures autant que tu veux !"
 	# [SANS FIN 1.32] le niveau Sans fin explique ses trous
-	if level_path.ends_with("LevelEndless.tscn"):
+	if level_path.contains("LevelEndless"):
+		if not Settings.is_chill() and not level_path.ends_with("LevelEndlessChill.tscn"):
+			text += "\n\n3 VIES (têtes de Pinpouin) · médailles à 1 / 3 / 5 km"
 		text += "\n\nSANS FIN : va le plus loin possible !\nPetits trous : saute.  Grands trous : grappin sur les blocs de glace,\npuis lâche quand Pinpouin remonte pour être projeté."
 	# [MODE ENFANT 1.23] carte courte : un enfant ne lit pas un long texte
 	if Settings.kid_mode:

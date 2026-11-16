@@ -40,6 +40,11 @@ const TYPE_NAMES := ["saut", "grand saut", "grappin", "grappin double", "grappin
 var sol_res = preload("res://src/levels/GroundGenerator/sol.tscn")
 var fish_res = preload("res://src/levels/parts/StaticBody2DFish.tscn")
 
+## [SANS FIN 1.33] true = toujours en Chill (bouton du panneau CHILL, scène
+## LevelEndlessChill.tscn) ; false = suit le choix Chill / Score des COURSES.
+@export var force_chill: bool = false
+var score = null             # EndlessScore (mode Score) ou null
+
 ## Pour les tests : -1 = tirage normal ; sinon, tous les trous de ce type.
 @export var force_type: int = -1
 ## Longueur des îles (px), tirée entre ces deux valeurs.
@@ -75,6 +80,11 @@ func _ready() -> void:
 	_player = get_parent().get_node_or_null("Player")
 	if _player != null:
 		_player.global_position = Vector2(250, surface_y(chunks[0], 250) - 60)
+	# [SANS FIN 1.33] mode Score : compteur de mètres, 3 vies, médailles
+	if not force_chill and not Settings.is_chill() and _player != null:
+		score = preload("res://src/levels/endless/EndlessScore.gd").new()
+		score.setup(_player)
+		get_parent().add_child.call_deferred(score)
 
 
 # -----------------------------------------------------------------------------

@@ -159,6 +159,13 @@ func _refresh_mode() -> void:
 		badge.medal = 0
 		if not score_mode:
 			continue
+		# [SANS FIN 1.33] record en mètres (pas de chrono ni de points)
+		if b.next_scene_path.ends_with("LevelEndless.tscn"):
+			var bm: int = preload("res://src/levels/endless/EndlessScore.gd").get_best_meters()
+			if bm > 0:
+				b.text += "   ·   " + preload("res://src/levels/endless/EndlessScore.gd").format_meters(bm)
+			badge.medal = RaceManager.get_best_medal(b.next_scene_path)
+			continue
 		# [FANTÔMES] record de temps et [SCORE] meilleur score du niveau
 		var best: float = RaceManager.get_best_time(b.next_scene_path)
 		if best >= 0.0:

@@ -686,3 +686,21 @@ Demande de l'équipe : plus de coupure nette du fond, une boucle infinie qui sui
   - Mode enfant, bot qui ne saute jamais : 17 îles en 150 s grâce au pont magique, contre 1 sans le mode enfant.
 - **Testé** : 120 fichiers OK ; captures de chaque type de trou ; panneau CHILL avec 4 boutons sur écran de téléphone.
 - **Prochaine étape (1.33)** : mode Score du Sans fin (compteur de mètres, record, 3 vies en têtes de Pinpouin, médailles 1 / 3 / 5 km).
+
+## 42. Sans fin en mode Score : mètres, 3 vies, médailles (16/11, version 1.33)
+
+- **Choix de Manu** : 3 vies en têtes de Pinpouin ; médailles bronze 1 km, argent 3 km, or 5 km.
+- **Où le trouver** :
+  - bouton « ∞ Sans fin ∞ » dans les COURSES, qui suit le choix Chill / Score ;
+  - le bouton « Sans fin » du panneau CHILL reste toujours en Chill (scène `LevelEndlessChill.tscn`, qui reprend `LevelEndless.tscn` avec `force_chill = true`).
+- **En Score** (`src/levels/endless/EndlessScore.gd`, créé par le générateur) :
+  - **Compteur** en haut au centre (en haut à droite, il y a le bouton pause tactile) : distance en mètres, record dessous, puis la médaille en cours et la suivante (« Argent à 3 km »).
+  - **Distance** = point le plus loin atteint ; une chute ne fait pas reculer le compteur.
+  - **1 m = 40 px**, à peu près la taille du pingouin (`PX_PER_METER`).
+  - **3 vies** : 3 têtes de Pinpouin en haut à gauche, découpées dans le sprite du pingouin, sans image ajoutée. Chaque chute en grise une, et on réapparaît avant le trou. À la 3e chute : panneau « PLUS DE VIES ! » avec distance, record, médaille, et boutons Rejouer / Menu.
+  - **Médailles** : « MÉDAILLE BRONZE ! » s'affiche en passant 1 km, de même pour 3 et 5 km. La meilleure médaille et le record (section `endless` du fichier d'options) s'affichent sur le bouton du menu en mode Score.
+  - La carte d'aide du départ rappelle les 3 vies et les médailles.
+- **Réglage de l'échelle aux bots** (parties complètes jusqu'à la 3e chute) :
+  - bot « saut + grappin » : 3,4 à 8,9 km, l'or est atteint dans 4 parties sur 6 (comme les temps de l'or des courses, mesurés sur un bon joueur) ;
+  - bot « saut seul » : 783 m, il s'arrête aux premiers trous à grappin, donc pas de bronze sans le grappin.
+- **Testé** : 122 fichiers OK ; captures du compteur et de l'écran de fin ; menu sur écran de téléphone avec le 7e bouton ; le Sans fin du panneau CHILL reste sans vies même quand le mode Score est choisi.
