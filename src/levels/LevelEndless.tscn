@@ -1,5 +1,6 @@
-[gd_scene load_steps=8 format=2]
+[gd_scene load_steps=9 format=2]
 
+[ext_resource path="res://src/levels/parallax/SkyCycle.gd" type="Script" id=95]
 [ext_resource path="res://src/levels/parallax/VerticalParallax.gd" type="Script" id=91]
 [ext_resource path="res://src/ui/UserInterface.tscn" type="PackedScene" id=93]
 [ext_resource path="res://src/levels/endless/EndlessGenerator.gd" type="Script" id=94]
@@ -55,3 +56,6 @@ collision_mask = 7
 
 [node name="SansFin" type="Node2D" parent="."]
 script = ExtResource( 94 )
+
+[node name="Ciel" type="Node" parent="."]
+script = ExtResource( 95 )

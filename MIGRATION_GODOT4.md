@@ -756,3 +756,21 @@ Demande de l'équipe : plus de coupure nette du fond, une boucle infinie qui sui
   - bot grappin : grappin 15/15, double 11/12, montée 17/17, plafond 8/8.
   - Échelle des mètres : le bot grappin faisait 6,9 à 10,9 km avant sa 3e chute. L'or serait atteint à chaque fois, donc **1 m = 55 px** au lieu de 40. Le bot fait alors 5,0 à 8,0 km (or 4 fois sur 5) ; le bot « saut seul » environ 670 m (pas de bronze sans grappin).
 - **Leçon pour la suite** : avant chaque mesure aux bots, effacer `user://pinpouin.cfg` (réglages F2, records et fantômes) de la machine de test.
+
+## 44. Ciel qui change de couleur (16/11, version 1.35)
+
+- **Idée de Léo** (« un ciel qui change de couleur, dans l'esprit d'Alto »), lancée par Manu.
+- **Sans fin** : le ciel suit la distance parcourue.
+  - 0 m aube rosée, 1 km plein jour (couleurs d'origine), 3 km couchant orangé, 5 à 6,5 km nuit bleue avec étoiles et pleine lune, retour à l'aube à 8 km, et ainsi de suite.
+  - Fondus doux. Le ciel suit le point le plus loin atteint : une chute ne fait pas revenir le jour.
+  - La nuit, avec la lune et les étoiles, devient la récompense visuelle de ceux qui passent les 5 km (l'or).
+- **Niveaux Chill** : ambiance fixe. 704 au petit matin, 917 au couchant, Half-pipe de nuit étoilée.
+- **Comment** (`src/levels/parallax/SkyCycle.gd`, un nœud « Ciel » dans chaque niveau concerné ; `fixed_at` = ambiance fixe, en « mètres » du cycle) :
+  - les 3 plans du fond sont teintés via leur `ParallaxLayer` (la teinte passe aussi à leurs prolongements) ;
+  - le premier plan (îles, pingouin, décor) est teinté plus légèrement par un `CanvasModulate`, pour rester lisible ; au couchant, presque pas, pour que la glace reste bleue ;
+  - la couleur du ciel derrière les images (couleur de fond du rendu) change aussi, et elle est remise d'origine en quittant le niveau ;
+  - étoiles qui scintillent et lune dessinées en code (`SkyStars.gd`), entre les nuages et les montagnes ;
+  - l'interface (HUD, boutons) n'est pas teintée.
+- **Aucune image ajoutée ni modifiée.** Les autres niveaux (courses) gardent le ciel d'origine.
+- Palette réglable en tête de `SkyCycle.gd` (`KEYS` : mètres, teinte du fond, teinte du premier plan, couleur du ciel, nuit).
+- **Testé** : 125 fichiers OK ; captures des 4 moments du Sans fin et des 3 niveaux Chill.

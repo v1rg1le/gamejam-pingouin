@@ -1,5 +1,6 @@
-[gd_scene load_steps=9 format=2]
+[gd_scene load_steps=10 format=2]
 
+[ext_resource path="res://src/levels/parallax/SkyCycle.gd" type="Script" id=95]
 [ext_resource path="res://src/levels/parallax/VerticalParallax.gd" type="Script" id=91]
 [ext_resource path="res://src/levels/ChillLoop.gd" type="Script" id=92]
 [ext_resource path="res://src/levels/GroundGenerator/sol.tscn" type="PackedScene" id=1]
@@ -117,3 +118,7 @@ position = Vector2( 13295.8, -640.814 )
 
 [node name="StaticBody2D5" parent="Plateforms" instance=ExtResource( 2 )]
 position = Vector2( 5039.85, -752.814 )
+
+[node name="Ciel" type="Node" parent="."]
+script = ExtResource( 95 )
+fixed_at = 300.0

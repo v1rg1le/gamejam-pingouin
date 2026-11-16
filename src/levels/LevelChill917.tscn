@@ -1,5 +1,6 @@
-[gd_scene load_steps=9 format=2]
+[gd_scene load_steps=10 format=2]
 
+[ext_resource path="res://src/levels/parallax/SkyCycle.gd" type="Script" id=95]
 [ext_resource path="res://src/levels/parallax/VerticalParallax.gd" type="Script" id=91]
 [ext_resource path="res://src/levels/ChillLoop.gd" type="Script" id=92]
 [ext_resource path="res://src/ui/UserInterface.tscn" type="PackedScene" id=93]
@@ -80,3 +81,7 @@ coeff_pente = 0.1
 coef_pente_animated = true
 is_igloo = true
 noise_period = 1050
+
+[node name="Ciel" type="Node" parent="."]
+script = ExtResource( 95 )
+fixed_at = 3000.0
