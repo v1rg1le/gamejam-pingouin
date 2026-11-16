@@ -596,3 +596,16 @@ Demande de l'équipe : plus de coupure nette du fond, une boucle infinie qui sui
   - Une chute par un bout fait réapparaître sur le bord gauche du half-pipe.
 - **Figures visibles dans tous les niveaux Chill** (704, 917, Half-pipe) : avant, sans arrivée, il n'y avait aucun affichage. Maintenant, un HUD sans chrono ni score montre les figures réussies, et le maître fait son clin d'œil (`RaceManager._setup_tricks`, ride libre `free_ride`).
 - **Testé** : bot qui fait des allers-retours avec une figure à chaque décollage : 60 s sans chute, figures comptées. 704 et 917 sans erreur. 118 fichiers OK.
+
+## 38. Plafonds pour s'accrocher dans Chill 704 et 917 (16/11, version 1.29)
+
+- **Retour de Léo** : « Les chill levels ont pas de plafond, donc c'est peu dynamique ».
+- **Principe** (`ChillLoop.gd`, `_add_ceilings`) : au chargement, des plafonds de glace (des `sol` presque plats, comme celui du tutoriel) sont posés au-dessus de la piste.
+  - Un plafond de 1600 px tous les 4200 px (`ceiling_length`, `ceiling_period`), pas dans les 1500 premiers / derniers px (`ceiling_margin`).
+  - À 450 px au-dessus du point le plus haut de la piste sous lui (`ceiling_clearance`), comme le plafond du tutoriel : hors de portée d'un simple saut, à portée de grappin.
+  - Incliné comme la piste en dessous.
+  - Dans 704, pas de plafond là où une piste retournée sert déjà de plafond à portée de grappin (entre 150 et 1100 px au-dessus).
+  - Ils sont dans « Plateforms » : la boucle infinie les recopie avec le reste.
+  - `add_ceilings = false` sur le nœud `BoucleInfinie` pour les retirer.
+- **Résultat** : 917 : 18 plafonds ; 704 : 21. Bot qui lance le grappin vers le haut toutes les 3 s pendant 60 s : 917 : 4 → 15 accroches ; 704 : 3 → 11 accroches ; aucune chute. 118 fichiers OK.
+- **À vérifier en jouant** : les plafonds sont parfois juste au-dessus du haut de l'écran (on voit la corde partir hors champ). Si c'est gênant, baisser `ceiling_clearance` (ex. 380).

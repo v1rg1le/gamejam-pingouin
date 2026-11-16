@@ -28,6 +28,23 @@ extends Node2D
 ## copies (la nouvelle copie commence un tout petit peu avant la fin).
 @export var joint_overlap: float = 2.0
 
+# --- [PLAFONDS 1.29] Plafonds pour s'accrocher au grappin --------------------
+# Retour de Léo : « Les chill levels ont pas de plafond, donc c'est peu
+# dynamique ». Au chargement, on pose des PLAFONDS (des sols de glace,
+# comme celui du tutoriel) au-dessus de la piste, par tronçons :
+#  - un plafond de ceiling_length px tous les ceiling_period px ;
+#  - à ceiling_clearance px au-dessus du point le PLUS HAUT de la piste sous
+#    lui (jamais dans une piste, même dans 704 où il y a des pistes à
+#    plusieurs étages), à portée de grappin (1200 px) ;
+#  - incliné comme la piste (pente mesurée sous le tronçon).
+# Ils font partie du terrain d'origine (dans « Plateforms ») : la boucle
+# infinie les recopie avec le reste. add_ceilings = false pour les retirer.
+@export var add_ceilings: bool = true
+@export var ceiling_length: float = 1600.0
+@export var ceiling_period: float = 4200.0
+@export var ceiling_clearance: float = 450.0   # comme le plafond du tutoriel : visible à l'écran, hors de portée d'un simple saut
+@export var ceiling_margin: float = 1500.0   # pas de plafond au tout début / à la toute fin
+
 var _period := Vector2.ZERO      # décalage entre deux copies (fin - début)
 var _start := Vector2.ZERO       # début du terrain d'origine (monde)
 var _copies := {}                # k -> Array de nœuds copiés
@@ -50,6 +67,11 @@ func _setup() -> void:
 	var lines: Array = []
 	for src in _sources:
 		_collect_lines(src, lines)
+	if add_ceilings and not lines.is_empty():
+		_add_ceilings(lines, level)
+		lines.clear()
+		for src in _sources:
+			_collect_lines(src, lines)
 	if lines.is_empty():
 		push_warning("[CHILL] aucun sol trouvé : pas de boucle infinie")
 		return
@@ -140,3 +162,96 @@ func _copy_node(src: Node) -> Node:
 			box.add_child(_copy_node(c))
 		return box
 	return src.duplicate()
+
+
+
+# --- [PLAFONDS 1.29] ---------------------------------------------------------
+# Points de la piste (monde) regroupés par tranches de 64 px : pour chaque
+# tranche, le point le plus HAUT (y le plus petit) de tous les sols.
+func _surface_buckets(lines: Array, flipped: bool) -> Dictionary:
+	var buckets := {}
+	for line in lines:
+		# sols retournés (pistes du haut de 704) : ils servent déjà de plafond ;
+		# on les compte à part (flipped = true) pour ne pas poser de plafond
+		# là où il y en a déjà un, ni au-dessus d'eux (hors de portée)
+		if (line.get_parent().scale.y < 0.0) != flipped:   # (global_scale ne marche pas : (-1,-1) = rotation de 180°)
+			continue
+		for lp in line.points:
+			var p: Vector2 = line.global_transform * lp
+			var k := int(floor(p.x / 64.0))
+			# piste normale : point le plus HAUT ; sol retourné : son dessous (le plus BAS)
+			if not buckets.has(k) or (p.y > buckets[k] if flipped else p.y < buckets[k]):
+				buckets[k] = p.y
+	return buckets
+
+
+func _highest_between(buckets: Dictionary, x0: float, x1: float) -> float:
+	var best := INF
+	for k in range(int(floor(x0 / 64.0)), int(floor(x1 / 64.0)) + 1):
+		if buckets.has(k):
+			best = minf(best, buckets[k])
+	return best
+
+
+func _add_ceilings(lines: Array, level: Node) -> void:
+	var plateforms := level.get_node_or_null("Plateforms")
+	if plateforms == null:
+		return
+	var buckets := _surface_buckets(lines, false)
+	var roofs := _surface_buckets(lines, true)
+	var keys := buckets.keys()
+	if keys.is_empty():
+		return
+	keys.sort()
+	var x_min: float = keys[0] * 64.0
+	var x_max: float = keys[-1] * 64.0
+	var sol_res = load("res://src/levels/GroundGenerator/sol.tscn")
+	var n := 0
+	var x := x_min + ceiling_margin
+	while x + ceiling_length < x_max - ceiling_margin:
+		var y_start := _highest_between(buckets, x - 64.0, x + 64.0)
+		var y_end := _highest_between(buckets, x + ceiling_length - 64.0, x + ceiling_length + 64.0)
+		var top := _highest_between(buckets, x, x + ceiling_length)
+		# déjà un sol retourné au-dessus de ce tronçon : il sert de plafond
+		# (seulement s'il est à portée de grappin : moins de 1100 px au-dessus
+		# de la piste ; plus haut, il ne sert à rien et on pose notre plafond)
+		var has_roof := _roof_in_reach(roofs, buckets, x - 400.0, x + ceiling_length + 400.0)
+		if y_start < INF and y_end < INF and top < INF and not has_roof:
+			var slope: float = (y_end - y_start) / ceiling_length
+			# hauteur du plafond : ceiling_clearance au-dessus du point le plus
+			# haut de la piste, en suivant la pente (repère local du plafond)
+			var lift := INF
+			for k in range(int(floor(x / 64.0)), int(floor((x + ceiling_length) / 64.0)) + 1):
+				if buckets.has(k):
+					lift = minf(lift, buckets[k] - slope * (k * 64.0 - x))
+			var sol = sol_res.instantiate()
+			sol.set_collision_layer(2)     # calque « ground », comme les autres sols
+			sol.coeff_pente = slope
+			sol.noise_octaves = 1
+			sol.noise_persistence = 0.2
+			sol.noise_lacunarity = 3
+			sol.world_seed = "PLAFOND_%d" % n
+			sol.is_boost = false
+			sol.is_igloo = false
+			sol.is_final_map = false
+			sol.map_width = int(ceiling_length)
+			sol.map_height = 24            # presque plat
+			sol.h = 60                     # épaisseur
+			sol.position = Vector2(x, lift - ceiling_clearance - 24)
+			sol.name = "Plafond%d" % n
+			plateforms.add_child(sol)
+			n += 1
+		x += ceiling_period
+	print("[CHILL] plafonds ajoutés : ", n)
+
+
+# [PLAFONDS 1.29] y a-t-il un sol retourné à portée de grappin (entre 150 et
+# 1100 px au-dessus de la piste) quelque part au-dessus de ce tronçon ?
+# On regarde le DESSOUS du sol retourné (y le plus grand de la tranche).
+func _roof_in_reach(roofs: Dictionary, ground: Dictionary, x0: float, x1: float) -> bool:
+	for k in range(int(floor(x0 / 64.0)), int(floor(x1 / 64.0)) + 1):
+		if roofs.has(k) and ground.has(k):
+			var gap: float = ground[k] - roofs[k]
+			if gap > 150.0 and gap < 1100.0:
+				return true
+	return false
