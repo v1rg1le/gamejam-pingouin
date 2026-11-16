@@ -34,8 +34,11 @@ var _ui_root: Control = null
 var _dist_label: Label
 var _best_label: Label
 var _next_label: Label
+var _ghost_label: Label        # [FANTÔME SANS FIN 1.36] « Fantôme : 120 m devant »
+var _ghost_tick := 0.0
 var _heads: Array = []
 var _over_panel: PanelContainer = null
+var _new_ghost := false        # [FANTÔME SANS FIN 1.36] cette partie est devenue le fantôme
 
 
 func setup(p) -> void:
@@ -60,7 +63,9 @@ func _ready() -> void:
 	_dist_label = _make_label(40, Color.WHITE)
 	_best_label = _make_label(18, Color(1, 0.94, 0.4))
 	_next_label = _make_label(16, Color(0.75, 0.95, 1.0))
-	for l in [_dist_label, _best_label, _next_label]:
+	# [FANTÔME SANS FIN 1.36] écart avec le fantôme (souvent hors de l'écran)
+	_ghost_label = _make_label(16, Color(0.55, 0.8, 1.0))
+	for l in [_dist_label, _best_label, _next_label, _ghost_label]:
 		l.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		top.add_child(l)
 	_best_label.text = "Record  " + format_meters(best) if best > 0 else "Premier essai !"
@@ -101,6 +106,7 @@ func _make_label(size: int, color: Color) -> Label:
 func _physics_process(_delta: float) -> void:
 	if over or player == null or not is_instance_valid(player):
 		return
+	_update_ghost_gap(_delta)
 	# distance = point le plus loin atteint (une chute ne fait pas reculer le compteur)
 	_max_x = maxf(_max_x, player.global_position.x)
 	var m := int((_max_x - _start_x) / PX_PER_METER)
@@ -153,6 +159,8 @@ func _game_over() -> void:
 		_save_best_meters(meters)
 	if medal > RaceManager.get_best_medal(LEVEL_KEY):
 		RaceManager._save_best_medal(LEVEL_KEY, medal)
+	# [FANTÔME SANS FIN 1.36] la partie devient le fantôme si elle est allée le plus loin
+	_new_ghost = RaceManager.save_endless_ghost(meters)
 	# le pingouin s'arrête après son fondu de chute
 	get_tree().create_timer(0.3).timeout.connect(func():
 		if is_instance_valid(player):
@@ -183,6 +191,12 @@ func _show_over_panel(medal: int, record: bool) -> void:
 		text.text += "\nRecord : %s" % format_meters(best)
 	if medal > 0:
 		text.text += "\nMédaille %s" % MEDAL_NAMES[medal]
+	# [FANTÔME SANS FIN 1.36]
+	var ghost_m: int = RaceManager.endless_ghost_meters()
+	if _new_ghost:
+		text.text += "\nC'est ton nouveau fantôme !"
+	elif ghost_m > 0 and meters < ghost_m:
+		text.text += "\nFantôme : %s (encore %s)" % [format_meters(ghost_m), format_meters(ghost_m - meters)]
 	for l in [title, text]:
 		l.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		box.add_child(l)
@@ -190,7 +204,14 @@ func _show_over_panel(medal: int, record: bool) -> void:
 	buttons.alignment = BoxContainer.ALIGNMENT_CENTER
 	buttons.add_theme_constant_override("separation", 16)
 	box.add_child(buttons)
-	for b in [["Rejouer", func(): get_tree().reload_current_scene()],
+	# [FANTÔME SANS FIN 1.36] « Rejouer » = même terrain contre le fantôme ;
+	# « Nouveau terrain » = terrain neuf, sans fantôme
+	for b in [["Rejouer", func():
+				RaceManager.endless_replay_seed = RaceManager.race_seed
+				get_tree().reload_current_scene()],
+			["Nouveau terrain", func():
+				RaceManager.endless_new_terrain = true
+				get_tree().reload_current_scene()],
 			["Menu", func(): get_tree().change_scene_to_file("res://src/screens/LevelSelectionScreen.tscn")]]:
 		var btn := Button.new()
 		btn.theme = load("res://src/theme_main.tres")   # même style que les menus du jeu
@@ -256,3 +277,25 @@ func _save_best_meters(m: int) -> void:
 	cfg.load(RaceManager.CONFIG_PATH)
 	cfg.set_value(SAVE_SECTION, "best_meters", m)
 	cfg.save(RaceManager.CONFIG_PATH)
+
+
+
+# [FANTÔME SANS FIN 1.36] Écart avec le fantôme, en mètres, 4 fois par seconde.
+# Le fantôme du Sans fin est vite hors de l'écran (devant ou derrière) : ce
+# texte dit où il est. Il s'efface quand le fantôme a fini sa partie.
+func _update_ghost_gap(delta: float) -> void:
+	_ghost_tick -= delta
+	if _ghost_tick > 0.0:
+		return
+	_ghost_tick = 0.25
+	var g = RaceManager._ghost_node
+	if g == null or not is_instance_valid(g) or g.modulate.a < 0.05:
+		_ghost_label.text = ""
+		return
+	var gap := int((g.global_position.x - player.global_position.x) / PX_PER_METER)
+	if absi(gap) < 15:
+		_ghost_label.text = "Fantôme : à côté de toi !"
+	elif gap > 0:
+		_ghost_label.text = "Fantôme : %s devant" % format_meters(gap)
+	else:
+		_ghost_label.text = "Fantôme : %s derrière" % format_meters(-gap)

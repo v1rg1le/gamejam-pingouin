@@ -123,6 +123,8 @@ var _player = null
 var _sample_timer: float = 0.0
 var _rec := {}                      # course en cours d'enregistrement
 var _ghost_data = null              # fantôme chargé pour ce niveau (ou null)
+var endless_new_terrain := false    # [FANTÔME SANS FIN 1.36] prochain Sans fin : terrain neuf
+var endless_replay_seed := -1       # [FANTÔME SANS FIN 1.36] « Rejouer » : même terrain que la partie finie
 var _ghost_node = null              # nœud GhostPenguin dans la scène
 var _hud = null                     # RaceHud (chrono à l'écran)
 var _best_cache := {}               # niveau -> meilleur temps (s)
@@ -188,6 +190,10 @@ func _prepare_level(path: String) -> void:
 	_reset_race()
 	level_path = path
 	_ghost_data = load_best_ghost(path) if ghost_enabled else null
+	# [FANTÔME SANS FIN 1.36] bouton « Nouveau terrain » : pas de fantôme, terrain neuf
+	if path.ends_with("LevelEndless.tscn") and endless_new_terrain:
+		_ghost_data = null
+	endless_new_terrain = false
 	if Settings.is_chill():
 		_ghost_data = null   # [MODES 1.25] pas de fantôme en mode Chill
 	# [MULTI] en course réseau : seed imposé par l'hôte, pas de fantôme
@@ -199,6 +205,13 @@ func _prepare_level(path: String) -> void:
 		race_seed = int(_ghost_data.seed)
 	else:
 		race_seed = randi()
+	# [FANTÔME SANS FIN 1.36] « Rejouer » relance le terrain de la partie qu'on
+	# vient de finir ; le fantôme ne vient que s'il a été fait sur ce terrain
+	if endless_replay_seed >= 0 and path.ends_with("LevelEndless.tscn") and not NetSession.in_race:
+		race_seed = endless_replay_seed
+		if _ghost_data != null and int(_ghost_data.seed) != race_seed:
+			_ghost_data = null
+	endless_replay_seed = -1
 	_rng.seed = race_seed
 	deco_rng.seed = race_seed ^ 0x5bd1e995
 	print("[COURSE] ", path.get_file(), " | seed ", race_seed, " | fantôme : ", _ghost_data != null)
@@ -285,6 +298,7 @@ func _start_race() -> void:
 		_hud.chill_mode = true
 		get_tree().current_scene.add_child(_hud)
 		_setup_tricks(get_tree().current_scene)
+		_start_endless_ghost()   # [FANTÔME SANS FIN 1.36] (Sans fin en mode Score seulement)
 		return
 	racing = true
 	race_time = 0.0
@@ -546,7 +560,11 @@ func _show_start_help() -> void:
 	# [BONUS 1.20] on prévient qu'il y a des figures bonus après l'arrivée
 	if has_finish and _has_bonus_half_pipe() and not Settings.is_chill():
 		text += "\nAprès l'arrivée : %d s de figures BONUS dans le half-pipe !" % int(BONUS_TIME)
-	ReadingPause.open(get_tree(), "C'EST PARTI !" if has_finish else "GLISSE TRANQUILLE", text)
+	# [FANTÔME SANS FIN 1.36] le Sans fin en mode Score n'est pas une « glisse tranquille »
+	var endless_score: bool = level_path.ends_with("LevelEndless.tscn") and not Settings.is_chill()
+	if endless_score and endless_ghost_meters() > 0:
+		text += "\nTon FANTÔME glisse avec toi : il est allé jusqu'à %d m, même terrain !" % endless_ghost_meters()
+	ReadingPause.open(get_tree(), "C'EST PARTI !" if has_finish or endless_score else "GLISSE TRANQUILLE", text)
 
 
 # --- 4. [MULTI] Course en réseau ----------------------------------------------
@@ -744,6 +762,8 @@ func import_ghost_text(text: String) -> String:
 	f.store_var(data)
 	f.close()
 	_best_cache.erase(level)
+	if level.ends_with("LevelEndless.tscn"):   # [FANTÔME SANS FIN 1.36] distance, pas un temps
+		return "Défi ajouté : Sans fin, %d m.\nS'il est allé plus loin que toi, tu glisseras contre lui (mode Score), sur le même terrain." % -int(float(data.time))
 	return "Fantôme ajouté : %s en %s.\nS'il est plus rapide que le tien, c'est lui qui courra contre toi." % [level.get_file().get_basename().replace("Level", ""), format_time(float(data.time))]
 
 
@@ -855,3 +875,53 @@ func _load_config() -> void:
 		if cfg.has_section(MEDALS_SECTION):
 			for key in cfg.get_section_keys(MEDALS_SECTION):
 				_best_medals[key] = int(cfg.get_value(MEDALS_SECTION, key, 0))
+
+
+
+# =============================================================================
+#  [FANTÔME SANS FIN 1.36] Fantôme du niveau Sans fin (mode Score)
+# =============================================================================
+#  Le Sans fin n'a pas d'arrivée : on « court » quand même (racing = true,
+#  sans chrono à l'écran) pour enregistrer la partie avec le système des
+#  fantômes des courses (mêmes échantillons, même GhostPenguin).
+#  - Le fantôme garde la DISTANCE, pas un temps : on range time = -mètres pour
+#    que « le plus petit time » (load_best_ghost) soit le fantôme allé le plus loin.
+#  - Il garde aussi la graine du terrain : la partie suivante a le même terrain
+#    que le fantôme (sauf bouton « Nouveau terrain » de l'écran de fin).
+#  - Défi entre amis : l'échange de fantômes des Options (copier-coller) marche
+#    tel quel ; le fantôme d'un ami allé plus loin devient la cible.
+func _start_endless_ghost() -> void:
+	if not level_path.ends_with("LevelEndless.tscn") or Settings.is_chill() or NetSession.in_race:
+		return
+	racing = true
+	race_time = 0.0
+	_sample_timer = 0.0
+	_rec = {"version": GHOST_FORMAT_VERSION, "level": level_path, "seed": race_seed,
+		"anims": [], "samples": PackedFloat32Array(), "time": 0.0}
+	if _ghost_data != null:
+		_ghost_node = preload("res://src/ui/race/GhostPenguin.gd").new()
+		_ghost_node.setup(_ghost_data, _player)
+		get_tree().current_scene.add_child(_ghost_node)
+		_ghost_node._label.text = "fantôme " + str(-int(float(_ghost_data.time))) + " m"
+	print("[SANS FIN] fantôme : ", _ghost_data != null, " | seed ", race_seed)
+
+
+## Mètres du fantôme chargé pour cette partie (0 s'il n'y en a pas).
+func endless_ghost_meters() -> int:
+	return -int(float(_ghost_data.time)) if _ghost_data != null else 0
+
+
+## Fin de partie du Sans fin (plus de vies) : on garde la partie comme fantôme
+## si elle est allée plus loin que tous les fantômes de ce niveau.
+func save_endless_ghost(meters: int) -> bool:
+	if not racing or _rec.is_empty():
+		return false
+	racing = false
+	_record_sample()
+	var best = load_best_ghost(level_path)
+	if best != null and -float(best.time) >= meters:
+		return false
+	_rec.time = -float(meters)
+	_rec["meters"] = meters
+	_save_ghost(_rec)
+	return true

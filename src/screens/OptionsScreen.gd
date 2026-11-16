@@ -29,6 +29,7 @@ const RACES = [
 	["Nice Slope", "res://src/levels/LevelRandomNiceSlope.tscn"],
 	["Hook, you fool !", "res://src/levels/LevelRandomGap.tscn"],
 	["Spaghetti", "res://src/levels/LevelRandomSpaghetti.tscn"],
+	["Sans fin", "res://src/levels/LevelEndless.tscn"],   # [FANTÔME SANS FIN 1.36] défi à distance
 ]
 
 @onready var help_on_start: CheckButton = $Margin/VBox/Columns/GamePanel/VBox/HelpOnStart
@@ -96,12 +97,14 @@ func _fill_ghost_list() -> void:
 	var n := 0
 	for race in RACES:
 		var best: float = RaceManager.get_best_time(race[1])
-		if best < 0.0:
+		var endless: bool = race[1].ends_with("LevelEndless.tscn")
+		# [FANTÔME SANS FIN 1.36] Sans fin : le fantôme garde -mètres (pas un temps)
+		if (best < 0.0) != endless or (endless and best == -1.0 and RaceManager.load_best_ghost(race[1]) == null):
 			continue
 		var row := HBoxContainer.new()
 		row.add_theme_constant_override("separation", 8)
 		var l := Label.new()
-		l.text = "%s   %s" % [race[0], RaceManager.format_time(best)]
+		l.text = "%s   %s" % [race[0], ("%d m" % -int(best)) if endless else RaceManager.format_time(best)]
 		l.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		l.add_theme_font_size_override("font_size", 17)
 		l.add_theme_color_override("font_color", Color(1, 1, 1))

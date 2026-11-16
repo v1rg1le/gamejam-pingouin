@@ -774,3 +774,23 @@ Demande de l'équipe : plus de coupure nette du fond, une boucle infinie qui sui
 - **Aucune image ajoutée ni modifiée.** Les autres niveaux (courses) gardent le ciel d'origine.
 - Palette réglable en tête de `SkyCycle.gd` (`KEYS` : mètres, teinte du fond, teinte du premier plan, couleur du ciel, nuit).
 - **Testé** : 125 fichiers OK ; captures des 4 moments du Sans fin et des 3 niveaux Chill.
+
+## 45. Fantôme du Sans fin et défis entre amis (16/11, version 1.36)
+
+- **Demande de Manu** : courir contre son meilleur essai dans le Sans fin, sur le même terrain, et pouvoir défier un ami.
+- **Mode Score seulement** (comme les fantômes des courses ; rien ne change en Chill ni en multi).
+- **Enregistrement** : la partie est enregistrée comme celle d'une course (30 positions par seconde, même `GhostPenguin.gd`). À la fin de la partie (plus de vies), elle devient le fantôme si elle est allée **plus loin** que tous les fantômes du niveau.
+  - Le fichier garde la distance, rangée en `time = -mètres` : « le plus petit temps » de `load_best_ghost` est ainsi le fantôme allé le plus loin, sans toucher au code des courses.
+  - Il garde aussi la **graine du terrain** : la partie suivante a le même terrain que le fantôme.
+- **En jeu** :
+  - le fantôme bleu glisse à côté, avec l'étiquette « fantôme 330 m » ;
+  - sous le compteur, l'écart : « Fantôme : 34 m devant / derrière / à côté de toi ! » (le fantôme est vite hors de l'écran dans ce niveau) ;
+  - carte d'aide : « Ton FANTÔME glisse avec toi : il est allé jusqu'à … m, même terrain ! ».
+- **Écran de fin** : « Fantôme : 330 m (encore 258 m) » ou « C'est ton nouveau fantôme ! ». Trois boutons :
+  - **Rejouer** : le même terrain que la partie qu'on vient de finir (avec le fantôme s'il a été fait sur ce terrain) ;
+  - **Nouveau terrain** : terrain neuf, sans fantôme ;
+  - **Menu**. En revenant par le menu, on retrouve le terrain du fantôme.
+- **Défi entre amis** : l'échange de fantômes des Options marche aussi pour le Sans fin (ligne « Sans fin   330 m », bouton Copier). Coller le texte d'un ami : « Défi ajouté : Sans fin, 330 m ». S'il est allé plus loin que le sien, on glisse contre lui, sur son terrain.
+- **Corrigé au passage** : la carte d'aide du Sans fin en mode Score avait le titre « GLISSE TRANQUILLE » (défaut de la 1.33) ; elle dit maintenant « C'EST PARTI ! ».
+- **Fichiers** : `RaceManager.gd` (`_start_endless_ghost`, `save_endless_ghost`, `endless_ghost_meters`, `endless_new_terrain`, `endless_replay_seed`), `EndlessScore.gd` (écart, écran de fin), `OptionsScreen.gd` (`RACES` + affichage en mètres).
+- **Testé** : 125 fichiers OK ; bot : partie 1 enregistre le fantôme, partie 2 le charge sur la même graine ; Nouveau terrain → graine neuve sans fantôme, Rejouer → même graine, menu → terrain du fantôme ; export puis import du texte (« Défi ajouté : Sans fin, 330 m »).
