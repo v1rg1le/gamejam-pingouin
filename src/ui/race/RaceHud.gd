@@ -28,6 +28,12 @@ var _tricks_label: Label        # [SCORE 1.5] points de figures
 var _pending_label: Label       # [SCORE 1.5] figures en jeu pendant le saut
 var _popup_label: Label         # [SCORE 1.5] points gagnés / perdus
 var _popup_timer: float = 0.0
+# [MODES 1.25] mode Chill : ni chrono, ni record, ni total de figures à l'écran
+# (les figures réussies s'affichent quand même en jaune, et le maître fait
+# toujours son clin d'œil). Réglé par RaceManager avant l'ajout du HUD.
+var chill_mode := false
+var _chill_panel: PanelContainer = null
+var _chill_label: Label = null
 
 
 func _ready() -> void:
@@ -97,6 +103,12 @@ func _ready() -> void:
 	# [FLÈCHES 1.14] flèches vers les autres joueurs hors écran (multi seulement)
 	if NetSession.in_race:
 		add_child(preload("res://src/ui/race/PlayerArrows.gd").new())
+	# [MODES 1.25] Chill : on cache chrono, record et total des figures
+	if chill_mode:
+		_time_label.visible = false
+		_best_label.visible = false
+		_tricks_label.visible = false
+		_ranking_label.visible = false
 	# [RESPONSIVE 1.14] tout le HUD est agrandi sur les petits écrans
 	# (téléphone) : voir UiScaler.gd. Les nœuds créés plus tard vont dans
 	# _ui_root, et les positions se calculent sur _ui_root.size.
@@ -228,6 +240,12 @@ func set_best(best: float) -> void:
 		_best_label.text = "En attente des autres joueurs…"
 		return
 	_best_label.text = ("Record  " + RaceManager.format_time(best)) if best >= 0.0 else "Pas encore de record"
+	# [MODES 1.25] + la prochaine médaille à décrocher (ou l'or, déjà eu)
+	if RaceManager.gold_time > 0.0:
+		var have: int = RaceManager.get_best_medal(RaceManager.level_path)
+		var target: int = clampi(have + 1, 1, 3)
+		var times: Array = RaceManager.medal_times()   # [bronze, argent, or]
+		_best_label.text += "   ·   %s  %s" % [RaceManager.MEDAL_NAMES[target].capitalize(), RaceManager.format_time(times[target - 1])]
 
 
 ## [MULTI] Affiche le compte à rebours (secondes restantes ; <= 0 -> "GO !").
@@ -245,6 +263,8 @@ func show_countdown(remaining: float) -> void:
 ## [MULTI] Classement en direct : liste [[nom, temps, score], ...] (temps -1 = en course).
 ## [SCORE 1.5] classé au score ; le temps reste affiché.
 func set_ranking(ranking: Array) -> void:
+	if chill_mode:
+		return   # [MODES 1.25] pas de classement en Chill
 	var lines := PackedStringArray()
 	var rank := 1
 	for entry in ranking:
@@ -276,9 +296,14 @@ func _score_text(score: Dictionary) -> String:
 	if score.is_empty():
 		return ""
 	var t := "\n\nVitesse %d  +  Figures %d\nSCORE  %d" % [score.speed, score.tricks, score.score]
-	# [SCORE 1.13] rappel du temps de référence (3000 points de vitesse à ce temps)
-	if score.has("ref_time") and score.ref_time > 0.0:
-		t += "\n(temps de référence %s)" % RaceManager.format_time(score.ref_time)
+	# [MODES 1.25] la médaille (remplace le rappel du « temps de référence »)
+	if score.has("medal"):
+		if score.medal > 0:
+			t += "\nMÉDAILLE %s%s" % [RaceManager.MEDAL_NAMES[score.medal], "  (nouvelle !)" if score.get("new_medal", false) else ""]
+		else:
+			t += "\nPas de médaille  (bronze : %s)" % RaceManager.format_time(score.gold_time * RaceManager.BRONZE_FACTOR)
+		if score.medal < 3:
+			t += "\nOr : %s" % RaceManager.format_time(score.gold_time)
 	if score.is_best_score and score.best_score >= 0:
 		t += "\nMeilleur score !"   # (pas affiché la toute 1re fois)
 	elif not score.is_best_score and score.best_score >= 0:
@@ -323,3 +348,54 @@ func show_multi_result(time: float, rank: int, total: int, score := {}) -> void:
 func _center_result() -> void:
 	var vs: Vector2 = _ui_root.size if _ui_root != null else _result_panel.get_viewport_rect().size   # [RESPONSIVE 1.14]
 	_result_panel.position = (vs - _result_panel.size) * 0.5 - Vector2(0, 80)
+
+
+# --- [MODES 1.25] Arrivée en mode Chill ------------------------------------------
+# Bandeau en haut : « BRAVO ! » + ce qu'on peut faire ensuite. Avec un
+# half-pipe, le niveau reste ouvert : bouton « Menu » pour partir quand on veut
+# (en solo ; en multi, on rentre au salon tous ensemble, cf. NetSession).
+func show_chill_finish(free_ride: bool) -> void:
+	if _chill_panel == null:
+		_chill_panel = PanelContainer.new()
+		var style := StyleBoxFlat.new()
+		style.bg_color = Color(0.06, 0.1, 0.22, 0.85)
+		style.border_color = Color(1, 0.94, 0.4)
+		style.set_border_width_all(3)
+		style.set_corner_radius_all(12)
+		style.set_content_margin_all(14)
+		_chill_panel.add_theme_stylebox_override("panel", style)
+		_chill_panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		var box := VBoxContainer.new()
+		box.alignment = BoxContainer.ALIGNMENT_CENTER
+		box.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		_chill_panel.add_child(box)
+		_chill_label = _make_label(26, Color(1, 0.94, 0.4))
+		_chill_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		box.add_child(_chill_label)
+		if not NetSession.in_race:
+			var menu := Button.new()
+			menu.theme = load("res://src/theme_main.tres")   # même style que les menus du jeu
+			menu.text = "Menu"
+			menu.custom_minimum_size = Vector2(180, 48)
+			menu.add_theme_font_size_override("font_size", 22)
+			menu.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+			menu.add_to_group("touch_block")   # un toucher ici ne lance pas le grappin
+			menu.pressed.connect(func():
+				get_tree().paused = false
+				get_tree().change_scene_to_file("res://src/screens/LevelSelectionScreen.tscn"))
+			box.add_child(menu)
+			menu.visible = free_ride
+		(_ui_root if _ui_root != null else self).add_child(_chill_panel)
+	var text := "BRAVO !"
+	if free_ride:
+		text += "\nReste faire des figures autant que tu veux"
+	if NetSession.in_race:
+		var arrived := 0
+		for entry in NetSession.ranking():
+			if entry[1] >= 0.0:
+				arrived += 1
+		text += "\n%d / %d arrivés  ·  retour au salon ensemble" % [arrived, NetSession.players.size()]
+	_chill_label.text = text
+	_chill_panel.reset_size()
+	var view: Vector2 = _ui_root.size if _ui_root != null else get_viewport().get_visible_rect().size
+	_chill_panel.position = Vector2((view.x - _chill_panel.size.x) * 0.5, 60.0)

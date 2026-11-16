@@ -343,6 +343,12 @@ const FINISH_GATE_RES = "res://src/levels/FinishGate.tscn"
 func _add_finish_at_arch(position: Vector2) -> void:
 	if not is_inside_tree() or not get_tree().get_nodes_in_group("finish_gate").is_empty():
 		return
+	# [MODES 1.25] en mode Chill, l'arrivée reste celle d'origine, dans le
+	# half-pipe (HalfPipe.add_finish_gate la pose quand il n'y en a pas ici) :
+	# demande de Léo, « je pose mon veto que l'arrivée soit avant la zone
+	# d'arrivée de toujours ». L'arche reste un décor.
+	if Settings.is_chill():
+		return
 	var gate = load(FINISH_GATE_RES).instantiate()
 	gate.global_position = position
 	gate.get_node("SpriteBackground").visible = false

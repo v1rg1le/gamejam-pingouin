@@ -97,7 +97,11 @@ func _ready() -> void:
 	
 	end_x = curve[curve.size()-2].x
 	end_y = curve[curve.size()-2].y
-	_add_end_wall()   # [BONUS 1.20]
+	# [MODES 1.25] plus de mur invisible au bout du half-pipe (Léo : « j'aime
+	# pas les murs invisibles »). Si on sort par le bout après l'arrivée (bonus
+	# du mode Score, ou half-pipe libre du mode Chill), on réapparaît sur le
+	# bord gauche du half-pipe (RaceManager.half_pipe_respawn_point).
+	# _add_end_wall()   # [BONUS 1.20]
 	
 #func f(x): #HALF_PIPE 1
 #	var y

@@ -62,6 +62,17 @@ var master_wink: bool = true      # [MAÎTRE 1.19] clin d'œil du maître ninja 
 # tactiles plus faciles à toucher, carte d'aide simplifiée (voir KidAssist.gd).
 # Désactivé par défaut ; jamais actif en multijoueur.
 var kid_mode: bool = false
+# [MODES 1.25] Deux façons de jouer (retours de Léo : « Chill > score,
+# Tricks > score ») :
+#  - MODE_CHILL (par défaut) : pas de chrono ni de score à l'écran, pas de
+#    fantôme, l'arrivée est celle d'origine (dans le half-pipe) et le niveau
+#    ne se ferme pas : on reste faire des figures autant qu'on veut ;
+#  - MODE_SCORE : le jeu « compétition » (arrivée à l'arche, chrono, record,
+#    fantôme, médailles bronze / argent / or, 30 s de figures bonus).
+# Choisi en haut de la sélection des niveaux ; en multijoueur, c'est l'hôte
+# qui choisit pour tout le monde (NetSession.race_mode).
+enum { MODE_CHILL, MODE_SCORE }
+var game_mode: int = MODE_CHILL
 var ui_size: float = 1.0          # [RESPONSIVE 1.14] réglage « Taille de l'interface » (0,8 à 1,5)
 # [FLÈCHES 1.16] flèches vers les autres joueurs en multi (choix dans Options)
 enum { ARROWS_ALL, ARROWS_NEIGHBOURS, ARROWS_NONE }
@@ -103,9 +114,18 @@ func _load_options() -> void:
 		physics_panel = cfg.get_value("options", "physics_panel", false)
 		master_wink = cfg.get_value("options", "master_wink", true)
 		kid_mode = cfg.get_value("options", "kid_mode", false)   # [MODE ENFANT 1.23]
+		game_mode = clampi(int(cfg.get_value("options", "game_mode", MODE_CHILL)), MODE_CHILL, MODE_SCORE)   # [MODES 1.25]
 		ui_size = clampf(float(cfg.get_value("options", "ui_size", 1.0)), 0.8, 1.5)
 		player_arrows = clampi(int(cfg.get_value("options", "player_arrows", ARROWS_ALL)), ARROWS_ALL, ARROWS_NONE)
 	apply_music_volume()
+
+
+## [MODES 1.25] Vrai si la partie en cours (ou à lancer) est en mode Chill.
+## En multijoueur, c'est le mode choisi par l'hôte qui compte.
+func is_chill() -> bool:
+	if NetSession.in_race:
+		return NetSession.race_mode == MODE_CHILL
+	return game_mode == MODE_CHILL
 
 
 ## Change un réglage, l'applique et le mémorise.

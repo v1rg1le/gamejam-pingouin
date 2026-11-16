@@ -53,6 +53,7 @@ const RACES = [
 @onready var version_label: Label = $Margin/VBox/Bottom/VersionLabel
 
 var _connecting: bool = false   # invité : connexion en cours (pas encore dans la liste)
+var mode_option: OptionButton    # [MODES 1.25] choix Chill / Score (hôte)
 
 
 func _ready() -> void:
@@ -63,11 +64,24 @@ func _ready() -> void:
 		level_option.add_item(race[0])
 	level_option.selected = clampi(NetSession.last_level_index, 0, RACES.size() - 1)
 	level_option.item_selected.connect(func(i): NetSession.last_level_index = i)
+	# [MODES 1.25] l'hôte choisit le mode de jeu pour tout le monde : copie
+	# du menu des niveaux (même style), juste en dessous
+	mode_option = level_option.duplicate(Node.DUPLICATE_GROUPS | Node.DUPLICATE_SCRIPTS)
+	mode_option.name = "ModeOption"
+	mode_option.clear()
+	mode_option.add_item("Mode Chill (tranquille, sans chrono)")
+	mode_option.add_item("Mode Score (chrono, médailles, classement)")
+	level_option.get_parent().add_child(mode_option)
+	level_option.get_parent().move_child(mode_option, level_option.get_index() + 1)
+	if NetSession.last_mode < 0:
+		NetSession.last_mode = Settings.game_mode
+	mode_option.selected = NetSession.last_mode
+	mode_option.item_selected.connect(func(i): NetSession.last_mode = i)
 
 	host_button.pressed.connect(_on_host_pressed)
 	join_button.pressed.connect(func(): _join(ip_edit.text))
 	ip_edit.text_submitted.connect(_join)
-	start_button.pressed.connect(func(): NetSession.start_race(RACES[level_option.selected][1]))
+	start_button.pressed.connect(func(): NetSession.start_race(RACES[level_option.selected][1], mode_option.selected))   # [MODES 1.25]
 	leave_button.pressed.connect(func():
 		NetSession.leave()
 		status_label.text = "Tu as quitté la partie.")
@@ -205,6 +219,8 @@ func _refresh() -> void:
 	internet_label.get_parent().visible = internet_label.text != ""
 
 	level_option.visible = NetSession.is_host()
+	if mode_option != null:
+		mode_option.visible = NetSession.is_host()   # [MODES 1.25]
 	start_button.visible = NetSession.is_host()
 	start_button.disabled = NetSession.players.size() < 1
 

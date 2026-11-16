@@ -117,6 +117,17 @@ func _finish() -> void:
 	_finished = true
 	print("yay")
 	RaceManager.finish_race()  # [FANTÔMES] arrête le chrono, sauve le record + le fantôme
+	# [MODES 1.25] Chill avec half-pipe : le niveau ne se ferme pas, on reste
+	# faire des figures ; on part avec le bouton « Menu » du bandeau (RaceHud)
+	# ou le menu pause.
+	if RaceManager.free_ride:
+		return
+	if Settings.is_chill():
+		# Chill sans half-pipe (tuto, Spaghetti) : « Bravo ! » puis menu, sans ralenti
+		await get_tree().create_timer(3.5, true, false, true).timeout
+		if is_inside_tree() and not NetSession.in_race:
+			get_tree().change_scene_to_file(next_scene_path)
+		return
 	# [BONUS 1.20] figures bonus dans le half-pipe : pas de ralenti, on laisse
 	# jouer ; on attend le score final, on le laisse lire, puis retour au menu.
 	if RaceManager.bonus_active:

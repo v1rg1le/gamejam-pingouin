@@ -516,7 +516,7 @@ func _pick_respawn_sample():
 	# exemple dans le trou entre la dernière île et le half-pipe) fait
 	# réapparaître directement sur le deck de gauche du half-pipe, sans élan :
 	# on ne repart pas avant la ligne d'arrivée et on ne perd pas le bonus.
-	if RaceManager.bonus_active:
+	if RaceManager.bonus_active or RaceManager.free_ride:   # [MODES 1.25] + half-pipe libre (Chill)
 		var p = RaceManager.bonus_respawn_point()
 		if p != null:
 			return {"pos": p, "vel": Vector2(300, 0), "time": _last_ground_time}

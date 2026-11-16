@@ -167,7 +167,7 @@ func _input(event: InputEvent) -> void:
 			if b != null:
 				_finger_down(event.index, b, pos)
 				get_viewport().set_input_as_handled()
-			elif free_aim_enabled and _hook_finger == -1 and not PhysicsTuner.covers(pos):
+			elif free_aim_enabled and _hook_finger == -1 and not PhysicsTuner.covers(pos) and not _blocked_by_ui(pos):
 				# [GRAPPIN TACTILE 1.11] toucher hors des boutons : grappin vers là
 				_free_hook_down(event.index, pos)
 				get_viewport().set_input_as_handled()
@@ -442,3 +442,15 @@ func _draw_rotation(c: Vector2, r: float, dir: int, col: Color) -> void:
 	var tangent := Vector2(-sin(ang), cos(ang)) * dir
 	var n := Vector2(cos(ang), sin(ang))
 	_canvas.draw_colored_polygon(PackedVector2Array([p + tangent * 12, p + n * 8 - tangent * 4, p - n * 8 - tangent * 4]), col)
+
+
+## [MODES 1.25] Vrai si ce point de l'écran est sur un bouton d'interface du
+## jeu (groupe « touch_block », ex. le bouton « Menu » de l'arrivée Chill) :
+## un toucher à cet endroit est pour le bouton, pas pour le grappin.
+func _blocked_by_ui(pos: Vector2) -> bool:
+	for c in get_tree().get_nodes_in_group("touch_block"):
+		if c is Control and c.is_visible_in_tree():
+			var xf: Transform2D = c.get_global_transform_with_canvas()
+			if Rect2(xf.origin, c.size * xf.get_scale()).has_point(pos):
+				return true
+	return false

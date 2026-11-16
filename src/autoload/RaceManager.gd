@@ -66,7 +66,43 @@ const SPEED_POINTS = 60000.0         # [SCORE 1.5] ancien barème (60 000 / temp
 const SPEED_BASE = 3000              # [SCORE 1.13] points de vitesse au temps de référence
 const SPEED_PER_SECOND = 100         # [SCORE 1.13] points par seconde d'avance / de retard
 const REF_SPEED = 1250.0             # [SCORE 1.13] px/s : sert à calculer le temps de référence
-const SCORES_SECTION = "scores_v2"   # [SCORE 1.13] nouveaux meilleurs scores (barème différent)
+const SCORES_SECTION = "scores_v3"   # [MODES 1.25] barème à médailles (avant : "scores_v2", gardée mais ignorée)
+
+# --- [MODES 1.25] Médailles du mode Score ---------------------------------------
+# Demande de l'équipe : remplacer le « temps de référence » calculé par des
+# temps de médailles mesurés avec des bots. OR = temps d'un bon joueur (bot
+# « ▶ + PUMP dans les descentes + grappin au-dessus des trous », hors projet :
+# medal_bot.gd), arrondi à la demi-seconde au-dessus ; ARGENT = or + 25 % ;
+# BRONZE = or + 60 %.
+#  - Spaghetti (terrain différent à chaque partie) : mesuré sur 10 terrains,
+#    on garde le PLUS LENT (30,9 à 34,1 s) pour que l'or soit faisable partout.
+#  - « Hook, you fool ! » : le bot ne passe pas encore tous les trous au
+#    grappin ; temps extrapolé de ses meilleurs passages (≈ 79 s pour 84 000
+#    px, puis le reste à vitesse de croisière). À ajuster après vos essais.
+# Un niveau absent de la liste utilise l'ancien temps de référence
+# (distance ÷ REF_SPEED) comme temps d'or.
+const MEDAL_GOLD := {
+	"LevelBateau": 17.5,          # bot : 17,28 s
+	"LevelRandomFlat": 64.0,      # bot : 63,83 s
+	"LevelRandomCorridor": 63.5,  # bot : 63,45 s
+	"LevelRandomNiceSlope": 48.0, # bot : 47,68 s
+	"LevelRandomSpaghetti": 34.5, # bot : 30,9 à 34,1 s selon le terrain
+	"LevelRandomGap": 97.0,       # estimé (voir plus haut)
+}
+const SILVER_FACTOR := 1.25       # argent = or × 1,25
+const BRONZE_FACTOR := 1.6        # bronze = or × 1,6
+const MEDAL_POINTS := [0, 1000, 2000, 3000]   # aucune / bronze / argent / or
+const MEDAL_NAMES := ["", "BRONZE", "ARGENT", "OR"]
+const MEDALS_SECTION = "medals"   # meilleure médaille par niveau (1..3)
+var gold_time: float = 0.0        # temps de l'or du niveau en cours (s)
+var _best_medals := {}            # niveau -> meilleure médaille (1..3)
+
+# --- [MODES 1.25] Mode Chill ----------------------------------------------------
+# Vrai une fois l'arrivée passée en mode Chill quand le niveau a un half-pipe :
+# le niveau ne se ferme pas, on y reste faire des figures (TrickScore compte
+# toujours pour les messages à l'écran) et une chute fait réapparaître sur le
+# bord du half-pipe.
+var free_ride := false
 
 ## Courir contre son meilleur fantôme (réglable dans le menu des niveaux).
 var ghost_enabled: bool = true
@@ -116,6 +152,11 @@ func _connect_net() -> void:
 	NetSession.countdown_started.connect(_on_countdown_started)
 	NetSession.race_results_changed.connect(func():
 		if _hud != null and is_instance_valid(_hud):
+			if Settings.is_chill():
+				# [MODES 1.25] pas de classement en Chill : juste qui est arrivé
+				if free_ride or not racing:
+					_hud.show_chill_finish(free_ride)
+				return
 			_hud.set_ranking(NetSession.ranking())
 			# déjà arrivé : on met à jour le bandeau ("En attente des autres…" disparaît)
 			if NetSession.my_rank() > 0:
@@ -143,6 +184,8 @@ func _prepare_level(path: String) -> void:
 	_reset_race()
 	level_path = path
 	_ghost_data = load_best_ghost(path) if ghost_enabled else null
+	if Settings.is_chill():
+		_ghost_data = null   # [MODES 1.25] pas de fantôme en mode Chill
 	# [MULTI] en course réseau : seed imposé par l'hôte, pas de fantôme
 	if NetSession.in_race:
 		_ghost_data = null
@@ -177,6 +220,7 @@ func _reset_race() -> void:
 	_countdown = -1.0
 	_waiting_go = false
 	bonus_active = false      # [BONUS 1.20] pas de bonus en cours dans une nouvelle scène
+	free_ride = false         # [MODES 1.25]
 	trick_score = null        # [SCORE 1.5] libéré avec l'ancienne scène
 
 
@@ -208,6 +252,8 @@ func _physics_process(delta: float) -> void:
 	if not racing:
 		return
 	race_time += delta
+	if Settings.is_chill():
+		return   # [MODES 1.25] pas d'enregistrement de fantôme en Chill
 	_sample_timer -= delta
 	if _sample_timer <= 0.0:
 		_sample_timer += SAMPLE_INTERVAL
@@ -234,10 +280,13 @@ func _start_race() -> void:
 	var gate = get_tree().get_first_node_in_group("finish_gate")
 	if gate != null and _player != null:
 		ref_time = maxf(10.0, absf(gate.global_position.x - _player.global_position.x) / REF_SPEED)
+	# [MODES 1.25] temps de l'or (mesuré par les bots), sinon le temps de référence
+	gold_time = float(MEDAL_GOLD.get(level_path.get_file().get_basename(), ref_time))
 	_rec = {"version": GHOST_FORMAT_VERSION, "level": level_path, "seed": race_seed,
 		"anims": [], "samples": PackedFloat32Array(), "time": 0.0}
 	var scene := get_tree().current_scene
 	_hud = preload("res://src/ui/race/RaceHud.gd").new()
+	_hud.chill_mode = Settings.is_chill()   # [MODES 1.25] pas de chrono ni de score à l'écran
 	scene.add_child(_hud)
 	_hud.set_best(get_best_time(level_path))
 	# [SCORE 1.5] juge des figures : il observe le pingouin et prévient le HUD
@@ -297,6 +346,8 @@ func finish_race() -> bool:
 	# [SCORE 1.5] une figure en cours en passant la ligne compte (avant de couper le chrono)
 	if trick_score != null and is_instance_valid(trick_score):
 		trick_score.bank()
+	if Settings.is_chill():
+		return _finish_chill()   # [MODES 1.25]
 	racing = false
 	_record_sample()  # dernière position exacte
 	var previous_best := get_best_time(level_path)
@@ -356,7 +407,12 @@ func _has_bonus_half_pipe() -> bool:
 
 ## [BONUS 1.20] Point de réapparition pendant le bonus : sur le deck de gauche
 ## du half-pipe d'arrivée (un quart de sa longueur, à côté du podium).
+## [MODES 1.25] devenu un simple relais vers half_pipe_respawn_point().
 func bonus_respawn_point():
+	return half_pipe_respawn_point()
+
+
+func _old_bonus_respawn_point():   # (ancienne version, gardée pour mémoire)
 	var gate = get_tree().get_first_node_in_group("finish_gate")
 	for hp in get_tree().get_nodes_in_group("half_pipe"):
 		if gate == null or hp.global_position.x > gate.global_position.x - 200.0:
@@ -364,6 +420,45 @@ func bonus_respawn_point():
 			if poly.size() > 1:
 				# poly[1] = coin haut-gauche du deck de gauche
 				return hp.to_global(poly[1]) + Vector2(hp.deck_length * 0.25, -20.0)
+	return null
+
+
+## [MODES 1.25] Arrivée en mode Chill : rien n'est enregistré (ni temps, ni
+## record, ni fantôme, ni score). S'il y a un half-pipe, on y reste aussi
+## longtemps qu'on veut (free_ride) ; sinon (tuto, Spaghetti) FinishGate
+## ramène au menu comme avant, après un « Bravo ! ».
+func _finish_chill() -> bool:
+	racing = false
+	free_ride = _has_half_pipe()
+	print("[COURSE] arrivée (Chill) | half-pipe libre : ", free_ride)
+	if NetSession.in_race:
+		NetSession.report_finish(race_time, 0)   # pour savoir qui est arrivé (pas de classement)
+	if _hud != null and is_instance_valid(_hud):
+		_hud.show_chill_finish(free_ride)
+	emit_signal("race_finished", race_time, false, -1.0)
+	emit_signal("race_completed")
+	return false
+
+
+## [MODES 1.25] Vrai si le niveau a un half-pipe (n'importe où).
+func _has_half_pipe() -> bool:
+	return not get_tree().get_nodes_in_group("half_pipe").is_empty()
+
+
+## [MODES 1.25] Point de réapparition sur le bord gauche (deck) du DERNIER
+## half-pipe du niveau : utilisé pendant le bonus (Score) et après l'arrivée
+## (Chill). Remplace l'ancien mur invisible au bout du half-pipe.
+func half_pipe_respawn_point():
+	var last = null
+	for hp in get_tree().get_nodes_in_group("half_pipe"):
+		if last == null or hp.global_position.x > last.global_position.x:
+			last = hp
+	if last == null:
+		return null
+	var poly: PackedVector2Array = last.get_node("CollisionPolygon2D").polygon
+	if poly.size() > 1:
+		# poly[1] = coin haut-gauche du deck de gauche
+		return last.to_global(poly[1]) + Vector2(last.deck_length * 0.25, -20.0)
 	return null
 
 
@@ -376,12 +471,18 @@ func _complete_race() -> void:
 	var previous_best: float = _finish_record.get("previous_best", -1.0)
 	# [SCORE 1.5] calcul du score
 	var tricks: int = trick_score.total if trick_score != null and is_instance_valid(trick_score) else 0
-	var speed := speed_points(race_time, ref_time)
+	# [MODES 1.25] points de vitesse selon les médailles (voir speed_points)
+	var speed := speed_points(race_time, gold_time)
+	var medal := medal_for(race_time, gold_time)
 	var previous_best_score := get_best_score(level_path)
-	last_score = {"speed": speed, "tricks": tricks, "score": speed + tricks, "ref_time": ref_time,
+	var previous_medal := get_best_medal(level_path)
+	last_score = {"speed": speed, "tricks": tricks, "score": speed + tricks, "gold_time": gold_time,
+		"medal": medal, "new_medal": medal > previous_medal,
 		"best_score": previous_best_score, "is_best_score": speed + tricks > previous_best_score}
 	if last_score.is_best_score:
 		_save_best_score(level_path, speed + tricks)
+	if medal > previous_medal:
+		_save_best_medal(level_path, medal)
 	print("[COURSE] arrivée en ", format_time(race_time), " | record : ", is_record, " | score ", last_score)
 	if NetSession.in_race:
 		# [MULTI] annonce l'arrivée à tous (appel local immédiat + envoi aux
@@ -409,12 +510,15 @@ func _show_start_help() -> void:
 	# Pas dans le tuto (ses panneaux expliquent déjà tout), pas en multijoueur
 	if not Settings.help_on_start or NetSession.in_race or level_path.ends_with("LevelBateau.tscn"):
 		return
-	var text := TutorialSign.resolve_text(START_HELP_TEXT + (START_HELP_SCORE if has_finish else ""))
+	var text := TutorialSign.resolve_text(START_HELP_TEXT + (START_HELP_SCORE if has_finish and not Settings.is_chill() else ""))
+	# [MODES 1.25] en Chill : pas de score, on reste dans le half-pipe d'arrivée
+	if Settings.is_chill() and has_finish and _has_half_pipe():
+		text += "\n\nMode Chill : pas de chrono. Après l'arrivée,\nreste dans le half-pipe faire des figures autant que tu veux !"
 	# [MODE ENFANT 1.23] carte courte : un enfant ne lit pas un long texte
 	if Settings.kid_mode:
 		text = TutorialSign.resolve_text(KID_HELP_TEXT)
 	# [BONUS 1.20] on prévient qu'il y a des figures bonus après l'arrivée
-	if has_finish and _has_bonus_half_pipe():
+	if has_finish and _has_bonus_half_pipe() and not Settings.is_chill():
 		text += "\nAprès l'arrivée : %d s de figures BONUS dans le half-pipe !" % int(BONUS_TIME)
 	ReadingPause.open(get_tree(), "C'EST PARTI !" if has_finish else "GLISSE TRANQUILLE", text)
 
@@ -637,9 +741,56 @@ static func format_time(t: float) -> String:
 ## Points de vitesse pour un temps donné (arrondis à la dizaine).
 ## [SCORE 1.13] SPEED_BASE au temps de référence, ± SPEED_PER_SECOND par
 ## seconde d'avance ou de retard, arrondi à la dizaine, jamais négatif.
+## [MODES 1.25] Points de vitesse avec les médailles (reference = temps de l'or) :
+##   temps <= or      : 3000 + 100 par seconde gagnée sous l'or
+##   or -> argent     : de 3000 à 2000, en continu (chaque seconde compte)
+##   argent -> bronze : de 2000 à 1000, en continu
+##   plus lent que le bronze : 0 (pas de médaille)
+## (1.13 à 1.24 : 3000 au temps de référence ± 100 par seconde.)
 static func speed_points(time: float, reference: float) -> int:
-	var pts: float = SPEED_BASE + (reference - time) * SPEED_PER_SECOND
+	var gold := reference
+	var silver := gold * SILVER_FACTOR
+	var bronze := gold * BRONZE_FACTOR
+	var pts: float
+	if time <= gold:
+		pts = MEDAL_POINTS[3] + (gold - time) * SPEED_PER_SECOND
+	elif time <= silver:
+		pts = lerpf(MEDAL_POINTS[3], MEDAL_POINTS[2], (time - gold) / (silver - gold))
+	elif time <= bronze:
+		pts = lerpf(MEDAL_POINTS[2], MEDAL_POINTS[1], (time - silver) / (bronze - silver))
+	else:
+		pts = 0.0
 	return maxi(0, int(round(pts / 10.0)) * 10)
+
+
+## [MODES 1.25] Médaille obtenue : 3 = or, 2 = argent, 1 = bronze, 0 = aucune.
+static func medal_for(time: float, gold: float) -> int:
+	if time <= gold:
+		return 3
+	if time <= gold * SILVER_FACTOR:
+		return 2
+	if time <= gold * BRONZE_FACTOR:
+		return 1
+	return 0
+
+
+## [MODES 1.25] Temps à battre pour chaque médaille du niveau en cours.
+func medal_times() -> Array:
+	return [gold_time * BRONZE_FACTOR, gold_time * SILVER_FACTOR, gold_time]
+
+
+## [MODES 1.25] Meilleure médaille obtenue sur un niveau (0 = aucune).
+func get_best_medal(path: String) -> int:
+	return int(_best_medals.get(path.get_file().get_basename(), 0))
+
+
+func _save_best_medal(path: String, medal: int) -> void:
+	var key := path.get_file().get_basename()
+	_best_medals[key] = medal
+	var cfg := ConfigFile.new()
+	cfg.load(CONFIG_PATH)
+	cfg.set_value(MEDALS_SECTION, key, medal)
+	cfg.save(CONFIG_PATH)
 
 
 ## Meilleur score connu pour un niveau, -1 s'il n'y en a pas.
@@ -674,3 +825,7 @@ func _load_config() -> void:
 		if cfg.has_section(SCORES_SECTION):
 			for key in cfg.get_section_keys(SCORES_SECTION):
 				_best_scores[key] = int(cfg.get_value(SCORES_SECTION, key, -1))
+		# [MODES 1.25] meilleures médailles
+		if cfg.has_section(MEDALS_SECTION):
+			for key in cfg.get_section_keys(MEDALS_SECTION):
+				_best_medals[key] = int(cfg.get_value(MEDALS_SECTION, key, 0))

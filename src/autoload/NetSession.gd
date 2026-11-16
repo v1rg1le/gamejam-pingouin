@@ -59,6 +59,14 @@ var players := {}            # peer_id -> {"name": String, "loaded": bool, "time
 var found_hosts := {}        # ip -> {"name": String, "players": int, "seen": float}
 var in_race: bool = false    # une course multijoueur est en cours
 var race_seed: int = 0
+# [MODES 1.25] mode de la course réseau (Settings.MODE_CHILL / MODE_SCORE),
+# choisi par l'hôte dans le salon et envoyé à tous avec le niveau et le seed.
+var race_mode: int = 0
+var last_mode: int = -1                  # dernier mode choisi dans le salon (-1 = celui des Options)
+# [MODES 1.25] en Chill, on ne rentre pas au salon 4 s après la dernière
+# arrivée : on laisse le temps de faire des figures ensemble dans le half-pipe.
+const CHILL_STAY_TIME = 60.0             # s après la dernière arrivée (Chill)
+const CHILL_FINISH_TIMEOUT = 150.0       # s après la 1re arrivée (Chill)
 var race_level: String = ""
 var last_results: Array = [] # [[nom, temps], ...] de la dernière course
 var last_level_index: int = 0   # dernière course choisie par l'hôte (salon)
@@ -346,7 +354,7 @@ func _process(delta: float) -> void:
 		if changed:
 			emit_signal("hosts_changed")
 	# Fin de course : délai max après la 1re arrivée (hôte)
-	if is_host() and in_race and _first_finish_time > 0.0 and now - _first_finish_time > FINISH_TIMEOUT:
+	if is_host() and in_race and _first_finish_time > 0.0 and now - _first_finish_time > (CHILL_FINISH_TIMEOUT if race_mode == Settings.MODE_CHILL else FINISH_TIMEOUT):
 		_end_race()
 
 
@@ -425,18 +433,19 @@ func _rpc_players(p: Dictionary) -> void:
 
 # --- Course ----------------------------------------------------------------------
 ## Hôte : lance une course sur un niveau pour tous les joueurs.
-func start_race(level_path: String) -> void:
+func start_race(level_path: String, mode: int = 0) -> void:
 	if not is_host():
 		return
-	_rpc_start.rpc(level_path, randi())
+	_rpc_start.rpc(level_path, randi(), mode)   # [MODES 1.25] + le mode de jeu
 
 
 @rpc("authority", "call_local", "reliable")
-func _rpc_start(level_path: String, seed_value: int) -> void:
+func _rpc_start(level_path: String, seed_value: int, mode: int = 0) -> void:
 	in_race = true
 	_race_id += 1
 	race_level = level_path
 	race_seed = seed_value
+	race_mode = mode   # [MODES 1.25]
 	_first_finish_time = -1.0
 	for id in players:
 		players[id].loaded = false
@@ -515,7 +524,8 @@ func _check_all_finished() -> void:
 		if players[id].time < 0.0:
 			return
 	var id := _race_id
-	await get_tree().create_timer(4.0).timeout   # le temps d'admirer le classement
+	# le temps d'admirer le classement (Score) ; en Chill : de rider ensemble
+	await get_tree().create_timer(CHILL_STAY_TIME if race_mode == Settings.MODE_CHILL else 4.0).timeout
 	if id == _race_id:
 		_end_race()
 
@@ -527,7 +537,8 @@ func _end_race() -> void:
 
 @rpc("authority", "call_local", "reliable")
 func _rpc_back_to_lobby() -> void:
-	last_results = ranking()
+	# [MODES 1.25] pas de classement à afficher au salon après une course Chill
+	last_results = [] if race_mode == Settings.MODE_CHILL else ranking()
 	in_race = false
 	Engine.time_scale = 1.0
 	get_tree().paused = false

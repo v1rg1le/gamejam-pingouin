@@ -526,3 +526,39 @@ Demande de l'équipe : plus de coupure nette du fond, une boucle infinie qui sui
   - le bouton s'appelle « ★ Tutoriel ★ » (au lieu de « Tuto : Bateau ») ; même nom dans le salon multi et l'échange de fantômes. Le fichier du niveau ne change pas (`LevelBateau.tscn`) : records et fantômes conservés ;
   - nouvel ordre des panneaux : avancer → PUMP → SAUT → rotation en l'air → SCORE → grappin… (avant : avancer → SCORE → saut → pump → rotation). Les panneaux restent aux mêmes endroits, seuls les textes changent de place.
 - **Un seul écran de démarrage** : le logo nuit (tête de Pinpouin masquée dans le rond du « i »). L'image « Pinpouin prêt au départ » n'est plus montrée ; il reste un fondu de 0,35 s de la couleur nuit vers l'écran titre. Image conservée, `SplashIntro.SHOW_INTRO_IMAGE = true` pour la remettre.
+
+## 34. Deux modes de jeu : Chill et Score (16/11, version 1.25)
+
+- **Demande** (retours de Léo, lot 2 + choix de Manu) : garder le jeu « compétition » tel qu'il est, avec des médailles, et ajouter le mode « relax » que préfère Léo (« Chill > score, Tricks > score »).
+- **Choix du mode** : deux boutons **Chill / Score** sous « COURSES », dans la sélection des niveaux (`Settings.game_mode`, **Chill par défaut**, mémorisé). En multijoueur, l'hôte choisit le mode dans le salon (`NetSession.race_mode`, envoyé à tous avec le niveau et le seed). `Settings.is_chill()` donne le mode de la partie en cours.
+- **Mode Chill** :
+  - **arrivée d'origine, dans le half-pipe** : l'arrivée sur l'arche (1.18) n'est pas posée (`sol.gd`), c'est `HalfPipe.add_finish_gate` qui pose la sienne, comme avant la 1.18 ;
+  - **pas de chrono, de record, de total de figures, de classement ni de fantôme** (rien n'est enregistré). Les figures réussies s'affichent quand même en jaune, et le maître fait son clin d'œil ;
+  - **le niveau ne se ferme pas** à l'arrivée : bandeau « BRAVO ! Reste faire des figures autant que tu veux » et bouton **Menu** pour partir quand on veut (`RaceManager.free_ride`). Un toucher sur ce bouton ne lance pas le grappin (groupe `touch_block`, `TouchControls._blocked_by_ui`) ;
+  - tuto (sans half-pipe) : « BRAVO ! » puis retour au menu au bout de 3,5 s, sans ralenti ;
+  - en multi : pas de classement ; le bandeau indique combien sont arrivés, et tout le monde rentre au salon 60 s après la dernière arrivée (150 s au plus après la première), pour rider ensemble.
+- **Mode Score** (le jeu de la 1.24, avec des médailles) :
+  - arrivée sur l'arche, chrono, record, fantôme, **30 s de figures bonus** ;
+  - **médailles mesurées par un bot** « bon joueur » (▶, PUMP dans les descentes, grappin au-dessus des trous ; hors projet, `medal_bot.gd`). Or = temps du bot arrondi à la demi-seconde au-dessus, argent = or + 25 %, bronze = or + 60 % :
+
+    | Course | Bot | Or | Argent | Bronze |
+    |---|---|---|---|---|
+    | Tutoriel | 17,28 s | 17,5 s | 21,9 s | 28,0 s |
+    | Flat and fun | 1:03,83 | 1:04,0 | 1:20,0 | 1:42,4 |
+    | Corridor | 1:03,45 | 1:03,5 | 1:19,4 | 1:41,6 |
+    | Nice Slope | 47,68 s | 48,0 s | 1:00,0 | 1:16,8 |
+    | Spaghetti | 30,9 à 34,1 s (10 terrains) | 34,5 s | 43,1 s | 55,2 s |
+    | Hook, you fool ! | estimé | 1:37,0 | 2:01,3 | 2:35,2 |
+
+    Spaghetti : le terrain change à chaque partie, on garde le plus lent des 10 pour que l'or soit faisable partout. Hook you fool : le bot ne passe pas encore tous les trous au grappin (il reste suspendu ou tombe au 4e trou) ; temps extrapolé de ses meilleurs passages, à ajuster avec vos essais (`RaceManager.MEDAL_GOLD`).
+  - **points de vitesse** (`RaceManager.speed_points`) : bronze 1000, argent 2000, or 3000, puis +100 par seconde gagnée sous l'or ; entre deux médailles les points évoluent en continu ; plus lent que le bronze : 0. Les figures s'ajoutent comme avant ;
+  - **affichage** : pastille de la meilleure médaille au bout de chaque bouton de course (dessinée en code, `src/ui/MedalBadge.gd`) ; pendant la course, la prochaine médaille à décrocher à côté du record (« Or 1:04.00 ») ; à l'arrivée, « MÉDAILLE OR (nouvelle !) » ou le temps du bronze à battre ;
+  - les meilleurs scores repartent à zéro (nouvelle section `scores_v3`, l'ancienne reste ignorée) ; records de temps et fantômes conservés ; médailles dans la section `medals` de `user://pinpouin.cfg`.
+- **Durée du bonus** (question de Manu) : un bot « joueur correct » (avance dans le sens du mouvement, PUMP dans les descentes, une figure à chaque décollage) fait **environ 10 passages et 7 à 11 figures en 30 s** (700 à 1100 points), soit le tiers des points de l'or. **30 s est gardé** : assez pour s'amuser, sans que le bonus écrase le chrono. Constat au passage : un pingouin qui retombe à la verticale au fond du half-pipe s'y arrête net ; il faut appuyer sur ◀ ou ▶ pour repartir (le mode enfant le fait tout seul).
+- **Plus de mur invisible** au bout du half-pipe (Léo), dans les deux modes : une chute après l'arrivée fait réapparaître sur le bord gauche du dernier half-pipe (`RaceManager.half_pipe_respawn_point`, utilisé par `Player._pick_respawn_sample`). Spaghetti a son half-pipe tout en bas, sous la fin des spaghettis : on y tombe après l'arrivée, comme avant.
+- **Testé** :
+  - bots en Score (Tutoriel, Flat, Nice Slope : or obtenu, bonus compté) ;
+  - bots en Chill (Flat et Spaghetti : on reste 40 s dans le half-pipe, figures comptées ; tuto : retour au menu) ;
+  - multi à 2 dans les deux modes (Score : classement et retour au salon ; Chill : pas de classement, retour au salon après la dernière arrivée) ;
+  - bot enfant en Chill avec mode enfant ;
+  - 0 erreur de script, 118 fichiers OK.
