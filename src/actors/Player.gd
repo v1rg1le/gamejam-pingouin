@@ -577,6 +577,12 @@ func die() -> void:
 # Choisit l'échantillon "sûr" pris environ respawn_rewind_time secondes avant
 # la dernière glisse au sol (ou le plus ancien disponible).
 func _pick_respawn_sample():
+	# [SANS FIN 1.32] niveau Sans fin : début de l'île d'avant le trou raté
+	var endless = get_tree().get_first_node_in_group("endless")
+	if endless != null:
+		var s = endless.respawn_sample(global_position.x)
+		if s != null:
+			return {"pos": s.pos, "vel": s.vel, "time": _last_ground_time}
 	# [BONUS 1.20] pendant les figures bonus après l'arrivée, une chute (par
 	# exemple dans le trou entre la dernière île et le half-pipe) fait
 	# réapparaître directement sur le deck de gauche du half-pipe, sans élan :

@@ -1,0 +1,57 @@
+[gd_scene load_steps=8 format=2]
+
+[ext_resource path="res://src/levels/parallax/VerticalParallax.gd" type="Script" id=91]
+[ext_resource path="res://src/ui/UserInterface.tscn" type="PackedScene" id=93]
+[ext_resource path="res://src/levels/endless/EndlessGenerator.gd" type="Script" id=94]
+[ext_resource path="res://src/actors/Player.tscn" type="PackedScene" id=14]
+[ext_resource path="res://sprites/levels/Background_glacier.png" type="Texture2D" id=17]
+[ext_resource path="res://sprites/levels/Background_mountains.png" type="Texture2D" id=18]
+[ext_resource path="res://sprites/levels/Background_clouds.png" type="Texture2D" id=19]
+
+[node name="LevelEndless" type="Node2D"]
+texture_repeat = 2
+
+[node name="UserInterface" parent="." instance=ExtResource( 93 )]
+
+[node name="ParallaxBackground" type="ParallaxBackground" parent="."]
+script = ExtResource( 91 )
+
+[node name="ParallaxLayer" type="ParallaxLayer" parent="ParallaxBackground"]
+motion_scale = Vector2( 0.9, 0.9 )
+
+[node name="Sprite2D" type="Sprite2D" parent="ParallaxBackground/ParallaxLayer"]
+position = Vector2( -2272.37, -1876.37 )
+scale = Vector2( 10, 10 )
+z_index = -126
+texture = ExtResource( 19 )
+region_enabled = true
+region_rect = Rect2( -2664.13, -36, 7000, 212.532 )
+
+[node name="ParallaxLayer2" type="ParallaxLayer" parent="ParallaxBackground"]
+motion_scale = Vector2( 0.8, 0.8 )
+
+[node name="Sprite2D" type="Sprite2D" parent="ParallaxBackground/ParallaxLayer2"]
+position = Vector2( -1825.98, -627.717 )
+scale = Vector2( 10, 10 )
+z_index = -120
+texture = ExtResource( 18 )
+region_enabled = true
+region_rect = Rect2( -164.895, 80.638, 7000, 221.683 )
+
+[node name="ParallaxLayer3" type="ParallaxLayer" parent="ParallaxBackground"]
+motion_scale = Vector2( 0.7, 0.7 )
+
+[node name="Sprite2D" type="Sprite2D" parent="ParallaxBackground/ParallaxLayer3"]
+position = Vector2( -1782.18, -949.276 )
+scale = Vector2( 10, 10 )
+z_index = -126
+texture = ExtResource( 17 )
+region_enabled = true
+region_rect = Rect2( -3.104, 26.159, 7000, 298.478 )
+
+[node name="Player" parent="." instance=ExtResource( 14 )]
+position = Vector2( 250, -100 )
+collision_mask = 7
+
+[node name="SansFin" type="Node2D" parent="."]
+script = ExtResource( 94 )

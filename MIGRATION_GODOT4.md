@@ -646,3 +646,43 @@ Demande de l'équipe : plus de coupure nette du fond, une boucle infinie qui sui
 - **En l'air** : la traînée d'avant (blanche, rose pendant un boost) reste ; au sol elle s'efface.
 - Aucun asset ajouté : le grain est une texture de 1 pixel créée en code.
 - **Testé** : 118 fichiers OK ; captures à 500, 1370 et 1620 px/s ; temps du bot des médailles inchangé.
+
+## 41. Niveau « Sans fin » (Chill) (16/11, version 1.32)
+
+- **Idée de Manu** (vidéo d'Alto's Odyssey) : un niveau sans fin avec des trous qu'on passe d'abord en sautant, puis au grappin de façon normale, puis de façon plus subtile, avec des passages testés par des bots.
+- **Niveau** : `src/levels/LevelEndless.tscn`, bouton « Sans fin » dans le panneau CHILL. Le terrain est fabriqué au fur et à mesure devant le pingouin par `src/levels/endless/EndlessGenerator.gd`, et libéré loin derrière (mémoire constante).
+- **Un tronçon** = une île de glace (`sol`, longue de 3000 à 4600 px, en légère descente pour garder de la vitesse) suivie d'un trou :
+
+| Trou | Largeur | Arrivée | Comment le passer |
+|---|---|---|---|
+| Saut | 450 à 800 px | 80 à 220 px plus bas | sauter au bord |
+| Grand saut | 950 à 1450 px | 200 à 380 px plus bas | PUMP + sauter |
+| Grappin | 2300 à 2700 px | 150 à 250 px plus haut | une prise au milieu |
+| Grappin double | 4000 à 4500 px | même niveau | deux prises à enchaîner |
+| Grappin montée | 1600 à 1900 px | 420 à 520 px plus haut | prise au-dessus de l'arrivée : lâcher dans la remontée |
+| Plafond | 3800 à 4400 px | 100 à 200 px plus haut | s'accrocher au plafond, lâcher, se raccrocher plus loin |
+
+- **Difficulté qui monte** (`_pick_type`) :
+  - les 3 premiers trous sont des sauts ;
+  - puis arrivent, dans l'ordre : grand saut (3e), grappin (5e), plafond (8e), grappin double (9e), grappin montée (12e) ;
+  - les petits sauts deviennent plus rares ;
+  - jamais deux fois de suite le même trou à grappin ;
+  - les sauts s'allongent jusqu'à +15 %.
+- **Chute** : réapparition au début de l'île d'avant le trou raté, avec un peu d'élan (`respawn_sample`, appelé par `Player._pick_respawn_sample`). Attention : en tombant, le pingouin dérive souvent sous l'île suivante ; on se sert donc de la dernière île où il a glissé, sinon on « sautait » le trou raté.
+- **Carte d'aide** propre au niveau : sauter les petits trous, grappin sur les blocs de glace, lâcher quand Pinpouin remonte.
+- **Ce que les bots ont appris sur le grappin** : avec une prise au-dessus, c'est un balancier rigide qui tire en plus vers la prise. La chaîne vole à 3000 px/s, donc à pleine vitesse il faut tirer environ 900 px avant la prise. Le bon moment pour lâcher : quand on remonte en avançant (vitesse verticale vers le haut > 45 % de la vitesse).
+- **Validation par bots** (outil hors projet `endless_bot.gd`, 120 s par type de trou forcé) :
+
+| Trou | Bot « saut seul » | Bot « saut + grappin » |
+|---|---|---|
+| Saut | 43/43 | 42/42 |
+| Grand saut | 34/34 | 36/36 |
+| Grappin | 0/19 | 17/21 |
+| Grappin double | 0/19 | 15/15 |
+| Grappin montée | 0/19 | 21/25 |
+| Plafond | 0/20 | 11/11 |
+
+  - Partie normale de 5 min avec le bot grappin : 41 îles, 8 chutes.
+  - Mode enfant, bot qui ne saute jamais : 17 îles en 150 s grâce au pont magique, contre 1 sans le mode enfant.
+- **Testé** : 120 fichiers OK ; captures de chaque type de trou ; panneau CHILL avec 4 boutons sur écran de téléphone.
+- **Prochaine étape (1.33)** : mode Score du Sans fin (compteur de mètres, record, 3 vies en têtes de Pinpouin, médailles 1 / 3 / 5 km).
