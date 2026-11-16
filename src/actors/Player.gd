@@ -285,6 +285,7 @@ func _physics_process(delta: float) -> void:
 	_unstick_from_ground()   # [SOL 1.9]
 	_update_speed_trail()    # [PHYSIQUE 1.10] (en l'air seulement depuis 1.31)
 	_update_snow_spray()     # [NEIGE 1.31] gerbe de neige et de glace au sol
+	_update_sounds()         # [BRUITAGES 1.34] glisse, vent, atterrissage, pump
 
 	# [FIX VITESSE -> 0] diagnostic console si la vitesse s'effondre quand même
 	if debug_speed_drop:
@@ -558,6 +559,7 @@ func die() -> void:
 		return
 	death_count += 1
 	print("[MORT] chute ! (mort n°", death_count, ")")
+	Sfx.play("chute")   # [BRUITAGES 1.34] « waaah » qui s'éloigne
 	emit_signal("died")
 	if not respawn_on_death:
 		# Variante "game over" : on recharge simplement le niveau.
@@ -618,6 +620,7 @@ func _do_respawn() -> void:
 	chain_velocity = Vector2.ZERO
 	_states.go_to_state(self, "in_air")
 	camera.reset_smoothing()  # la caméra saute directement au pingouin
+	Sfx.play("reapparition", -4.0)   # [BRUITAGES 1.34] petit « pop »
 	_respawning = false
 	emit_signal("respawned")
 
@@ -692,6 +695,7 @@ func _get_aim_direction() -> Vector2:
 
 func _on_Chain_chain_hooked(current_length):
 	chain_length = current_length
+	Sfx.play("grappin_accroche")   # [BRUITAGES 1.34] le crochet se plante
 
 
 
@@ -779,3 +783,46 @@ func _update_snow_spray() -> void:
 		p.scale_amount_min = 5.0 + 4.0 * t + 2.0 * i
 		p.scale_amount_max = 9.0 + 9.0 * t + 3.0 * i
 		p.modulate = Color(1.0, 0.6, 0.9) if boosting else Color.WHITE
+
+
+
+# =============================================================================
+#  [BRUITAGES 1.34] Sons continus et petits événements du pingouin
+#  (voir src/autoload/Sfx.gd). Les boucles sont redemandées à chaque image
+#  avec leur volume : elles s'éteignent toutes seules quand on ne les demande
+#  plus (pause, changement de niveau, pingouin figé).
+# =============================================================================
+var _sfx_was_ground := true
+var _sfx_air_time := 0.0
+var _sfx_last_vy := 0.0
+
+func _update_sounds() -> void:
+	var speed := _velocity.length()
+	var dt := get_physics_process_delta_time()
+	var gliding: bool = is_on_ground and _states != null and _states.current != null \
+		and _states.current.super_state_name == "ON_GROUND"
+	# glisse sur la glace : plus fort avec la vitesse ; « rapide » au-delà de 1100 px/s
+	if gliding and speed > 60.0:
+		Sfx.loop("glisse_boucle", clampf(speed / 900.0, 0.0, 1.0) * 0.55, 0.85 + clampf(speed / 1500.0, 0.0, 1.0) * 0.3)
+		if speed > 1000.0:
+			Sfx.loop("glisse_rapide_boucle", clampf((speed - 1000.0) / 700.0, 0.0, 1.0) * 0.5)
+	# vent en l'air (après un petit moment, pour ne pas souffler à chaque bosse)
+	if not is_on_ground:
+		_sfx_air_time += dt
+		if _sfx_air_time > 0.25:
+			Sfx.loop("vent_boucle", clampf(speed / 1600.0, 0.0, 1.0) * 0.45)
+			if speed > 1300.0:
+				Sfx.loop("vitesse_boucle", clampf((speed - 1300.0) / 600.0, 0.0, 1.0) * 0.35)
+	# fond sonore : vent arctique lointain, très doux
+	Sfx.loop("ambiance_vent", 0.25)
+	# atterrissage : plus fort si on tombait vite (pas en réapparaissant)
+	if is_on_ground and not _sfx_was_ground and _sfx_air_time > 0.2 and not _respawning:
+		var impact := clampf(_sfx_last_vy / 900.0, 0.2, 1.0)
+		Sfx.play("atterrissage", linear_to_db(impact) - 2.0)
+	if is_on_ground:
+		_sfx_air_time = 0.0
+	# pump : un « fff » à chaque appui au sol
+	if is_on_ground and Input.is_action_just_pressed("pump") and not Settings.kid_mode:
+		Sfx.play("pump", -5.0)
+	_sfx_was_ground = is_on_ground
+	_sfx_last_vy = _velocity.y

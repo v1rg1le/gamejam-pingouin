@@ -201,6 +201,7 @@ func show_master_wink() -> void:
 		_master = preload("res://src/ui/race/MasterWink.gd").new()
 		(_ui_root if _ui_root != null else self).add_child(_master)
 	_master.play()
+	Sfx.play("maitre_clin", -4.0)   # [BRUITAGES 1.34] petit « ting »
 
 
 # --- [BONUS 1.20] Bandeau « BONUS HALF-PIPE » après l'arrivée ------------------
@@ -249,14 +250,20 @@ func set_best(best: float) -> void:
 
 
 ## [MULTI] Affiche le compte à rebours (secondes restantes ; <= 0 -> "GO !").
+var _last_count := -1   # [BRUITAGES 1.34] dernier chiffre annoncé
+
 func show_countdown(remaining: float) -> void:
 	_countdown_label.visible = true
 	if remaining > 0.0:
 		_countdown_label.text = str(ceili(remaining))
+		if ceili(remaining) != _last_count:   # [BRUITAGES 1.34] « tic » à chaque chiffre
+			_last_count = ceili(remaining)
+			Sfx.play("decompte_bip", 0.0, 1.0)
 		_best_label.text = "Prêt ?"
 	elif _go_timer <= 0.0:
 		_countdown_label.text = "GO !"
 		_go_timer = 0.8
+		Sfx.play("decompte_go", 0.0, 1.0)   # [BRUITAGES 1.34]
 		set_best(RaceManager.get_best_time(RaceManager.level_path))
 
 

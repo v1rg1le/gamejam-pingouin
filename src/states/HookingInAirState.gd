@@ -156,10 +156,14 @@ func swing(player: CharacterBody2D, delta):
 	player._velocity += (player.chain.tip - player.global_position).normalized() * stretch_factor * delta
 
 func exit(player: CharacterBody2D) -> void:
+	# [BRUITAGES 1.34] on lâche une corde accrochée (pas un lancer dans le vide)
+	if player.chain.hooked:
+		Sfx.play("grappin_lacher", -4.0)
 	player.chain.release()
 
 func enter(player: CharacterBody2D, _previous_state: PlayerState) -> void:
 	pull_factor = 1  # par default
+	Sfx.play("grappin_lancer", -2.0)   # [BRUITAGES 1.34]
 	_mode_initialised = false  # [GRAPPIN] le mode sera choisi à l'accroche
 	player.chain_velocity = Vector2.ZERO
 

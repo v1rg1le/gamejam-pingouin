@@ -103,6 +103,7 @@ func _physics_process(_delta: float) -> void:
 		while _spins_counted < turns:
 			_spins_counted += 1
 			_add("Vrille", SPIN_POINTS)
+			Sfx.play("vrille", -4.0)   # [BRUITAGES 1.34]
 	_prev_rotation = rot
 
 	# 6. Atterrissage propre : les points du saut sont gagnés
@@ -128,6 +129,10 @@ func bank() -> void:
 	if combo > 1:
 		label += "  COMBO ×%d" % combo
 	_pending.clear()
+	# [BRUITAGES 1.34] « ding » de figure réussie ; un combo monte d'un cran par figure
+	Sfx.play("figure_ok", -2.0)
+	if combo > 1:
+		Sfx.play("combo", -3.0, 1.0 + 0.12 * (combo - 2))
 	# [BOOST FIGURE 1.30] la figure réussie donne de l'élan au pingouin
 	if player != null and is_instance_valid(player) and player.has_method("trick_boost"):
 		player.trick_boost(combo)

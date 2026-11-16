@@ -55,6 +55,7 @@ const OPTIONS_PATH = "user://pinpouin.cfg"   # même fichier que les records / f
 var help_on_start: bool = true
 var tutorial_pause: bool = true
 var music_volume: float = 0.8
+var sfx_volume: float = 0.8   # [BRUITAGES 1.34] volume des effets (bus audio « Sound »)
 var physics_panel: bool = false   # [PHYSIQUE 1.10] bouton ⚙ du panneau de réglage en tactile
 var master_wink: bool = true      # [MAÎTRE 1.19] clin d'œil du maître ninja à chaque figure réussie
 # [MODE ENFANT 1.23] Options → « Mode enfant » : poussée automatique au sol,
@@ -111,6 +112,7 @@ func _load_options() -> void:
 		help_on_start = cfg.get_value("options", "help_on_start", true)
 		tutorial_pause = cfg.get_value("options", "tutorial_pause", true)
 		music_volume = clampf(float(cfg.get_value("options", "music_volume", 0.8)), 0.0, 1.0)
+		sfx_volume = clampf(float(cfg.get_value("options", "sfx_volume", 0.8)), 0.0, 1.0)   # [BRUITAGES 1.34]
 		physics_panel = cfg.get_value("options", "physics_panel", false)
 		master_wink = cfg.get_value("options", "master_wink", true)
 		kid_mode = cfg.get_value("options", "kid_mode", false)   # [MODE ENFANT 1.23]
@@ -131,7 +133,7 @@ func is_chill() -> bool:
 ## Change un réglage, l'applique et le mémorise.
 func set_option(key: String, value) -> void:
 	set(key, value)
-	if key == "music_volume":
+	if key == "music_volume" or key == "sfx_volume":
 		apply_music_volume()
 	if key == "ui_size":   # [RESPONSIVE 1.14] appliqué tout de suite aux menus
 		_last_scene_path = ""
@@ -147,6 +149,10 @@ func apply_music_volume() -> void:
 	var bus := AudioServer.get_bus_index("Music")
 	if bus >= 0:
 		AudioServer.set_bus_volume_db(bus, linear_to_db(maxf(music_volume, 0.0001)))
+	# [BRUITAGES 1.34] volume des effets : bus "Sound"
+	var sfx_bus := AudioServer.get_bus_index("Sound")
+	if sfx_bus >= 0:
+		AudioServer.set_bus_volume_db(sfx_bus, linear_to_db(maxf(sfx_volume, 0.0001)))
 
 
 # [FINITION 13/11] Touche "retour" d'Android : par défaut Godot FERME l'appli

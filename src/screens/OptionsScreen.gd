@@ -76,6 +76,7 @@ func _ready() -> void:
 	kid.toggled.connect(func(v): Settings.set_option("kid_mode", v))
 	music_slider.value = Settings.music_volume
 	music_slider.value_changed.connect(func(v): Settings.set_option("music_volume", v))
+	_add_sfx_slider()       # [BRUITAGES 1.34] juste sous la musique
 	_add_ui_size_slider()   # [RESPONSIVE 1.14]
 	_add_arrows_choice()    # [FLÈCHES 1.16]
 	# --- Fantômes
@@ -153,6 +154,24 @@ func _go_back() -> void:
 # Créé par code sous le curseur de musique (même style), pour ne pas
 # toucher à la scène. Appliqué au relâchement du curseur (sinon l'écran
 # changerait de taille sous le doigt pendant qu'on le fait glisser).
+# [BRUITAGES 1.34] « Volume des effets » : curseur créé par code sous celui de
+# la musique (même style). Un petit son d'essai au relâchement.
+func _add_sfx_slider() -> void:
+	var box: VBoxContainer = music_slider.get_parent()
+	var title: Label = box.get_node("MusicTitle").duplicate()
+	title.text = "Volume des effets"
+	var slider := HSlider.new()
+	slider.custom_minimum_size = music_slider.custom_minimum_size
+	slider.min_value = music_slider.min_value
+	slider.max_value = music_slider.max_value
+	slider.step = music_slider.step
+	slider.value = Settings.sfx_volume
+	box.add_child(title)
+	box.add_child(slider)
+	slider.value_changed.connect(func(v): Settings.set_option("sfx_volume", v))
+	slider.drag_ended.connect(func(_c): Sfx.play("figure_ok"))
+
+
 func _add_ui_size_slider() -> void:
 	var box: VBoxContainer = music_slider.get_parent()
 	var title: Label = box.get_node("MusicTitle").duplicate()

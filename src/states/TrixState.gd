@@ -25,6 +25,7 @@ func _update(_player: CharacterBody2D) -> void:
 	pass
 
 func enter(player: CharacterBody2D, _previous_state: PlayerState) -> void:
+	Sfx.play("figure_whoosh")   # [BRUITAGES 1.34] figure lancée
 #	player.animated_sprite.animation = "spin"
 	var animations = ["trick_spin", "trick_boule", "trick_etoile_ninja", "trick_carpe"]
 	randomize()

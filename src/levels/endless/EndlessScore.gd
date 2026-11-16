@@ -15,7 +15,7 @@ extends CanvasLayer
 const LIVES := 3
 ## Pixels par mètre : réglé aux bots pour que l'or (5 km) corresponde à une
 ## bonne partie d'un « bon joueur » (bot qui saute et utilise bien le grappin).
-const PX_PER_METER := 40.0   # ~ la taille du pingouin : 1 Pinpouin = 1 m
+const PX_PER_METER := 55.0   # [1.34] réglé aux bots avec la physique par défaut (1.33 : 40)
 ## Distances des médailles (mètres) : bronze, argent, or.
 const MEDAL_METERS := [1000, 3000, 5000]
 const MEDAL_NAMES := ["", "BRONZE", "ARGENT", "OR"]
@@ -146,6 +146,7 @@ func _on_died() -> void:
 
 func _game_over() -> void:
 	over = true
+	get_tree().create_timer(0.9).timeout.connect(func(): Sfx.play("bonus_fin"))   # [BRUITAGES 1.34]
 	var medal := medal_for(meters)
 	var record := meters > best
 	if record:
@@ -218,6 +219,7 @@ static func medal_for(m: int) -> int:
 
 
 func _flash_medal(medal: int) -> void:
+	Sfx.play("record")   # [BRUITAGES 1.34]
 	var l := _make_label(44, MEDAL_COLORS[medal])
 	l.text = "MÉDAILLE %s !" % MEDAL_NAMES[medal]
 	l.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER

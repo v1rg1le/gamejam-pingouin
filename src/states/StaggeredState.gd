@@ -19,6 +19,7 @@ func _handle_input(player: CharacterBody2D, _delta: float) -> void:
 
 func enter(player: CharacterBody2D, _previous_state: PlayerState) -> void:
 	print('entering staggered')
+	Sfx.play("figure_rate")   # [BRUITAGES 1.34] « boing », Pinpouin sonné
 #	player.anim_player.play("staggered")
 #	player.anim_player.play("stuck")
 	randomize()

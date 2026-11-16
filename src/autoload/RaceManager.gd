@@ -81,15 +81,16 @@ const SCORES_SECTION = "scores_v3"   # [MODES 1.25] barème à médailles (avant
 #    px, puis le reste à vitesse de croisière). À ajuster après vos essais.
 # Un niveau absent de la liste utilise l'ancien temps de référence
 # (distance ÷ REF_SPEED) comme temps d'or.
-# [BOOST FIGURE 1.30] temps remesurés avec le boost de figure : le bot fait
-# une figure à chaque saut assez long (il simule sa trajectoire et ne tente
-# rien s'il retombe avant 1,1 s). Anciens temps (sans figures) entre ().
+# [MÉDAILLES 1.34] temps remesurés avec les réglages physiques PAR DÉFAUT (les
+# mesures de la 1.30 avaient été faites avec d'anciens réglages F2 restés sur la
+# machine de test : trop rapides). Or = meilleur temps du bot « bon joueur »,
+# avec ou sans figures, arrondi à la demi-seconde au-dessus.
 const MEDAL_GOLD := {
-	"LevelBateau": 17.5,          # bot : 17,23 s (17,28)
-	"LevelRandomFlat": 55.0,      # bot : 54,82 s (63,83)
-	"LevelRandomCorridor": 56.0,  # bot : 55,62 s (63,45)
-	"LevelRandomNiceSlope": 46.0, # bot : 45,75 s (47,68)
-	"LevelRandomSpaghetti": 28.0, # bot : 26,1 à 28,0 s selon le terrain (30,9 à 34,1)
+	"LevelBateau": 19.0,          # bot : 18,95 s avec figures (19,12 sans)
+	"LevelRandomFlat": 64.0,      # bot : 63,60 s avec figures (65,15 sans)
+	"LevelRandomCorridor": 66.5,  # bot : 66,40 s sans figures (74,33 avec : figures risquées ici)
+	"LevelRandomNiceSlope": 49.5, # bot : 49,07 s avec figures (52,17 sans)
+	"LevelRandomSpaghetti": 33.5, # bot : 31,3 à 33,6 s selon le terrain (32,55 sans figures)
 	"LevelRandomGap": 97.0,       # estimé (voir plus haut), pas remesuré
 }
 const SILVER_FACTOR := 1.25       # argent = or × 1,25
@@ -250,6 +251,7 @@ func _physics_process(delta: float) -> void:
 		if _hud != null and is_instance_valid(_hud):
 			_hud.set_bonus_left(bonus_left)
 		if bonus_left <= 0.0:
+			Sfx.play("bonus_fin")   # [BRUITAGES 1.34] coup de sifflet
 			_complete_race()
 		return
 	if not racing:
@@ -362,6 +364,7 @@ func finish_race() -> bool:
 	# [SCORE 1.5] une figure en cours en passant la ligne compte (avant de couper le chrono)
 	if trick_score != null and is_instance_valid(trick_score):
 		trick_score.bank()
+	Sfx.play("arrivee")   # [BRUITAGES 1.34] passage de la ligne d'arrivée
 	if Settings.is_chill():
 		return _finish_chill()   # [MODES 1.25]
 	racing = false
@@ -372,6 +375,8 @@ func finish_race() -> bool:
 		_rec.time = race_time
 		_save_ghost(_rec)
 	_finish_record = {"is_record": is_record, "previous_best": previous_best}
+	if is_record:   # [BRUITAGES 1.34] petites notes montantes, juste après l'arrivée
+		get_tree().create_timer(0.7).timeout.connect(func(): Sfx.play("record"))
 	# [BONUS 1.20] le chrono est arrêté (temps, record et fantôme ci-dessus ne
 	# changent plus), mais s'il y a un half-pipe après l'arrivée, on laisse
 	# BONUS_TIME secondes pour y faire des figures qui comptent encore.

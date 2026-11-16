@@ -18,6 +18,7 @@ func _handle_input(player: CharacterBody2D, delta: float) -> void:
 
 func enter(player: CharacterBody2D, _previous_state: PlayerState) -> void:
 	print('enter jumping')
+	Sfx.play("saut", -3.0)   # [BRUITAGES 1.34]
 #	player.anim_player.play("jumping")
 #	player.animated_sprite.animation = "fly"
 	player.direction.y = -1.0

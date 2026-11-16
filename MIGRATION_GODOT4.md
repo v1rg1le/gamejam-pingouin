@@ -704,3 +704,55 @@ Demande de l'équipe : plus de coupure nette du fond, une boucle infinie qui sui
   - bot « saut + grappin » : 3,4 à 8,9 km, l'or est atteint dans 4 parties sur 6 (comme les temps de l'or des courses, mesurés sur un bon joueur) ;
   - bot « saut seul » : 783 m, il s'arrête aux premiers trous à grappin, donc pas de bronze sans le grappin.
 - **Testé** : 122 fichiers OK ; captures du compteur et de l'écran de fin ; menu sur écran de téléphone avec le 7e bouton ; le Sans fin du panneau CHILL reste sans vies même quand le mode Score est choisi.
+
+## 43. Bruitages provisoires + médailles corrigées (16/11, version 1.34)
+
+### Bruitages provisoires
+- **Demande de Manu** : en attendant les vrais enregistrements de son ami, des bruitages générés par Claude d'après la liste « Pinpouin Le Ninja — Sons à enregistrer ».
+- **Les sons** (`assets/sfx_provisoire/`) : entièrement calculés (bruit filtré, sinus, enveloppes), rien de récupéré ailleurs. Outil hors projet `gen_sfx.py`. 60 fichiers WAV mono 44,1 kHz, 5 Mo :
+  - 25 sons, la plupart en 3 variantes, tirées au hasard et à une hauteur légèrement différente à chaque fois ;
+  - 5 boucles : glisse, glisse rapide, vent en l'air, sifflement de vitesse, vent d'ambiance ;
+  - les **voix** (hop, youhou, aïe, maître ninja), les applaudissements, la corde tendue et le freinage ne sont pas faits : des voix calculées sonneraient faux, c'est le travail de l'ami.
+- **Lecteur** : autoload `Sfx` (`src/autoload/Sfx.gd`).
+  - `Sfx.play("nom")` pour les sons courts ; `Sfx.loop("nom", volume)` pour les boucles, redemandées à chaque image et qui s'éteignent en douceur quand on ne les demande plus (pause, changement de niveau).
+  - Bus audio « Sound », qui existait déjà sans être utilisé. Nouveau curseur **« Volume des effets »** dans les Options, sous la musique (`Settings.sfx_volume`), avec un « ding » d'essai.
+  - Clic sur tous les boutons des menus, ajouté automatiquement.
+- **Pour passer aux vrais sons** : déposer les WAV de l'ami dans `assets/sfx/` avec les noms de la liste (`saut_01.wav`, `saut_02.wav`… ou `glisse_boucle.wav`). Ils sont pris en priorité, sans toucher au code. Pour une boucle, régler *Loop Mode = Forward* dans l'import (fait pour les provisoires).
+- **Où on les entend** :
+
+| Moment | Son |
+|---|---|
+| Glisse au sol (plus fort avec la vitesse ; « rapide » au-delà de 1000 px/s) | `glisse_boucle`, `glisse_rapide_boucle` |
+| En l'air (vent ; sifflement au-delà de 1300 px/s) | `vent_boucle`, `vitesse_boucle` |
+| Fond sonore de tous les niveaux | `ambiance_vent` |
+| Saut, atterrissage (plus fort si on tombait vite), appui sur PUMP au sol | `saut`, `atterrissage`, `pump` |
+| Grappin : lancer, accroche, lâcher | `grappin_lancer`, `grappin_accroche`, `grappin_lacher` |
+| Figure lancée, réussie, combo (de plus en plus aigu), vrille, figure ratée | `figure_whoosh`, `figure_ok`, `combo`, `vrille`, `figure_rate` |
+| Chute dans le vide, réapparition | `chute`, `reapparition` |
+| Décompte 3-2-1, GO (multi) | `decompte_bip`, `decompte_go` |
+| Ligne d'arrivée, nouveau record, fin du bonus | `arrivee`, `record`, `bonus_fin` |
+| Clin d'œil du maître | `maitre_clin` |
+| Sans fin : médaille, plus de vies | `record`, `bonus_fin` |
+| Boutons des menus | `ui_clic` |
+
+- Testé : un bot sur Nice Slope déclenche glisse, glisse rapide, vent, sifflement, ambiance, atterrissage, pump, figures, figure ratée, clin d'œil et arrivée ; le temps du bot est identique avec et sans les sons.
+
+### Médailles corrigées (important)
+- En vérifiant les sons, le temps du bot était différent de celui mesuré en 1.30. Cause : le fichier d'options de la machine de test contenait d'anciens réglages du panneau F2, restés d'un essai précédent, qui rendaient le pingouin plus rapide. **Les temps de l'or de la 1.30 et l'échelle des mètres de la 1.33 avaient été mesurés avec cette physique-là**, pas avec celle des joueurs.
+- Remesuré avec les réglages par défaut (fichier d'options effacé avant chaque partie, terrains au hasard pour Spaghetti). Or = meilleur temps du bot, avec ou sans figures, arrondi à la demi-seconde au-dessus :
+
+| Niveau | Or 1.30 (faux) | Bot avec figures | Bot sans figures | Or 1.34 |
+|---|---|---|---|---|
+| Tutoriel | 17,5 s | 18,95 s | 19,12 s | 19 s |
+| Flat and fun | 55 s | 63,60 s | 65,15 s | 64 s |
+| Corridor | 56 s | 74,33 s | 66,40 s | 66,5 s |
+| Nice Slope | 46 s | 49,07 s | 52,17 s | 49,5 s |
+| Spaghetti | 28 s | 31,3 à 33,6 s | 32,55 s | 33,5 s |
+| Hook, you fool ! | 97 s | — | — | 97 s (estimé) |
+
+  - À noter : dans Corridor, faire des figures fait perdre du temps (atterrissages ratés) ; dans les autres niveaux, le boost fait gagner 1 à 3 s.
+- **Sans fin** revalidé avec la vraie physique :
+  - bot « saut seul » : 100 % des sauts, 0 % des trous à grappin ;
+  - bot grappin : grappin 15/15, double 11/12, montée 17/17, plafond 8/8.
+  - Échelle des mètres : le bot grappin faisait 6,9 à 10,9 km avant sa 3e chute. L'or serait atteint à chaque fois, donc **1 m = 55 px** au lieu de 40. Le bot fait alors 5,0 à 8,0 km (or 4 fois sur 5) ; le bot « saut seul » environ 670 m (pas de bronze sans grappin).
+- **Leçon pour la suite** : avant chaque mesure aux bots, effacer `user://pinpouin.cfg` (réglages F2, records et fantômes) de la machine de test.
