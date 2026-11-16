@@ -272,7 +272,15 @@ func _start_race() -> void:
 		kid.setup(_player)
 		get_tree().current_scene.add_child(kid)
 	if not has_finish and not NetSession.in_race:
-		return  # niveau "Chill" : pas de chrono
+		# niveau "Chill" (704, 917, half-pipe) : pas de chrono.
+		# [CHILL 1.28] mais les figures s'affichent (et le maître fait son clin
+		# d'œil) : HUD sans chrono ni score + juge des figures, en « ride libre ».
+		free_ride = true
+		_hud = preload("res://src/ui/race/RaceHud.gd").new()
+		_hud.chill_mode = true
+		get_tree().current_scene.add_child(_hud)
+		_setup_tricks(get_tree().current_scene)
+		return
 	racing = true
 	race_time = 0.0
 	_sample_timer = 0.0
@@ -289,7 +297,27 @@ func _start_race() -> void:
 	_hud.chill_mode = Settings.is_chill()   # [MODES 1.25] pas de chrono ni de score à l'écran
 	scene.add_child(_hud)
 	_hud.set_best(get_best_time(level_path))
-	# [SCORE 1.5] juge des figures : il observe le pingouin et prévient le HUD
+	_setup_tricks(scene)
+	if _ghost_data != null:
+		_ghost_node = preload("res://src/ui/race/GhostPenguin.gd").new()
+		_ghost_node.setup(_ghost_data, _player)
+		scene.add_child(_ghost_node)
+	# [MULTI] on fige le pingouin et on prévient l'hôte qu'on est prêt.
+	# Le chrono ne part qu'au "GO" (cf. _on_countdown_started).
+	if NetSession.in_race:
+		racing = false
+		_waiting_go = true
+		_freeze_player_for_start()   # [ATTENTE 1.14] posé au sol, grappin rangé
+		_player.process_mode = Node.PROCESS_MODE_DISABLED
+		_hud.set_best(-2.0)   # -2 = "en attente des autres joueurs"
+		_hud.show_waiting(true)   # [ATTENTE 1.14] grand panneau « En attente… »
+		_hud.set_ranking(NetSession.ranking())
+		NetSession.notify_loaded()
+
+
+## [SCORE 1.5] juge des figures : il observe le pingouin et prévient le HUD.
+## ([CHILL 1.28] sorti de _start_race pour servir aussi aux niveaux Chill.)
+func _setup_tricks(scene: Node) -> void:
 	trick_score = preload("res://src/ui/race/TrickScore.gd").new()
 	trick_score.setup(_player)
 	scene.add_child(trick_score)
@@ -306,21 +334,6 @@ func _start_race() -> void:
 	trick_score.pending_changed.connect(func(text):
 		if is_instance_valid(_hud):
 			_hud.set_pending(text))
-	if _ghost_data != null:
-		_ghost_node = preload("res://src/ui/race/GhostPenguin.gd").new()
-		_ghost_node.setup(_ghost_data, _player)
-		scene.add_child(_ghost_node)
-	# [MULTI] on fige le pingouin et on prévient l'hôte qu'on est prêt.
-	# Le chrono ne part qu'au "GO" (cf. _on_countdown_started).
-	if NetSession.in_race:
-		racing = false
-		_waiting_go = true
-		_freeze_player_for_start()   # [ATTENTE 1.14] posé au sol, grappin rangé
-		_player.process_mode = Node.PROCESS_MODE_DISABLED
-		_hud.set_best(-2.0)   # -2 = "en attente des autres joueurs"
-		_hud.show_waiting(true)   # [ATTENTE 1.14] grand panneau « En attente… »
-		_hud.set_ranking(NetSession.ranking())
-		NetSession.notify_loaded()
 
 
 # Un échantillon = 10 nombres : t, x, y, rotation, n° d'animation, image,

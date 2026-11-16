@@ -43,6 +43,9 @@ var b = pow(0.01,1/length)
 @export var is_igloo: bool = false
 @export var igloo_treshold = 0.01 #ATTENTION -igloo_treshold<...<igloo_treshold
 @export var is_final_map: bool = false
+## [CHILL 1.28] false = pas de ligne d'arrivée (niveau Chill « Half-pipe » :
+## on y fait des figures sans fin). Le podium et les décors restent.
+@export var with_finish: bool = true
 
 
 #Permet d'avoir la position de la fin (x,y) y=end_height x=map_width * NUMERO MAP + SOMME DES GAP
@@ -271,6 +274,8 @@ func add_finish_podium(position :Vector2):#, rotation_degrees): #point_a:Vector2
 #	return deco
 
 func add_finish_gate(position :Vector2):#, rotation_degrees): #point_a:Vector2,point_b:Vector2):
+	if not with_finish:
+		return   # [CHILL 1.28]
 	# [ARRIVÉE 1.18] l'arrivée est désormais sur l'arche de la dernière île
 	# (voir sol.gd, _add_finish_at_arch) : pas de 2e arrivée dans le half-pipe.
 	# (Un half-pipe utilisé seul, sans île avant, garde la sienne.)

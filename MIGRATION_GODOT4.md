@@ -585,3 +585,14 @@ Demande de l'équipe : plus de coupure nette du fond, une boucle infinie qui sui
 - **Pas pendant le grappin** (il a sa propre physique) **ni en mode enfant** (les petits appuient sur PUMP au hasard). Le petit coup de pump en l'air d'origine (`InAirState`) est conservé.
 - **Mesuré** sur un saut du Tutoriel lancé à ~850 px/s : 1,67 s en l'air et 935 px sans PUMP ; **0,92 s et 514 px** en gardant PUMP. Ça sert à écourter un saut trop long, à viser son atterrissage, et à « coller » à une descente pour garder l'élan. Revers : un saut écourté laisse moins de temps pour les figures.
 - Temps des médailles inchangés : le bot de mesure ne pumpe qu'au sol.
+
+## 37. Niveau Chill « Half-pipe » + figures visibles en Chill (16/11, version 1.28)
+
+- **Demande de Léo** : « un level à mettre dans Chill avec juste un half-pipe ».
+- **Niveau** : la scène `LevelHalfPipe.tscn` existait déjà dans le projet sans être au menu. Elle y est ajoutée : bouton « Half-pipe » dans le panneau CHILL, après 917.
+  - Pas de ligne d'arrivée : nouvelle option `HalfPipe.with_finish = false`. On y fait des figures sans fin.
+  - Menu pause ajouté (`UserInterface`), comme dans les autres niveaux.
+  - Podium, décors et prises de grappin (blocs au-dessus) conservés.
+  - Une chute par un bout fait réapparaître sur le bord gauche du half-pipe.
+- **Figures visibles dans tous les niveaux Chill** (704, 917, Half-pipe) : avant, sans arrivée, il n'y avait aucun affichage. Maintenant, un HUD sans chrono ni score montre les figures réussies, et le maître fait son clin d'œil (`RaceManager._setup_tricks`, ride libre `free_ride`).
+- **Testé** : bot qui fait des allers-retours avec une figure à chaque décollage : 60 s sans chute, figures comptées. 704 et 917 sans erreur. 118 fichiers OK.

@@ -1,14 +1,17 @@
-[gd_scene load_steps=6 format=2]
+[gd_scene load_steps=7 format=2]
 
 [ext_resource path="res://src/levels/parallax/VerticalParallax.gd" type="Script" id=91]
+[ext_resource path="res://src/ui/UserInterface.tscn" type="PackedScene" id=93]
 [ext_resource path="res://src/levels/GroundGenerator/HalfPipe.tscn" type="PackedScene" id=1]
 [ext_resource path="res://src/actors/Player.tscn" type="PackedScene" id=14]
 [ext_resource path="res://sprites/levels/Background_glacier.png" type="Texture2D" id=17]
 [ext_resource path="res://sprites/levels/Background_mountains.png" type="Texture2D" id=18]
 [ext_resource path="res://sprites/levels/Background_clouds.png" type="Texture2D" id=19]
 
-[node name="LevelChill917" type="Node2D"]
+[node name="LevelHalfPipe" type="Node2D"]
 texture_repeat = 2
+
+[node name="UserInterface" parent="." instance=ExtResource( 93 )]
 
 [node name="ParallaxBackground" type="ParallaxBackground" parent="."]
 script = ExtResource( 91 )
@@ -53,3 +56,4 @@ collision_mask = 7
 [node name="Plateforms" type="Node2D" parent="."]
 
 [node name="HalfPipe" parent="Plateforms" instance=ExtResource( 1 )]
+with_finish = false
