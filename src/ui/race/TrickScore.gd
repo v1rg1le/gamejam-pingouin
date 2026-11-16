@@ -128,6 +128,9 @@ func bank() -> void:
 	if combo > 1:
 		label += "  COMBO ×%d" % combo
 	_pending.clear()
+	# [BOOST FIGURE 1.30] la figure réussie donne de l'élan au pingouin
+	if player != null and is_instance_valid(player) and player.has_method("trick_boost"):
+		player.trick_boost(combo)
 	emit_signal("pending_changed", "")
 	emit_signal("points_banked", points, total, label)
 

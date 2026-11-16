@@ -36,6 +36,9 @@ const PARAMS = [
 	["over_speed_drag", "Frottement au-dessus du max", 0.0, 3.0, 0.05],
 	["landing_speed_keep", "Vitesse gardée à l'atterrissage", 0.0, 1.0, 0.05],
 	["air_pump_gravity", "Gravité en pumpant en l'air (×)", 1.0, 4.0, 0.1],   # [PUMP EN L'AIR 1.27]
+	["trick_boost_base", "Boost d'une figure réussie (px/s)", 0.0, 600.0, 10.0],   # [BOOST FIGURE 1.30]
+	["trick_boost_per_combo", "Boost en plus par figure du combo", 0.0, 300.0, 10.0],
+	["trick_boost_time", "Durée du boost de figure (s)", 0.2, 4.0, 0.1],
 	["gravity", "Gravité", 300.0, 2000.0, 10.0],
 	["speed_trail_from", "Traînée de vitesse à partir de", 0.0, 3000.0, 50.0],
 ]

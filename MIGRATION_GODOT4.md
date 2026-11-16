@@ -609,3 +609,26 @@ Demande de l'équipe : plus de coupure nette du fond, une boucle infinie qui sui
   - `add_ceilings = false` sur le nœud `BoucleInfinie` pour les retirer.
 - **Résultat** : 917 : 18 plafonds ; 704 : 21. Bot qui lance le grappin vers le haut toutes les 3 s pendant 60 s : 917 : 4 → 15 accroches ; 704 : 3 → 11 accroches ; aucune chute. 118 fichiers OK.
 - **À vérifier en jouant** : les plafonds sont parfois juste au-dessus du haut de l'écran (on voit la corde partir hors champ). Si c'est gênant, baisser `ceiling_clearance` (ex. 380).
+
+## 39. Boost de figure (16/11, version 1.30)
+
+- **Demande de Manu** (après la vidéo d'Alto's Odyssey) : « un petit boost de vitesse quand on a réussi un trick », partout.
+- **Principe** : quand les points d'un saut sont gagnés (atterrissage propre, `TrickScore.bank()`), le pingouin reçoit une poussée dans le sens de sa vitesse (`Player.trick_boost(combo)`).
+  - +220 px/s pour une figure seule (`trick_boost_base`), +90 px/s par figure en plus du combo (`trick_boost_per_combo`) ; combo ×5 = +580 px/s.
+  - Pendant 1,6 s (`trick_boost_time`), la vitesse max « douce » est relevée d'autant, puis redescend progressivement : sinon le frottement au-dessus de la vitesse max mangerait le boost.
+  - Traînée rose, plus épaisse et plus longue, pendant le boost.
+  - Réglable avec F2 (3 nouvelles lignes dans le panneau physique).
+  - Partout : courses, Chill, half-pipe, mode enfant.
+- **Médailles remesurées** : le bot « bon joueur » fait maintenant des figures pendant la course. Il simule sa trajectoire et ne tente une figure que si le vol dure plus de 1,1 s, et jamais au-dessus d'un trou (il lui faut le grappin). 0 figure ratée.
+
+| Niveau | Or avant | Bot avec boost | Or 1.30 |
+|---|---|---|---|
+| Tutoriel | 17,5 s | 17,23 s | 17,5 s |
+| Flat and fun | 64 s | 54,82 s | 55 s |
+| Corridor | 63,5 s | 55,62 s | 56 s |
+| Nice Slope | 48 s | 45,75 s | 46 s |
+| Spaghetti | 34,5 s | 26,1 à 28,0 s | 28 s |
+| Hook, you fool ! | 97 s (estimé) | non mesuré | 97 s |
+
+- **À savoir** : une figure ratée (atterrissage pendant la figure) arrête net le pingouin 2 s (comportement d'origine, `StaggeredState`). Le boost rend donc les figures intéressantes mais risquées sur les petits sauts.
+- **Testé** : 118 fichiers OK ; boost vérifié dans le half-pipe et dans les courses.

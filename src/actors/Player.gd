@@ -131,6 +131,24 @@ var direction: Vector2
 @export var speed_trail_from: float = 1200.0
 
 # =============================================================================
+#  [BOOST FIGURE 1.30] Une figure réussie donne de l'élan (idée de Manu, façon
+#  Alto's Odyssey). Au moment où les points d'un saut sont gagnés (atterrissage
+#  propre, cf. TrickScore.bank()), le pingouin reçoit une poussée dans le sens
+#  de sa vitesse, plus forte avec le combo. Pendant trick_boost_time secondes,
+#  les plafonds de vitesse « doux » sont relevés d'autant (sinon le frottement
+#  au-dessus de la vitesse max mangerait le boost) et la traînée devient rose.
+#  Partout (courses, Chill, Sans fin). Réglable avec F2.
+# =============================================================================
+## Poussée pour une figure seule (px/s).
+@export var trick_boost_base: float = 220.0
+## Poussée en plus par figure supplémentaire du combo (px/s).
+@export var trick_boost_per_combo: float = 90.0
+## Durée pendant laquelle la vitesse max est relevée (s).
+@export var trick_boost_time: float = 1.6
+var _trick_boost_left: float = 0.0     # temps restant du boost en cours
+var _trick_boost_extra: float = 0.0    # px/s ajoutés aux plafonds pendant le boost
+
+# =============================================================================
 #  [FIX VITESSE -> 0] Réglages du filtre anti-collision-fantôme
 # =============================================================================
 ## Active le filtre qui ignore les normales "fantômes" des arêtes internes.
@@ -266,6 +284,10 @@ func _apply_soft_speed_caps(delta: float) -> void:
 	if _states == null or _states.current == null or _states.current.sub_state_name == "HOOKING":
 		return
 	var cap := ground_max_speed if is_on_ground else air_max_speed
+	# [BOOST FIGURE 1.30] plafond relevé pendant le boost (et qui redescend doucement)
+	if _trick_boost_left > 0.0:
+		_trick_boost_left -= delta
+		cap += _trick_boost_extra * clampf(_trick_boost_left / trick_boost_time, 0.0, 1.0)
 	var speed := _velocity.length()
 	if speed > cap:
 		var new_speed := cap + (speed - cap) * (1.0 - clampf(over_speed_drag * delta, 0.0, 1.0))
@@ -293,6 +315,15 @@ func _update_speed_trail() -> void:
 		_trail.width_curve = curve
 		add_child(_trail)
 	var speed := _velocity.length()
+	# [BOOST FIGURE 1.30] traînée rose pendant un boost de figure (et visible
+	# même un peu en dessous de la vitesse habituelle de la traînée)
+	var boosting := _trick_boost_left > 0.0
+	# rose franc (couleur > 1 = plus opaque que la traînée blanche normale),
+	# plus épaisse et plus longue pendant le boost
+	_trail.modulate = Color(1.0, 0.35, 0.8, 1.6) if boosting else Color.WHITE
+	_trail.width = 26.0 if boosting else 14.0
+	if boosting and speed_trail_from > 0.0:
+		speed = maxf(speed, speed_trail_from + 840.0)
 	if speed_trail_from <= 0.0 or speed < speed_trail_from:
 		if _trail.get_point_count() > 0:
 			_trail.remove_point(0)   # la traînée s'efface en douceur
@@ -632,3 +663,19 @@ func _get_aim_direction() -> Vector2:
 
 func _on_Chain_chain_hooked(current_length):
 	chain_length = current_length
+
+
+
+# [BOOST FIGURE 1.30] Appelé par TrickScore.bank() quand les points d'un saut
+# sont gagnés. combo = nombre de figures du saut (1 à MAX_COMBO).
+func trick_boost(combo: int) -> void:
+	if combo <= 0 or trick_boost_base <= 0.0:
+		return
+	var amount := trick_boost_base + trick_boost_per_combo * float(combo - 1)
+	# direction : celle de la vitesse ; à l'arrêt, vers où regarde le pingouin
+	var dir := _velocity.normalized()
+	if _velocity.length() < 50.0:
+		dir = Vector2(-1.0 if animated_sprite.flip_h else 1.0, 0.0)
+	_velocity += dir * amount
+	_trick_boost_left = trick_boost_time
+	_trick_boost_extra = amount

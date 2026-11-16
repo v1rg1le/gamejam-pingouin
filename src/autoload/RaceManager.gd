@@ -81,13 +81,16 @@ const SCORES_SECTION = "scores_v3"   # [MODES 1.25] barème à médailles (avant
 #    px, puis le reste à vitesse de croisière). À ajuster après vos essais.
 # Un niveau absent de la liste utilise l'ancien temps de référence
 # (distance ÷ REF_SPEED) comme temps d'or.
+# [BOOST FIGURE 1.30] temps remesurés avec le boost de figure : le bot fait
+# une figure à chaque saut assez long (il simule sa trajectoire et ne tente
+# rien s'il retombe avant 1,1 s). Anciens temps (sans figures) entre ().
 const MEDAL_GOLD := {
-	"LevelBateau": 17.5,          # bot : 17,28 s
-	"LevelRandomFlat": 64.0,      # bot : 63,83 s
-	"LevelRandomCorridor": 63.5,  # bot : 63,45 s
-	"LevelRandomNiceSlope": 48.0, # bot : 47,68 s
-	"LevelRandomSpaghetti": 34.5, # bot : 30,9 à 34,1 s selon le terrain
-	"LevelRandomGap": 97.0,       # estimé (voir plus haut)
+	"LevelBateau": 17.5,          # bot : 17,23 s (17,28)
+	"LevelRandomFlat": 55.0,      # bot : 54,82 s (63,83)
+	"LevelRandomCorridor": 56.0,  # bot : 55,62 s (63,45)
+	"LevelRandomNiceSlope": 46.0, # bot : 45,75 s (47,68)
+	"LevelRandomSpaghetti": 28.0, # bot : 26,1 à 28,0 s selon le terrain (30,9 à 34,1)
+	"LevelRandomGap": 97.0,       # estimé (voir plus haut), pas remesuré
 }
 const SILVER_FACTOR := 1.25       # argent = or × 1,25
 const BRONZE_FACTOR := 1.6        # bronze = or × 1,6
