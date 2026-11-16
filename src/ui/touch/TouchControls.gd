@@ -79,6 +79,12 @@ var _free_hook := false       # [GRAPPIN TACTILE 1.11] le doigt du grappin vise 
 var free_aim_enabled := true  # [GRAPPIN TACTILE 1.11] toucher la zone de jeu = grappin vers ce point
 var _canvas: Control          # nœud qui dessine tous les boutons
 var _font: Font
+# [MODE ENFANT 1.23] en mode enfant, le bouton pause doit être TENU un moment
+# (le test enfant ouvrait la pause en tapotant, puis repartait au menu des
+# niveaux malgré la double confirmation). Un anneau se remplit pendant l'appui.
+const KID_PAUSE_HOLD = 1.0    # s d'appui pour ouvrir la pause en mode enfant
+var _pause_finger := -1       # doigt posé sur le bouton pause (mode enfant)
+var _pause_hold := 0.0        # temps d'appui écoulé
 
 
 func _ready() -> void:
@@ -115,6 +121,16 @@ func _process(delta: float) -> void:
 		_update_pull(_aim_vec.length())
 	elif _pulling:
 		_update_pull(0.0)
+
+	# [MODE ENFANT 1.23] appui long sur pause : ouvre le menu au bout d'1 s
+	if _pause_finger != -1:
+		_pause_hold += delta
+		if _pause_hold >= KID_PAUSE_HOLD:
+			_pause_finger = -1
+			var ev := InputEventAction.new()
+			ev.action = "ui_cancel"
+			ev.pressed = true
+			Input.parse_input_event(ev)
 
 	# GRAPPIN : tir différé si le doigt n'a pas (encore) glissé
 	if _hook_finger != -1 and not _hook_fired:
@@ -184,7 +200,11 @@ func _input(event: InputEvent) -> void:
 func _finger_down(index: int, b: Dictionary, pos: Vector2) -> void:
 	_fingers[index] = b.id
 	_pressed_count[b.id] = _pressed_count.get(b.id, 0) + 1
-	if b.id == "pause":
+	if b.id == "pause" and Settings.kid_mode:
+		# [MODE ENFANT 1.23] pas tout de suite : il faut tenir (voir _process)
+		_pause_finger = index
+		_pause_hold = 0.0
+	elif b.id == "pause":
 		# Le menu pause écoute "ui_cancel" : on simule l'appui sur Échap.
 		var ev := InputEventAction.new()
 		ev.action = "ui_cancel"
@@ -238,6 +258,8 @@ func _finger_up(index: int) -> void:
 		_release_hook_deferred()
 		return
 	_fingers.erase(index)
+	if index == _pause_finger:
+		_pause_finger = -1   # [MODE ENFANT 1.23] relâché trop tôt : pas de pause
 	_pressed_count[id] = max(0, _pressed_count.get(id, 1) - 1)
 	var b = _get_button(id)
 	if id == "hook":
@@ -299,6 +321,7 @@ func _release_all() -> void:
 		_pulling = false
 	_fingers.clear()
 	_pressed_count.clear()
+	_pause_finger = -1   # [MODE ENFANT 1.23]
 	_hook_finger = -1
 	_free_hook = false
 	_aim_vec = Vector2.ZERO
@@ -333,7 +356,11 @@ func _button_at(pos: Vector2):
 	var best_d := INF
 	for b in _buttons:
 		var d: float = pos.distance_to(_pos(b))
-		if d <= b.r * 1.25 and d < best_d:  # zone de toucher un peu plus large que le dessin
+		# [MODE ENFANT 1.23] zone de toucher encore plus large pour les petits
+		# doigts peu précis (le test enfant ratait souvent les boutons de peu,
+		# ce qui lançait le grappin à la place). 1,25 = réglage normal.
+		var reach: float = 1.6 if Settings.kid_mode else 1.25
+		if d <= b.r * reach and d < best_d:  # zone de toucher un peu plus large que le dessin
 			best = b
 			best_d = d
 	return best
@@ -369,6 +396,11 @@ func _draw_buttons() -> void:
 				var size := 30 if b.id == "pause" else (22 if b.r >= 60 else 17)
 				var w := _font.get_string_size(b.label, HORIZONTAL_ALIGNMENT_LEFT, -1, size).x
 				_canvas.draw_string(_font, c + Vector2(-w * 0.5, size * 0.35), b.label, HORIZONTAL_ALIGNMENT_LEFT, -1, size, line)
+	# [MODE ENFANT 1.23] anneau qui se remplit pendant l'appui long sur pause
+	if _pause_finger != -1:
+		var pb: Dictionary = _get_button("pause")
+		var frac := clampf(_pause_hold / KID_PAUSE_HOLD, 0.0, 1.0)
+		_canvas.draw_arc(_pos(pb), pb.r + 8.0, -PI / 2, -PI / 2 + TAU * frac, 32, Color(1, 0.94, 0.4, 0.95), 6.0, true)
 	var hook_pos: Vector2 = _pos(_get_button("hook"))
 	if _free_hook:
 		# [GRAPPIN TACTILE 1.11] repères dessinés autour du point touché

@@ -217,6 +217,14 @@ func _physics_process(delta: float) -> void:
 func _start_race() -> void:
 	has_finish = not get_tree().get_nodes_in_group("finish_gate").is_empty()
 	_show_start_help()   # [AIDE 1.7] carte d'aide (jeu en pause) si l'option est active
+	# [MODE ENFANT 1.23] aide de jeu pour les petits (poussée auto, coup de
+	# pouce, cercles sur ▶ / PUMP). Toujours créée en solo, y compris dans les
+	# niveaux Chill : elle ne fait rien tant que l'option est coupée, et on
+	# peut donc l'activer/désactiver depuis les Options sans relancer.
+	if not NetSession.in_race:
+		var kid = preload("res://src/ui/race/KidAssist.gd").new()
+		kid.setup(_player)
+		get_tree().current_scene.add_child(kid)
 	if not has_finish and not NetSession.in_race:
 		return  # niveau "Chill" : pas de chrono
 	racing = true
@@ -394,11 +402,17 @@ const START_HELP_TEXT = "Avancer : {move_right}    Reculer : {move_left}\nSauter
 # [SCORE 1.13] aide de départ : rappel de la règle « 1 s = 100 pts = 1 figure »
 const START_HELP_SCORE = "\n\nSCORE = vitesse + figures  (1 seconde gagnée = 100 pts = 1 figure)\nFigures et vrilles comptent si tu atterris bien !"
 
+# [MODE ENFANT 1.23] aide de départ très courte (la poussée automatique fait avancer)
+const KID_HELP_TEXT = "Pinpouin avance tout seul !\nSauter : {jump}    Grappin : {hook}\nPUMP : {pump} pour aller plus vite"
+
 func _show_start_help() -> void:
 	# Pas dans le tuto (ses panneaux expliquent déjà tout), pas en multijoueur
 	if not Settings.help_on_start or NetSession.in_race or level_path.ends_with("LevelBateau.tscn"):
 		return
 	var text := TutorialSign.resolve_text(START_HELP_TEXT + (START_HELP_SCORE if has_finish else ""))
+	# [MODE ENFANT 1.23] carte courte : un enfant ne lit pas un long texte
+	if Settings.kid_mode:
+		text = TutorialSign.resolve_text(KID_HELP_TEXT)
 	# [BONUS 1.20] on prévient qu'il y a des figures bonus après l'arrivée
 	if has_finish and _has_bonus_half_pipe():
 		text += "\nAprès l'arrivée : %d s de figures BONUS dans le half-pipe !" % int(BONUS_TIME)

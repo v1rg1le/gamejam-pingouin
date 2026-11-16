@@ -488,15 +488,32 @@ Demande de l'équipe : plus de coupure nette du fond, une boucle infinie qui sui
   4. **Centaines d'erreurs « slide »** (`TouchControls.gd`) : poser un doigt sur le bouton GRAPPIN pendant qu'un « grappin libre » (toucher dans le décor) était actif faisait planter le glissé de l'autre doigt. Le bouton reprend proprement la main, et relever l'ancien doigt ne décroche plus.
   - Bonus, PC tactile seulement (`Settings.gd`) : le tout premier toucher sur un PC à écran tactile pouvait laisser l'action « hook » appuyée pour toujours (clic souris émulé). L'action est relâchée quand le jeu passe en mode tactile.
 - **Résultat après corrections** : 0 erreur de script, plus aucune fermeture d'appli, 116 fichiers OK.
-- **Ce qu'un enfant arrive à faire (4 min, après corrections)** :
+- **Ce qu'un enfant arrive à faire** : ⚠️ le tableau publié avec la 1.22 était faux. L'outil de test ne voyait pas toujours que l'enfant avait quitté le niveau par le menu pause, et comptait alors l'arrivée d'un AUTRE niveau. Les bons chiffres (6 min par partie, même version) sont dans la section 32, colonnes « sans mode enfant ».
 
-  | Niveau | « Petit » (au hasard) | « Grand » (a compris ▶) |
-  |---|---|---|
-  | Tuto Bateau | 3 / 5 finis | 5 / 5 |
-  | Nice Slope | 3 / 5 | 4 / 5 |
-  | Spaghetti | 1 / 5 | 3 / 5 |
-  | Hook you fool ! | 0 / 5 | 1 / 5 |
-  | Flat and fun | 0 / 5 | 0 / 5 |
-  | Corridor | 0 / 5 | 0 / 5 |
+## 32. Mode enfant (16/11, version 1.23)
 
-  Le « grand » meurt plus (jusqu'à 6 chutes par partie) et reste parfois plus de 2 min sans avancer, souvent arrêté sur du plat ou dans un creux. Pistes possibles (non faites) : une bulle « Appuie sur ▶ / PUMP » après ~8 s sans avancer, ou un mode « enfant » avec une petite poussée automatique.
+- **Demande** : un mode pour les enfants dans les paramètres, suite au « test enfant ».
+- **Options → « Mode enfant (avance tout seul + aide) »** (`Settings.kid_mode`, coupé par défaut, mémorisé). Jamais actif en multijoueur. Tout est dans `src/ui/race/KidAssist.gd`, créé par `RaceManager` au début de chaque niveau solo :
+  1. **Pinpouin avance tout seul** au sol, jusqu'à 650 px/s (◀▶ normal : 500). La poussée s'arrête si on appuie sur ◀, en l'air ou au grappin ; pentes, pump et grappin restent les seuls moyens d'aller plus vite.
+  2. **Coup de pouce dans les creux** : coincé 4 s sans avancer, il reçoit une petite impulsion vers l'avant et le haut.
+  3. **Pont magique** : après 2 chutes de suite dans le même trou, il réapparaît sur l'île suivante, avec le message « Coup de pouce ! ». Le trou est repéré par son bord (cherché au rayon depuis le dernier endroit sûr), et les prises de grappin « poisson » au-dessus des trous ne sont pas prises pour du sol.
+  4. **Aide visuelle** : 6 s sans avancer, des cercles jaunes clignotent autour de ▶ et PUMP (tactile), ou un message rappelle les touches (clavier, manette).
+  5. **Boutons tactiles plus faciles à toucher** : zone de toucher ×1,6 au lieu de ×1,25 (`TouchControls._button_at`).
+  6. **Pause par appui long** : le bouton pause tactile doit être tenu 1 s, avec un anneau qui se remplit (`TouchControls.KID_PAUSE_HOLD`). La touche retour Android ouvre toujours la pause.
+  7. **Carte d'aide courte** : « Pinpouin avance tout seul ! Sauter, Grappin, PUMP ».
+- **Au passage** (menu pause) : sur téléphone, sans « Quitter le jeu », le bouton « Choisir un niveau » s'étirait sur deux hauteurs ; il garde maintenant la taille des autres.
+- **Mesuré avec le bot enfant** (téléphone simulé, 6 min par partie, 5 parties par course et par profil) :
+
+  | Course | Petit, sans mode | Petit, mode enfant | Grand, sans mode | Grand, mode enfant |
+  |---|---|---|---|---|
+  | Tuto Bateau | 4 / 5 | 5 / 5 | 5 / 5 | 5 / 5 |
+  | Nice Slope | 1 / 5 | 5 / 5 | 2 / 5 | 4 / 5 |
+  | Spaghetti | 1 / 5 | 5 / 5 | 1 / 5 | 5 / 5 |
+  | Hook you fool ! | 0 / 5 | 3 / 5 | 0 / 5 | 2 / 5 |
+  | Flat and fun | 0 / 5 | 5 / 5 | 0 / 5 | 4 / 5 |
+  | Corridor | 0 / 5 | 5 / 5 | 0 / 5 | 4 / 5 |
+  | **Total** | **6 / 30** | **28 / 30** | **8 / 30** | **24 / 30** |
+  | Sorties du niveau par erreur (menu pause) | 24 | 0 | 21 | 4 |
+
+  Sans le mode, l'enfant ouvre la pause en tapotant, et finit souvent par toucher deux fois « Choisir un niveau » ou « Recommencer » malgré la confirmation. Les 4 sorties restantes du profil « grand » viennent d'un doigt gardé plus d'1 s sur le bouton pause. Hook you fool ! reste le plus dur : le pont magique aide, mais l'enfant tombe encore souvent (le niveau est long).
+- **À noter** : les records, temps et fantômes faits en mode enfant comptent comme les autres (le mode est pensé pour les petits, pas pour battre des records).

@@ -22,6 +22,11 @@ func _ready() -> void:
 	# (iOS interdit même aux applis de se fermer toutes seules).
 	if Settings.is_web or Settings.is_mobile_device:
 		pause_overlay.get_node("VBoxContainer/QuitButton").visible = false
+	# [MODE ENFANT 1.23] « Choisir un niveau » a « étirer en hauteur » dans sa
+	# propre scène (ChangeSceneButton.tscn) : sans « Quitter le jeu » en
+	# dessous, il prenait toute la place restante (bouton 2 fois trop haut).
+	# Ici, il garde la même hauteur que les autres boutons.
+	pause_overlay.get_node("VBoxContainer/ChangeSceneButton").size_flags_vertical = Control.SIZE_FILL
 	# [TEST ENFANT 1.22] boutons « qui font perdre la partie » : il faut les
 	# toucher DEUX fois (le 1er toucher affiche « Sûr ? Touche encore »).
 	# Différé : en multi, « Choisir un niveau » est d'abord renommé plus bas.

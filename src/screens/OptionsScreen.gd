@@ -65,6 +65,15 @@ func _ready() -> void:
 	help_on_start.get_parent().move_child(wink, help_on_start.get_index() + 1)
 	wink.button_pressed = Settings.master_wink
 	wink.toggled.connect(func(v): Settings.set_option("master_wink", v))
+	# [MODE ENFANT 1.23] même style, juste au-dessus de l'aide (le plus visible)
+	var kid: CheckButton = help_on_start.duplicate(Node.DUPLICATE_GROUPS | Node.DUPLICATE_SCRIPTS)
+	kid.name = "KidMode"
+	kid.text = "Mode enfant (avance tout seul + aide)"
+	kid.tooltip_text = "Pinpouin avance tout seul au sol, reçoit un coup de pouce dans les creux,\nles boutons ▶ et PUMP clignotent quand il n'avance plus et les boutons tactiles\nsont plus faciles à toucher. Pas en multijoueur."
+	help_on_start.get_parent().add_child(kid)
+	help_on_start.get_parent().move_child(kid, help_on_start.get_index())
+	kid.button_pressed = Settings.kid_mode
+	kid.toggled.connect(func(v): Settings.set_option("kid_mode", v))
 	music_slider.value = Settings.music_volume
 	music_slider.value_changed.connect(func(v): Settings.set_option("music_volume", v))
 	_add_ui_size_slider()   # [RESPONSIVE 1.14]
