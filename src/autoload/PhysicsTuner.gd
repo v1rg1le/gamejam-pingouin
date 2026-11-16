@@ -35,6 +35,7 @@ const PARAMS = [
 	["air_max_speed", "Vitesse max en l'air", 800.0, 3000.0, 25.0],
 	["over_speed_drag", "Frottement au-dessus du max", 0.0, 3.0, 0.05],
 	["landing_speed_keep", "Vitesse gardée à l'atterrissage", 0.0, 1.0, 0.05],
+	["air_pump_gravity", "Gravité en pumpant en l'air (×)", 1.0, 4.0, 0.1],   # [PUMP EN L'AIR 1.27]
 	["gravity", "Gravité", 300.0, 2000.0, 10.0],
 	["speed_trail_from", "Traînée de vitesse à partir de", 0.0, 3000.0, 50.0],
 ]

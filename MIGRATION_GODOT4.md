@@ -577,3 +577,11 @@ Demande de l'équipe : plus de coupure nette du fond, une boucle infinie qui sui
   - défilement horizontal inchangé : 0,2 / 0,35 / 0,5 selon la profondeur.
 - **Vérifié** en captures toutes les 3 s sur toute la descente de Nice Slope et de Corridor : composition identique du haut en bas des pentes, plus de bande noire. Même rendu sur le Tutoriel, Chill 704, Chill 917, Flat, Hook you fool ! et Spaghetti.
 - Aucune image modifiée ni supprimée. `alto_layout = false` (sur le `ParallaxBackground` d'un niveau) remet le fond de la 1.9.
+
+## 36. PUMP en l'air = descendre plus vite (16/11, version 1.27)
+
+- **Demande de Léo**, validée par Manu, **activée par défaut** : tant que PUMP est maintenu en l'air, la gravité est plus forte et Pinpouin redescend plus vite.
+- `Player.air_pump_gravity` = **×2** (1 = désactivé) ; réglable en jeu dans le panneau F2 (« Gravité en pumpant en l'air », de ×1 à ×4).
+- **Pas pendant le grappin** (il a sa propre physique) **ni en mode enfant** (les petits appuient sur PUMP au hasard). Le petit coup de pump en l'air d'origine (`InAirState`) est conservé.
+- **Mesuré** sur un saut du Tutoriel lancé à ~850 px/s : 1,67 s en l'air et 935 px sans PUMP ; **0,92 s et 514 px** en gardant PUMP. Ça sert à écourter un saut trop long, à viser son atterrissage, et à « coller » à une descente pour garder l'élan. Revers : un saut écourté laisse moins de temps pour les figures.
+- Temps des médailles inchangés : le bot de mesure ne pumpe qu'au sol.

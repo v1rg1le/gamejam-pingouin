@@ -149,6 +149,13 @@ var _ghost_filter_blocked_frames: int = 0
 # la vitesse « écrasée » contre le sol à chaque bosse, ce qui faisait un petit
 # « freeze » à répétition qui ressemblait à un bug. 0 = comportement Godot 3.
 @export_range(0.0, 1.0) var landing_speed_keep: float = 0.75
+# [PUMP EN L'AIR 1.27] Demande de Léo, validée par Manu (activé par défaut) :
+# maintenir PUMP en l'air fait descendre plus vite, comme une gravité plus
+# forte. La gravité est multipliée par air_pump_gravity tant que PUMP est
+# tenu en l'air (1 = désactivé). Pas pendant le grappin (il a sa propre
+# physique), ni en mode enfant (les petits appuient sur PUMP au hasard).
+# Réglable en jeu dans le panneau F2 (« Gravité en pumpant en l'air »).
+@export_range(1.0, 4.0) var air_pump_gravity: float = 2.0
 ## Vitesse d'impact minimale (px/s, perpendiculaire au sol) pour appliquer l'amorti.
 @export var landing_impact_min: float = 250.0
 const GHOST_FILTER_MAX_BLOCKED_FRAMES = 6
@@ -221,7 +228,11 @@ func _physics_process(delta: float) -> void:
 		facing = 1 if _velocity.x > 0 else -1
 	animated_sprite.flip_h = facing != 1
 
-	_velocity.y += gravity * delta
+	# [PUMP EN L'AIR 1.27] gravité plus forte tant que PUMP est tenu en l'air
+	var g: float = gravity
+	if not is_on_ground and Input.is_action_pressed("pump") and not chain.hooked and not chain.flying and not Settings.kid_mode:
+		g *= air_pump_gravity
+	_velocity.y += g * delta
 
 	_apply_soft_speed_caps(delta)   # [PHYSIQUE 1.10]
 	_velocity.x = clamp(_velocity.x, -SUPER_MAX_SPEED.x, SUPER_MAX_SPEED.x)
