@@ -15,6 +15,15 @@ var paused: = false: set = set_paused
 #  - "Choisir un niveau" devient "Quitter la course" : on quitte la partie
 #    réseau et on revient au salon multijoueur.
 func _ready() -> void:
+	# [BOUTONS HUD 1.39] BUG : ce nœud couvre tout l'écran (ancres 0 → 1) et,
+	# comme tout Control, il « attrape » la souris par défaut (mouse_filter =
+	# STOP), MÊME quand le menu pause est caché (seul PauseOverlay est masqué).
+	# Il est sur le calque 60, au-dessus du HUD (calque 36) : il mangeait
+	# donc les clics destinés aux boutons du HUD (« Rejouer / Nouveau terrain
+	# / Menu » de la fin du Sans fin, ancien bouton « Menu » de l'arrivée
+	# Chill). On le laisse traverser : quand la pause est ouverte, c'est
+	# PauseOverlay (plein écran, STOP par défaut) qui reçoit les clics.
+	mouse_filter = Control.MOUSE_FILTER_IGNORE
 	# [WEB 1.17] dans le navigateur, « Quitter le jeu » ne peut rien fermer : masqué
 	# [TEST ENFANT 1.22] … et sur téléphone / tablette aussi : un enfant qui
 	# tapote partout fermait l'appli dans plus d'une partie sur deux ! Sur

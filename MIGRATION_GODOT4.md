@@ -812,3 +812,10 @@ Demande de l'équipe : plus de coupure nette du fond, une boucle infinie qui sui
 - **Changement** (`RaceHud.show_chill_finish`) : le bouton est retiré ; le bandeau dit à la place « (pour partir : menu pause) ». En multi, le bandeau ne change pas (retour au salon ensemble).
 - Pour partir : Échap, bouton pause tactile ou manette → « Choisir un niveau ».
 - **Testé** : 125 fichiers OK ; capture du bandeau.
+
+## 48. Boutons de fin de partie du Sans fin qui ne répondaient pas (21/11, version 1.39)
+
+- **Retour de Manu** : à la fin d'une partie du Sans fin (« PLUS DE VIES ! »), les boutons Rejouer, Nouveau terrain et Menu ne marchaient pas. C'était aussi la cause du bouton « Menu » de l'arrivée Chill retiré en 1.38.
+- **Cause** : le menu pause (`MenuPause`, calque 60) est un `Control` qui couvre tout l'écran. Même caché (seul son fond `PauseOverlay` est masqué), il attrapait la souris par défaut (`mouse_filter = STOP`) et passait au-dessus du HUD (calque 36). Il mangeait donc tous les clics destinés aux boutons du HUD. Trouvé en simulant un clic : le contrôle sous la souris était `MenuPause`, pas le bouton.
+- **Correction** (`MenuPause.gd`) : `mouse_filter = IGNORE` sur ce nœud. Quand la pause est ouverte, c'est `PauseOverlay` (plein écran) qui reçoit les clics, comme avant.
+- **Testé** (clics de souris simulés) : Rejouer (même terrain), Nouveau terrain (terrain neuf), Menu (sélection des niveaux), et « Reprendre » du menu pause ; 125 fichiers OK.
