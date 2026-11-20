@@ -379,23 +379,15 @@ func show_chill_finish(free_ride: bool) -> void:
 		_chill_label = _make_label(26, Color(1, 0.94, 0.4))
 		_chill_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		box.add_child(_chill_label)
-		if not NetSession.in_race:
-			var menu := Button.new()
-			menu.theme = load("res://src/theme_main.tres")   # même style que les menus du jeu
-			menu.text = "Menu"
-			menu.custom_minimum_size = Vector2(180, 48)
-			menu.add_theme_font_size_override("font_size", 22)
-			menu.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
-			menu.add_to_group("touch_block")   # un toucher ici ne lance pas le grappin
-			menu.pressed.connect(func():
-				get_tree().paused = false
-				get_tree().change_scene_to_file("res://src/screens/LevelSelectionScreen.tscn"))
-			box.add_child(menu)
-			menu.visible = free_ride
+		# [CHILL 1.38] le bouton « Menu » de ce bandeau est retiré (demande de
+		# Manu : il ne répondait pas) ; pour partir, on passe par le menu pause
+		# (Échap, bouton pause tactile ou manette), qui marche partout.
 		(_ui_root if _ui_root != null else self).add_child(_chill_panel)
 	var text := "BRAVO !"
 	if free_ride:
 		text += "\nReste faire des figures autant que tu veux"
+		if not NetSession.in_race:
+			text += "\n(pour partir : menu pause)"   # [CHILL 1.38] remplace le bouton « Menu »
 	if NetSession.in_race:
 		var arrived := 0
 		for entry in NetSession.ranking():

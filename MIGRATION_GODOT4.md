@@ -805,3 +805,10 @@ Demande de l'équipe : plus de coupure nette du fond, une boucle infinie qui sui
 - **Ancien panneau CHILL** : masqué (`visible = false`), pas supprimé. Son étiquette CHILL d'origine et le bouton vers `LevelEndlessChill.tscn` (Sans fin toujours en Chill) y restent. Ce bouton faisait doublon avec « ∞ Sans fin ∞ » en mode Chill.
 - Boutons élargis à 380 px et séparateurs « · » resserrés : en mode Score, la médaille au bout du bouton ne mord plus sur le texte.
 - **Testé** : 125 fichiers OK ; captures en Chill et en Score (avec records, points et médailles sur tous les boutons) en 1280 × 720, 1024 × 720 et 2400 × 1080.
+
+## 47. Bouton « Menu » retiré du bandeau d'arrivée Chill (21/11, version 1.38)
+
+- **Retour de Manu** : en mode Chill, à l'arrivée, le bouton « Menu » du bandeau « BRAVO ! Reste faire des figures autant que tu veux » ne marchait pas, alors que le menu pause (Échap) permet déjà de partir.
+- **Changement** (`RaceHud.show_chill_finish`) : le bouton est retiré ; le bandeau dit à la place « (pour partir : menu pause) ». En multi, le bandeau ne change pas (retour au salon ensemble).
+- Pour partir : Échap, bouton pause tactile ou manette → « Choisir un niveau ».
+- **Testé** : 125 fichiers OK ; capture du bandeau.
