@@ -794,3 +794,14 @@ Demande de l'équipe : plus de coupure nette du fond, une boucle infinie qui sui
 - **Corrigé au passage** : la carte d'aide du Sans fin en mode Score avait le titre « GLISSE TRANQUILLE » (défaut de la 1.33) ; elle dit maintenant « C'EST PARTI ! ».
 - **Fichiers** : `RaceManager.gd` (`_start_endless_ghost`, `save_endless_ghost`, `endless_ghost_meters`, `endless_new_terrain`, `endless_replay_seed`), `EndlessScore.gd` (écart, écran de fin), `OptionsScreen.gd` (`RACES` + affichage en mètres).
 - **Testé** : 125 fichiers OK ; bot : partie 1 enregistre le fantôme, partie 2 le charge sur la même graine ; Nouveau terrain → graine neuve sans fantôme, Rejouer → même graine, menu → terrain du fantôme ; export puis import du texte (« Défi ajouté : Sans fin, 330 m »).
+
+## 46. Un seul menu pour tous les niveaux (21/11, version 1.37)
+
+- **Demande de Manu** : plus de panneau « CHILL » à droite ; tous les niveaux dans la liste COURSES, et le choix Chill / Score s'applique à chacun.
+- **Nouvelle liste** (`LevelSelectionScreen.tscn`) : les 10 boutons sont dans une grille de deux colonnes (nœud `Grid`, un `GridContainer`), dans cet ordre : Tutoriel, Flat and fun, Corridor, Nice Slope, Hook you fool !, Spaghetti, 704, 917, Half-pipe, ∞ Sans fin ∞. Sur une seule colonne, la liste aurait été trop haute : l'écran aurait tout rétréci sur téléphone.
+- **Les modes** :
+  - les 6 courses avec arrivée et le Sans fin suivent le choix Chill / Score comme avant ;
+  - 704, 917 et Half-pipe n'ont pas d'arrivée : ils restent en glisse libre dans les deux modes. En Score, leur bouton affiche « · glisse libre » et le texte sous les boutons le rappelle (`FREE_RIDE_LEVELS` dans `LevelSelectionScreen.gd`).
+- **Ancien panneau CHILL** : masqué (`visible = false`), pas supprimé. Son étiquette CHILL d'origine et le bouton vers `LevelEndlessChill.tscn` (Sans fin toujours en Chill) y restent. Ce bouton faisait doublon avec « ∞ Sans fin ∞ » en mode Chill.
+- Boutons élargis à 380 px et séparateurs « · » resserrés : en mode Score, la médaille au bout du bouton ne mord plus sur le texte.
+- **Testé** : 125 fichiers OK ; captures en Chill et en Score (avec records, points et médailles sur tous les boutons) en 1280 × 720, 1024 × 720 et 2400 × 1080.

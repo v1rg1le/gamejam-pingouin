@@ -19,11 +19,24 @@ extends Control
 #  [OPTIONS 1.7] bouton "Options" -> src/screens/OptionsScreen.tscn
 #  [MULTI] (étape 6) bouton "Multijoueur" -> salon réseau local
 #   (src/screens/MultiplayerLobby.tscn).
+#  [MENU UNIQUE 1.37] demande de Manu : plus de panneau « CHILL » à droite.
+#   Tous les niveaux sont dans le panneau COURSES, rangés sur deux colonnes
+#   (nœud « Grid », un GridContainer) pour que la liste tienne sur un écran de
+#   téléphone sans tout rétrécir. Le choix Chill / Score s'applique à tous.
+#   - 704, 917 et Half-pipe n'ont pas d'arrivée : ils restent en glisse libre
+#     dans les deux modes (RaceManager les traite déjà ainsi) ; en Score, leur
+#     bouton l'indique (« · glisse libre »).
+#   - « ∞ Sans fin ∞ » suit le mode (Chill = sans vies, Score = vies + mètres) :
+#     l'ancien bouton « Sans fin » du panneau CHILL faisait doublon.
+#   - L'ancien panneau CHILL n'est pas supprimé, seulement masqué (visible =
+#     false dans la scène) : son étiquette CHILL d'origine et le bouton vers
+#     LevelEndlessChill.tscn y restent, prêts à resservir.
 #  Les boutons de niveau restent des ChangeSceneButton : on ajoute un niveau
-#  en dupliquant un bouton dans l'éditeur et en changeant next_scene_path.
+#  en dupliquant un bouton de « Grid » dans l'éditeur et en changeant
+#  next_scene_path.
 # =============================================================================
 
-@onready var first_button: Button = $Margin/VBox/Columns/RacesPanel/VBox/ButtonBateau
+@onready var first_button: Button = $Margin/VBox/Columns/RacesPanel/VBox/Grid/ButtonBateau   # [MENU UNIQUE 1.37] boutons dans « Grid »
 @onready var back_button: Button = $Margin/VBox/Bottom/BackButton
 @onready var version_label: Label = $Margin/VBox/Bottom/VersionLabel
 @onready var ghost_toggle: CheckButton = $Margin/VBox/Bottom/GhostToggle
@@ -31,6 +44,15 @@ extends Control
 @onready var multi_button: Button = $Margin/VBox/Bottom/MultiButton   # [MULTI]
 @onready var options_button: Button = $Margin/VBox/Bottom/OptionsButton   # [OPTIONS 1.7]
 @onready var races_box: VBoxContainer = $Margin/VBox/Columns/RacesPanel/VBox
+@onready var races_grid: GridContainer = $Margin/VBox/Columns/RacesPanel/VBox/Grid   # [MENU UNIQUE 1.37]
+
+## [MENU UNIQUE 1.37] Niveaux sans ligne d'arrivée : toujours en glisse libre,
+## même quand le mode Score est choisi (pas de chrono, de record ni de médaille).
+const FREE_RIDE_LEVELS := [
+	"res://src/levels/LevelChill704.tscn",
+	"res://src/levels/LevelChill917.tscn",
+	"res://src/levels/LevelHalfPipe.tscn",
+]
 
 
 func _ready() -> void:
@@ -136,11 +158,15 @@ func _mode_button(text: String, group: ButtonGroup) -> Button:
 
 func _refresh_mode() -> void:
 	var score_mode: bool = Settings.game_mode == Settings.MODE_SCORE
-	_mode_hint.text = "Chrono, médailles et 30 s de figures bonus" if score_mode else "Tranquille : pas de chrono, reste dans le half-pipe autant que tu veux"
+	# [MENU UNIQUE 1.37] textes valables pour toute la liste (704, 917 et Half-pipe compris)
+	_mode_hint.text = "Chrono, médailles et 30 s de figures bonus (704, 917 et Half-pipe : glisse libre)" if score_mode else "Tranquille : pas de chrono, reste dans le half-pipe autant que tu veux"
 	# le fantôme n'existe qu'en mode Score
 	ghost_toggle.visible = score_mode
 	ghost_folder_button.visible = score_mode and not Settings.is_mobile_device and not Settings.is_web   # [WEB 1.17]
-	for b in races_box.get_children():
+	# [MENU UNIQUE 1.37] les boutons sont maintenant dans la grille « Grid »
+	# (séparateurs « · » resserrés et boutons élargis à 380 px dans la scène :
+	# sur deux colonnes, la médaille au bout du bouton mordait sur « pts »)
+	for b in races_grid.get_children():
 		if not (b is Button and "next_scene_path" in b and b.next_scene_path != ""):
 			continue
 		if not b.has_meta("base_text"):
@@ -159,17 +185,21 @@ func _refresh_mode() -> void:
 		badge.medal = 0
 		if not score_mode:
 			continue
+		# [MENU UNIQUE 1.37] pas d'arrivée = pas de chrono ni de médaille, même en Score
+		if b.next_scene_path in FREE_RIDE_LEVELS:
+			b.text += "   ·   glisse libre"
+			continue
 		# [SANS FIN 1.33] record en mètres (pas de chrono ni de points)
 		if b.next_scene_path.ends_with("LevelEndless.tscn"):
 			var bm: int = preload("res://src/levels/endless/EndlessScore.gd").get_best_meters()
 			if bm > 0:
-				b.text += "   ·   " + preload("res://src/levels/endless/EndlessScore.gd").format_meters(bm)
+				b.text += "  ·  " + preload("res://src/levels/endless/EndlessScore.gd").format_meters(bm)
 			badge.medal = RaceManager.get_best_medal(b.next_scene_path)
 			continue
 		# [FANTÔMES] record de temps et [SCORE] meilleur score du niveau
 		var best: float = RaceManager.get_best_time(b.next_scene_path)
 		if best >= 0.0:
-			b.text += "   ·   " + RaceManager.format_time(best)
+			b.text += "  ·  " + RaceManager.format_time(best)
 		var best_score: int = RaceManager.get_best_score(b.next_scene_path)
 		if best_score >= 0:
 			b.text += "   ·   %d pts" % best_score

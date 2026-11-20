@@ -103,56 +103,94 @@ text = "COURSES"
 horizontal_alignment = 1
 vertical_alignment = 1
 
-[node name="ButtonBateau" parent="Margin/VBox/Columns/RacesPanel/VBox" instance=ExtResource("5")]
-custom_minimum_size = Vector2(0, 46)
+[node name="Grid" type="GridContainer" parent="Margin/VBox/Columns/RacesPanel/VBox"]
 layout_mode = 2
+theme_override_constants/h_separation = 10
+theme_override_constants/v_separation = 9
+columns = 2
+
+[node name="ButtonBateau" parent="Margin/VBox/Columns/RacesPanel/VBox/Grid" instance=ExtResource("5")]
+custom_minimum_size = Vector2(380, 46)
+layout_mode = 2
+size_flags_horizontal = 3
 size_flags_vertical = 0
 text = "★  Tutoriel  ★"
 next_scene_path = "res://src/levels/LevelBateau.tscn"
 
-[node name="ButtonFlat" parent="Margin/VBox/Columns/RacesPanel/VBox" instance=ExtResource("5")]
-custom_minimum_size = Vector2(0, 46)
+[node name="ButtonFlat" parent="Margin/VBox/Columns/RacesPanel/VBox/Grid" instance=ExtResource("5")]
+custom_minimum_size = Vector2(380, 46)
 layout_mode = 2
+size_flags_horizontal = 3
 size_flags_vertical = 0
 text = "Flat and fun"
 next_scene_path = "res://src/levels/LevelRandomFlat.tscn"
 
-[node name="ButtonCorridor" parent="Margin/VBox/Columns/RacesPanel/VBox" instance=ExtResource("5")]
-custom_minimum_size = Vector2(0, 46)
+[node name="ButtonCorridor" parent="Margin/VBox/Columns/RacesPanel/VBox/Grid" instance=ExtResource("5")]
+custom_minimum_size = Vector2(380, 46)
 layout_mode = 2
+size_flags_horizontal = 3
 size_flags_vertical = 0
 text = "Corridor"
 next_scene_path = "res://src/levels/LevelRandomCorridor.tscn"
 
-[node name="ButtonNiceSlope" parent="Margin/VBox/Columns/RacesPanel/VBox" instance=ExtResource("5")]
-custom_minimum_size = Vector2(0, 46)
+[node name="ButtonNiceSlope" parent="Margin/VBox/Columns/RacesPanel/VBox/Grid" instance=ExtResource("5")]
+custom_minimum_size = Vector2(380, 46)
 layout_mode = 2
+size_flags_horizontal = 3
 size_flags_vertical = 0
 text = "Nice Slope"
 next_scene_path = "res://src/levels/LevelRandomNiceSlope.tscn"
 
-[node name="ButtonGap" parent="Margin/VBox/Columns/RacesPanel/VBox" instance=ExtResource("5")]
-custom_minimum_size = Vector2(0, 46)
+[node name="ButtonGap" parent="Margin/VBox/Columns/RacesPanel/VBox/Grid" instance=ExtResource("5")]
+custom_minimum_size = Vector2(380, 46)
 layout_mode = 2
+size_flags_horizontal = 3
 size_flags_vertical = 0
 text = "Hook, you fool !"
 next_scene_path = "res://src/levels/LevelRandomGap.tscn"
 
-[node name="ButtonSpaghetti" parent="Margin/VBox/Columns/RacesPanel/VBox" instance=ExtResource("5")]
-custom_minimum_size = Vector2(0, 46)
+[node name="ButtonSpaghetti" parent="Margin/VBox/Columns/RacesPanel/VBox/Grid" instance=ExtResource("5")]
+custom_minimum_size = Vector2(380, 46)
 layout_mode = 2
+size_flags_horizontal = 3
 size_flags_vertical = 0
 text = "Spaghetti"
 next_scene_path = "res://src/levels/LevelRandomSpaghetti.tscn"
 
-[node name="ButtonSansFin" parent="Margin/VBox/Columns/RacesPanel/VBox" instance=ExtResource("5")]
-custom_minimum_size = Vector2(0, 46)
+[node name="Button704" parent="Margin/VBox/Columns/RacesPanel/VBox/Grid" instance=ExtResource("5")]
+custom_minimum_size = Vector2(380, 46)
 layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 0
+text = "704"
+next_scene_path = "res://src/levels/LevelChill704.tscn"
+
+[node name="Button917" parent="Margin/VBox/Columns/RacesPanel/VBox/Grid" instance=ExtResource("5")]
+custom_minimum_size = Vector2(380, 46)
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 0
+text = "917"
+next_scene_path = "res://src/levels/LevelChill917.tscn"
+
+[node name="ButtonHalfPipe" parent="Margin/VBox/Columns/RacesPanel/VBox/Grid" instance=ExtResource("5")]
+custom_minimum_size = Vector2(380, 46)
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 0
+text = "Half-pipe"
+next_scene_path = "res://src/levels/LevelHalfPipe.tscn"
+
+[node name="ButtonSansFin" parent="Margin/VBox/Columns/RacesPanel/VBox/Grid" instance=ExtResource("5")]
+custom_minimum_size = Vector2(380, 46)
+layout_mode = 2
+size_flags_horizontal = 3
 size_flags_vertical = 0
 text = "∞  Sans fin  ∞"
 next_scene_path = "res://src/levels/LevelEndless.tscn"
 
 [node name="ChillPanel" type="PanelContainer" parent="Margin/VBox/Columns"]
+visible = false
 custom_minimum_size = Vector2(300, 0)
 layout_mode = 2
 size_flags_vertical = 0
@@ -169,27 +207,6 @@ size_flags_horizontal = 4
 texture = SubResource("chill_crop")
 expand_mode = 1
 stretch_mode = 5
-
-[node name="Button704" parent="Margin/VBox/Columns/ChillPanel/VBox" instance=ExtResource("5")]
-custom_minimum_size = Vector2(0, 46)
-layout_mode = 2
-size_flags_vertical = 0
-text = "704"
-next_scene_path = "res://src/levels/LevelChill704.tscn"
-
-[node name="Button917" parent="Margin/VBox/Columns/ChillPanel/VBox" instance=ExtResource("5")]
-custom_minimum_size = Vector2(0, 46)
-layout_mode = 2
-size_flags_vertical = 0
-text = "917"
-next_scene_path = "res://src/levels/LevelChill917.tscn"
-
-[node name="ButtonHalfPipe" parent="Margin/VBox/Columns/ChillPanel/VBox" instance=ExtResource("5")]
-custom_minimum_size = Vector2(0, 46)
-layout_mode = 2
-size_flags_vertical = 0
-text = "Half-pipe"
-next_scene_path = "res://src/levels/LevelHalfPipe.tscn"
 
 [node name="ButtonSansFin" parent="Margin/VBox/Columns/ChillPanel/VBox" instance=ExtResource("5")]
 custom_minimum_size = Vector2(0, 46)
