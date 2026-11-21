@@ -1011,3 +1011,14 @@ Demande de l'équipe (21/11) : partager un niveau, et pouvoir l'exporter pour aj
 - **Niveaux de la communauté** : fichiers JSON dans `res://src/levels/drawn/officiels/` (format d'un niveau + `order` + `gold_time`). Vérifié : ils sont bien dans le jeu exporté (pck) et listés par `DirAccess`. Écran `CommunityLevelsScreen.tscn` (même script que Mes niveaux, `community = true`) : seulement Jouer, avec l'auteur ; pas de bouton « Éditer » en course ; `save()` refuse d'écrire un niveau officiel. Records sous l'id `off-<fichier>`. L'or vient de `gold_time` (`RaceManager`, après `MEDAL_GOLD`).
 - **Ajouter un niveau officiel** (outils hors projet) : `add_official.gd -- <fichier du code> <slug> [ordre] [nom] [auteur]`, puis `official_bot.sh <slug>` (bot avec et sans figures, or = meilleur temps arrondi à la demi-seconde au-dessus, écrit dans le fichier). Exemple livré : « Première glisse » par « Claude (exemple) », or 13,5 s (bot 13,42 / 13,57). Pour le retirer, effacer son fichier.
 - **Tests** : `share_test.gd` entre deux dossiers de joueur (export, import, auteur, même empreinte, fantôme repris, doublon, message avec retours à la ligne, code coupé, texte quelconque, code de fantôme, nombres absurdes, nom en double) : tout OK. Captures PC et téléphone des fenêtres. Non-régression : `editor_input_test`, `mylevels_test`, Flat 65,15 s, check_all 139 fichiers, 0 échec.
+
+## 57. Médailles de « Hook, you fool ! » mesurées pour de vrai (21/11, pour la 1.48)
+
+- **Avant** : l'or (97 s) était **estimé**, parce que le bot « bon joueur » ne passait pas les trous de ce niveau. Il lançait le tremplin du départ droit dans le bord avant du plafond du couloir, et tombait (45 chutes en 400 s).
+- **Nouveau bot** (`gap_bot.gd`, hors projet, copie de `medal_bot.gd`), réglé en essayant plusieurs façons de faire :
+  - il accroche le poisson presque à la verticale (moins de 150 px devant) ; accroché trop tôt, il faisait un tour complet et perdait toute sa vitesse ;
+  - il lâche quand la corde fait environ 25° de l'autre côté de la prise, en remontant (`REL = 0,4` × longueur de corde) ;
+  - sans poisson à portée, il s'accroche au **plafond du couloir**, au point le plus loin devant (grand balancier). Il ignore le dessous des îles flottantes (vide en dessous) : un joueur ne ramperait pas dessous.
+- **Fausse alerte au passage** : le bot semblait « coincé dans la glace ». En fait, les îles de ce niveau sont des bandes d'environ 300 px d'épaisseur avec du vide dessous, et il pendait SOUS une île en s'accrochant à son dessous. Ce n'est pas un bug du jeu, rien n'a été changé dans le pingouin.
+- **Résultat** : course sans chute en **85,57 s** avec figures (89,3 à 95,6 s selon les réglages, 90,1 s sans figures). Le terrain est le même à chaque partie (les trous ne dépendent pas du seed).
+- **Nouvelles médailles** (`RaceManager.MEDAL_GOLD["LevelRandomGap"]`) : or **86 s** (avant 97), argent 1:47,5, bronze 2:17,6. Une médaille déjà gagnée reste gagnée.
