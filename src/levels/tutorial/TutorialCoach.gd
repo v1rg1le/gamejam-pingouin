@@ -36,6 +36,19 @@ class_name TutorialCoach
 #  Multijoueur : pas d'ateliers (les autres courent) ; le tuto reste une
 #  course du départ à l'arrivée. Le coach se retire tout seul.
 #
+#  [TUTO 1.55] Changements (demande de l'équipe, 21/11) :
+#   - UNE réussite par atelier (need = 1 dans BateauGenerator) ;
+#   - plus de pause de lecture en ENTRANT dans un atelier : la bulle donne la
+#     consigne sans figer le jeu, et s'efface toute seule (MasterBubble) ;
+#   - à la place, à la 1re tentative de chaque atelier, le jeu se fige AU
+#     MOMENT du geste et montre le bouton à utiliser selon l'appareil
+#     (ActionPrompt). Les invites de l'atelier (`prompts` de
+#     BateauGenerator.workshop_specs) passent dans l'ordre ; chacune attend
+#     son moment (_prompt_ready). Après un échec, plus d'invites dans cet
+#     atelier : seulement l'indice du maître ;
+#   - deux ateliers FALAISE avant la course finale (geste « cliff » : arriver
+#     sur le dessus de la falaise). Bloqué au pied du mur = échec + boucle.
+#
 #  Comment on reconnaît chaque geste (aucune modification du pingouin) :
 #   pump   : un appui sur PUMP au sol, tenu ≥ 0,25 s dans une descente
 #            (ou chaque 0,7 s de PUMP tenu sans relâcher) ;
@@ -46,7 +59,9 @@ class_name TutorialCoach
 #   figure : un saut validé par TrickScore qui contient une figure ;
 #   combo  : un saut validé avec au moins 2 éléments (figure, vrille, nose) ;
 #   hook   : accroché ≥ 1 s au plafond, en tout (balancier ou en tirant) ;
-#   swing  : de retour au sol de l'AUTRE côté du trou.
+#   swing  : de retour au sol de l'AUTRE côté du trou ;
+#   cliff, cliff2 : [TUTO 1.55] posé au sol SUR le dessus de la falaise
+#            (grande falaise : deux murs en escalier, voir BateauGenerator).
 # =============================================================================
 
 const FAILS_BEFORE_SKIP := 5          # échecs avant le bouton « Passer »
@@ -86,6 +101,17 @@ var _pull_t := 0.0                    # temps à tirer pendant ce temps (s)
 var _hint_i := 0
 var _final_hide_at := -1.0
 var _welcome_wait := 0.0
+# [TUTO 1.55] invites « Appuie sur… » au moment du geste
+const PROMPT_LAND_SOON := 0.22        # s avant de toucher le sol : invite NOSE / pattes
+const PROMPT_AIM_TOL := 45.0          # px : tolérance de « la prise est dans l'axe (45°) »
+const CLIFF_STUCK_TIME := 1.2         # s arrêté au pied de la falaise = échec
+var prompt: ActionPrompt
+var _prompts_on := false              # invites encore actives dans cet atelier (1re tentative)
+var _prompt_i := 0                    # prochaine invite de l'atelier
+var _air_t := 0.0                     # s depuis que Pinpouin a quitté le sol
+var _hooked_t := 0.0                  # s accroché (invite « tire ! »)
+var _stuck_t := 0.0                   # s bloqué au pied de la falaise
+var _start_prompt_done := false       # invite « avance » de l'accueil
 
 
 func _init() -> void:
@@ -117,6 +143,9 @@ func _ready() -> void:
 	bubble.skip_pressed.connect(_on_skip)
 	counter = SuccessCounter.new()
 	add_child(counter)
+	prompt = ActionPrompt.new()   # [TUTO 1.55]
+	add_child(prompt)
+	prompt.done.connect(_on_prompt_done)
 
 
 # -----------------------------------------------------------------------------
@@ -146,6 +175,15 @@ func _physics_process(delta: float) -> void:
 	if _final_hide_at > 0.0 and RaceManager.race_time >= _final_hide_at:
 		_final_hide_at = -1.0
 		bubble.hide_bubble()
+
+	# [TUTO 1.55] jeu figé par une invite : rien à suivre (delta vaut 0)
+	# (_prev_state n'est PAS mis à jour : un saut commencé pendant le gel doit
+	# être vu comme un nouveau saut à la reprise, atelier « saut »)
+	if prompt.is_active():
+		return
+	# temps en l'air / accroché (pour les moments des invites)
+	_air_t = 0.0 if _player.is_on_ground else _air_t + delta
+	_hooked_t = _hooked_t + delta if _player.chain.hooked else 0.0
 
 	var px: float = _player.global_position.x
 	# limite de « chute infinie » : sous la piste à cet endroit (la piste
@@ -180,6 +218,9 @@ func _physics_process(delta: float) -> void:
 	# 4. Gestes suivis image par image
 	if _index >= 0 and not _completed:
 		_watch(delta)
+	# 5. [TUTO 1.55] invite « Appuie sur… » si c'est le moment
+	_update_prompts()
+	_update_camera_focus()
 	_prev_state = _player._states.current
 
 
@@ -220,6 +261,29 @@ func _watch(delta: float) -> void:
 				if _hook_t >= HOOK_MIN_TIME:
 					_success()
 					_hook_t = 0.0
+		"cliff", "cliff2":
+			# [TUTO 1.55] réussi : posé SUR le dessus de la falaise (dernier mur)
+			var ppos: Vector2 = _player.global_position
+			var last_face: float = w.cliff_faces[w.cliff_faces.size() - 1]
+			if _player.is_on_ground and ppos.x > last_face and ppos.y < w.cliff_top_y + 120.0:
+				_success()
+				return
+			# bloqué au pied d'un mur (au sol, presque arrêté, pas accroché) :
+			# échec + boucle, sinon on ne pourrait jamais atteindre le bout
+			var stuck := false
+			if _player.is_on_ground and absf(_player._velocity.x) < 80.0 and not _player.chain.hooked:
+				for i in w.cliff_faces.size():
+					if ppos.x > w.cliff_faces[i] - 250.0 and ppos.x < w.cliff_faces[i] + 10.0 \
+							and ppos.y > w.cliff_tops[i] + 150.0:
+						stuck = true
+			if stuck:
+				_stuck_t += delta
+				if _stuck_t >= CLIFF_STUCK_TIME:
+					_stuck_t = 0.0
+					_fail("wall")
+					_loop_back()
+			else:
+				_stuck_t = 0.0
 		"swing":
 			# passé de l'autre côté du trou (au sol, ou encore en l'air AU-DESSUS
 			# de l'autre bord). Attention : en tombant dans le trou, le pingouin
@@ -306,9 +370,13 @@ func _welcome() -> void:
 	var text := "Bienvenue, petit Pinpouin ! Je vais t'apprendre la glisse ninja.\nAvance avec {move_right}. Un atelier raté ? On le recommence !"
 	if _done_before:
 		text += "\nTu connais déjà ? Passe directement à la course."
-	bubble.say("LE MAÎTRE NINJA", text, true)
+	bubble.say("LE MAÎTRE NINJA", text)   # [TUTO 1.55] plus de pause de lecture ici
 	counter.set_goal("", 0)
 	_update_skip()
+	# [TUTO 1.55] première invite : avancer (Pinpouin est arrêté au départ)
+	if not _start_prompt_done and not Input.is_action_pressed("move_right"):
+		_start_prompt_done = true
+		prompt.show_prompt("move_right", "Pour avancer. Garde-le enfoncé !")
 
 
 func _enter(i: int) -> void:
@@ -321,12 +389,17 @@ func _enter(i: int) -> void:
 	_stroke = 0.0
 	_hook_t = 0.0
 	_pull_t = 0.0
+	_prompts_on = true     # [TUTO 1.55] 1re tentative : invites au moment du geste
+	_prompt_i = 0
+	_stuck_t = 0.0
+	prompt.cancel()
 	_entry_speed = clampf(_player._velocity.length(), LOOP_SPEED_MIN, LOOP_SPEED_MAX)
 	var w: Dictionary = workshops[i]
 	var text: String = w.text
 	if w.need > 1:
 		text += "  (%d fois)" % w.need
-	bubble.say("ATELIER %d / %d · %s" % [i + 1, workshops.size(), w.title], text, true)
+	# [TUTO 1.55] plus de pause en entrant : on fige plutôt au moment du geste
+	bubble.say("ATELIER %d / %d · %s" % [i + 1, workshops.size(), w.title], text)
 	counter.set_goal(w.short, w.need)
 	_update_skip()
 	print("[TUTO] atelier ", i + 1, " : ", w.key)
@@ -342,6 +415,7 @@ func _success() -> void:
 	print("[TUTO] réussite ", _count, "/", w.need, " (", w.key, ")")
 	if _count >= w.need:
 		_completed = true
+		prompt.cancel()   # [TUTO 1.55]
 		bubble.cheer()
 		counter.flash("RÉUSSI !", Color(0.5, 1, 0.55))
 		var msg: String = w.get("done_text", "")
@@ -358,11 +432,14 @@ func _success() -> void:
 
 func _fail(reason: String) -> void:
 	_fails += 1
+	# [TUTO 1.55] choix de l'équipe : invites seulement à la 1re tentative
+	_prompts_on = false
+	prompt.cancel()
 	var w: Dictionary = workshops[_index]
 	var hints: Array = w.hints
 	var hint: String = hints[_hint_i % hints.size()]
 	_hint_i += 1
-	var head: String = {"loop": "On recommence !", "crash": "Aïe, sur le dos !", "trick": "Figure pas finie !", "fall": "Plouf !"}.get(reason, "Encore !")
+	var head: String = {"loop": "On recommence !", "crash": "Aïe, sur le dos !", "trick": "Figure pas finie !", "fall": "Plouf !", "wall": "Bloqué au pied du mur !"}.get(reason, "Encore !")
 	bubble.say("ATELIER %d / %d · %s" % [_index + 1, workshops.size(), w.title], head + "  " + hint)
 	counter.flash("Encore !", Color(1, 0.6, 0.3))
 	_update_skip()
@@ -415,6 +492,7 @@ func _on_skip() -> void:
 		target = Vector2(final_x - 500.0, generator.surface_y(final_x - 500.0) - 40.0)
 		_completed = true
 	print("[TUTO] atelier passé")
+	prompt.cancel()   # [TUTO 1.55]
 	counter.set_goal("", 0)
 	bubble.set_skip_visible(false)
 	_player.teleport_to(target, Vector2(maxf(_entry_speed, 900.0), 0.0))
@@ -422,6 +500,9 @@ func _on_skip() -> void:
 
 func _start_final() -> void:
 	_final_started = true
+	if _player != null and "focus_point" in _player.camera:
+		_player.camera.focus_point = null   # [TUTO 1.55]
+	prompt.cancel()   # [TUTO 1.55]
 	counter.set_goal("", 0)
 	RaceManager.start_tutorial_final()
 	# on retient que le tuto a été fait (les ateliers deviennent « passables »)
@@ -439,3 +520,185 @@ func _start_final() -> void:
 	bubble.set_skip_visible(false)
 	# la bulle laisse la place au chrono au bout de quelques secondes
 	_final_hide_at = 4.0
+
+
+# =============================================================================
+#  [TUTO 1.55] Invites « Appuie sur… » au moment du geste (ActionPrompt)
+# -----------------------------------------------------------------------------
+#  À chaque image (jeu non figé), on regarde si la prochaine invite de
+#  l'atelier a trouvé son moment (_prompt_ready). Si oui, ActionPrompt fige
+#  le jeu et montre le bouton ; quand le joueur appuie, `done` arrive et on
+#  passe à l'invite suivante. Une invite dont le bouton est DÉJÀ tenu (le
+#  joueur fait déjà le geste) est sautée sans figer.
+# =============================================================================
+func _update_prompts() -> void:
+	if _final_started or _index < 0 or _completed or not _prompts_on:
+		return
+	if _player._respawning or get_tree().paused:
+		return
+	var list: Array = workshops[_index].get("prompts", [])
+	if _prompt_i >= list.size():
+		return
+	var p: Dictionary = list[_prompt_i]
+	if not _prompt_ready(String(p.when), workshops[_index]):
+		return
+	var mode: String = p.get("mode", "press")
+	if mode == "press" and Input.is_action_pressed(p.action):
+		_prompt_i += 1   # il le fait déjà : pas besoin de figer
+		return
+	if mode == "release" and not Input.is_action_pressed(p.action):
+		_prompt_i += 1   # déjà relâché
+		return
+	print("[TUTO] invite ", p.action, " (", p.when, ")")
+	prompt.show_prompt(p.action, p.text, mode)
+
+
+# [TUTO 1.55] Falaises : la caméra garde dans le cadre la prise du mur à
+# grimper (AdaptiveCamera.focus_point), depuis un peu avant le mur jusqu'à ce
+# que Pinpouin soit passé au-dessus. Partout ailleurs : rien (null).
+func _update_camera_focus() -> void:
+	var cam = _player.camera
+	if cam == null or not "focus_point" in cam:
+		return
+	var focus = null
+	if not _final_started and _index >= 0 and workshops[_index].has("cliff_faces"):
+		var w: Dictionary = workshops[_index]
+		var px: float = _player.global_position.x
+		if _player.chain.hooked:
+			# accroché : on garde dans le cadre la prise où tient le grappin
+			var best := INF
+			for key in w.targets:
+				var dd: float = w.targets[key].distance_to(_player.chain.tip)
+				if dd < best and dd < 300.0:
+					best = dd
+					focus = w.targets[key]
+			cam.focus_point = focus
+			return
+		for i in w.cliff_faces.size():
+			var face: float = w.cliff_faces[i]
+			# déjà monté sur ce mur (posé sur la marche ou le dessus : la
+			# marche descend un peu, d'où la marge de 80 px) -> mur suivant
+			var passed: bool = px > face + 40.0 and _player.global_position.y < w.cliff_tops[i] + 80.0
+			if px > face - 1600.0 and not passed:
+				focus = w.targets.get("hold%d" % (i + 1), null)
+				break
+	cam.focus_point = focus
+
+
+func _on_prompt_done() -> void:
+	_prompt_i += 1
+
+
+# Le moment de l'invite est-il venu ? (voir la liste dans BateauGenerator)
+func _prompt_ready(when: String, w: Dictionary) -> bool:
+	var pos: Vector2 = _player.global_position
+	var vel: Vector2 = _player._velocity
+	var ground: bool = _player.is_on_ground
+	var st = _player._states.current
+	var trixing: bool = st == _player._states.trixing
+	if when.begins_with("aim:"):
+		# prise devant, sur la ligne à 45° du grappin « par défaut »
+		var t = _target(w, when.substr(4))
+		return t != null and not _player.chain.hooked and not _player.chain.flying and _on_aim_line(pos, t)
+	if when.begins_with("over:"):
+		# accroché, et au-dessus du n-ième mur de la falaise (on peut lâcher)
+		var n := int(when.substr(5)) - 1
+		if not w.has("cliff_faces") or n >= w.cliff_faces.size():
+			return false
+		return _player.chain.hooked and pos.x > w.cliff_faces[n] + 60.0 and pos.y < w.cliff_tops[n] - 30.0
+	match when:
+		"start":
+			return true
+		"ground":
+			return ground and pos.x > w.x0 + 400.0
+		"ground_descent":
+			return ground and pos.x > w.x0 + 400.0 and vel.y > 20.0
+		"lip":
+			# au sol, juste avant le bord d'un tremplin de l'atelier
+			if not ground:
+				return false
+			for lip in generator.ramp_lips(w.x0, w.x1):
+				if pos.x < lip and lip - pos.x < 160.0:
+					return true
+			return false
+		"takeoff":
+			return not ground and _air_t > 0.1 and vel.y < 0.0 and not _player.chain.hooked
+		"land_crash":
+			# atelier « chute » : assez tôt pour tourner jusque sur le dos
+			# (~370°/s en tenant la rotation : 0,45 s ≈ 165°)
+			if ground or vel.y <= 0.0 or _air_t < 0.3:
+				return false
+			return _time_to_ground() < 0.45
+		"land_soon":
+			# en l'air, en train de redescendre, sol tout proche (et la figure
+			# finie : on ne penche pas pendant une figure)
+			if ground or vel.y <= 0.0 or trixing or _air_t < 0.3:
+				return false
+			return _time_to_ground() < PROMPT_LAND_SOON
+		"under_roof":
+			return ground and pos.x > generator.roof_start + 300.0
+		"hooked":
+			return _player.chain.hooked and _hooked_t > 0.25
+		"swing_release":
+			# accroché au bloc du balancier, passé dessous, et on remonte
+			# ET, lâché maintenant, il retomberait bien de l'autre côté du trou
+			# (trajectoire simple : gravité seule)
+			var t3 = generator.targets.get("swing", null)
+			return t3 != null and _player.chain.hooked and pos.x > t3.x + 150.0 and vel.y < -50.0 \
+					and _clears_far_edge()
+	return false
+
+
+# Prise `name` de l'atelier (falaises) ou du niveau (balancier).
+func _target(w: Dictionary, name: String):
+	var t = w.get("targets", {}).get(name, null)
+	if t == null:
+		t = generator.targets.get(name, null)
+	return t
+
+
+# La prise `t` est-elle devant Pinpouin, sur la ligne à 45° vers le haut
+# (direction du grappin lancé sans viser : Espace, bouton manette, bouton
+# tactile GRAPPIN), et à portée (Chain.distance_max = 1200 px) ?
+func _on_aim_line(pos: Vector2, t: Vector2) -> bool:
+	var dx: float = (t.x - pos.x) * _player.facing
+	var dy: float = pos.y - t.y
+	return dx > 0.0 and dy > 0.0 and absf(dx - dy) < PROMPT_AIM_TOL and dx * 1.414 < 1150.0
+
+
+# [TUTO 1.55] Lâché maintenant, Pinpouin passerait-il AU-DESSUS du bord
+# d'arrivée du balancier ? (trajectoire simple, gravité seule, avec une
+# marge : le bord d'arrivée est 200 px plus haut que le départ, et l'air
+# freine un peu). Sert à dire « lâche ! » au bon moment.
+func _clears_far_edge() -> bool:
+	var p: Vector2 = _player.global_position
+	var v: Vector2 = _player._velocity
+	var edge_x: float = generator.hole_end() + 60.0
+	var edge_y: float = generator.surface_y(generator.hole_end() + 60.0)
+	var step := 0.02
+	for k in range(200):
+		v.y += _player.gravity * step
+		p += v * step * 0.97
+		if p.x >= edge_x:
+			return p.y < edge_y - 70.0
+		if v.y > 0.0 and p.y > edge_y + 300.0:
+			return false
+	return false
+
+
+# Temps avant de toucher le sol (trajectoire simple : gravité seule), en s ;
+# 9 s si rien en dessous dans les 1,5 s.
+func _time_to_ground() -> float:
+	var space = _player.get_world_2d().direct_space_state
+	var p: Vector2 = _player.global_position
+	var v: Vector2 = _player._velocity
+	var step := 0.03
+	for k in range(50):
+		var nv := v + Vector2(0, _player.gravity * step)
+		var np := p + nv * step
+		var q := PhysicsRayQueryParameters2D.create(p, np + Vector2(0, 30), 2, [_player.get_rid()])
+		if not space.intersect_ray(q).is_empty():
+			return k * step
+		p = np
+		v = nv
+	return 9.0

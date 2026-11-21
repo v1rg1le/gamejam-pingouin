@@ -1171,3 +1171,26 @@ Retour de l'équipe sur la 1.51 : « la chute dans le vide apparaît trop rapide
 - Si le texte change (en multi : « 2 / 3 arrivés », classement), le bandeau redevient lisible 3 s. Même texte renvoyé : rien ne bouge (pas de clignotement).
 - Pas touché : le compte à rebours « BONUS HALF-PIPE : N s » du mode Score (info qui change chaque seconde, sans fond).
 - **Testé** (`fade_test.gd`) : opacité 1,00 à 2,9 s, 0,57 à 3,4 s, 0,15 à 4 s et après ; rappel avec le même texte : reste à 0,15 ; nouveau texte : revient à 1. check_all 140 fichiers, 0 échec.
+
+## 66. Tuto : une seule réussite, pause au moment du geste, bulle qui s'efface, falaises (21/11, pour la 1.55)
+
+Demande de l'équipe : ne plus redemander plusieurs fois le même geste ; mettre la pause AU MOMENT où il faut agir, en montrant le bouton selon l'appareil (PC, téléphone, manette) ; texte qui s'efface ; un atelier pour grimper une falaise avant la course finale. Choix de l'équipe : on repart en appuyant sur le bon bouton (l'action se fait tout de suite) ; pause à la 1re tentative seulement ; bulle effacée selon la longueur du texte ; falaise simple au grappin puis une plus difficile.
+
+- **Une réussite par atelier** (`need` = 1 dans `BateauGenerator.workshop_specs`).
+- **Invites « Appuie sur… »** (`src/levels/tutorial/ActionPrompt.gd`, nouveau) :
+  - le jeu se fige (`Engine.time_scale = 0` : le pingouin ne bouge plus mais lit encore les touches, donc l'appui fait l'action tout de suite ; une vraie pause cachait les boutons tactiles) ;
+  - le bouton affiché dépend de l'appareil : touche du clavier, bouton de manette, ou bouton tactile entouré d'un cercle jaune qui « respire » ;
+  - modes : appuyer, relâcher (lâcher le grappin au bon moment) ;
+  - le temps est toujours remis à 1 en sortant (changement de scène compris) ; option coupée (`Settings.tutorial_pause`, renommée « Tuto : figer le jeu sur les gestes ») : l'invite s'affiche sans figer ;
+  - le panneau se place pour ne jamais cacher Pinpouin.
+- **Moments des invites** (`prompts` de chaque atelier, `TutorialCoach._prompt_ready`) : au sol / dans une descente, au bord d'un tremplin, juste après le décollage, juste avant le sol (0,22 s : un appui maintenu ne peut pas dépasser ~80° de rotation, donc pas de chute), plus tôt pour l'atelier chute (0,45 s), sous le plafond, accroché, quand une prise est dans l'axe du grappin lancé sans viser (45°), quand lâcher le balancier fait retomber de l'autre côté du trou, au-dessus du bord d'une falaise. Seulement à la 1re tentative ; après un échec, seulement l'indice du maître.
+- **Plus de pause en entrant dans un atelier** ; la bulle du maître reste lisible le temps de la lire (15 caractères par seconde, 3 à 10 s) puis devient presque transparente (`MasterBubble._show_then_fade`).
+- **Deux ateliers falaise** avant la course finale (11 ateliers au lieu de 9) :
+  - FALAISE : un mur de 500 px, une prise (boule de glace dessinée en code) au-dessus du bord ; grappin, tirer, lâcher au-dessus ;
+  - GRANDE FALAISE : deux murs de 500 px en escalier avec une marche de 1000 px ; le même geste deux fois.
+  - Bloqué au pied d'un mur 1,2 s = échec et retour au début de l'atelier.
+  - La caméra garde la prise à grimper dans le cadre (`AdaptiveCamera.focus_point`).
+  - Premiers essais ratés aux bots : gros blocs « poisson » (le grappin accrochait leur coin, Pinpouin restait pendu contre la paroi) ; un seul mur de 1000 px avec une prise basse devant (Pinpouin, projeté en tirant, restait posé sur la prise).
+- **Grappin** (`HookingInAirState.swing`) : pendu presque à la verticale et presque immobile, « tirer » ne faisait rien (sortie anticipée du code d'origine). Corrigé seulement quand on tire. Vérifié : Hook you fool 86,27 s (comme en 1.53), Sans fin grappin 9/9, double 5/5 et 30/30, montée 7/7, plafond 4/4.
+- **Manette** : « Avance avec {move_right} » affichait « (aucun bouton manette) » ; maintenant « Stick gauche ▶ » (`TutorialSign._binding_text`).
+- **Testé** (`tuto_prompt_bot.gd`, élève qui ne fait QUE ce que disent les invites) : les 11 ateliers réussis du premier coup au clavier, à la manette, au tactile et en mode enfant ; captures PC et téléphone ; course finale inchangée (12,85 s, or 13,5) ; check_all 141 fichiers, 0 échec.

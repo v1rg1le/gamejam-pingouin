@@ -112,6 +112,15 @@ var _in_gap: bool = false             # dernier scan : au-dessus d'un trou
 var _gap_offset: Vector2 = Vector2.ZERO  # décalage pour centrer les prises du grappin
 var _gap_zoom_needed: float = 1.0     # zoom qui montre toutes les prises
 var _view_offset: Vector2 = Vector2.ZERO # décalage lissé appliqué à la caméra
+## [TUTO 1.55] Point du monde à garder dans le cadre (ou null). Posé par le
+## tuto (TutorialCoach) dans les ateliers FALAISE : la prise du grappin est
+## haut au-dessus du mur, hors de l'écran ; sans ça, l'invite « la prise est
+## dans l'axe » montrait un mur blanc. Tant qu'il est posé, la caméra se
+## recentre entre Pinpouin et ce point, et dézoome juste ce qu'il faut pour
+## voir les deux (palier lissé comme les autres : pas de « yoyo »).
+var focus_point = null
+const FOCUS_MARGIN := Vector2(260, 200)   # marge autour des deux points (px du monde)
+const FOCUS_MIN_ZOOM := 0.5
 
 
 func _ready() -> void:
@@ -162,6 +171,15 @@ func _physics_process(delta: float) -> void:
 
 # Choisit le palier de zoom à viser (avec la logique anti-nausée).
 func _choose_target_zoom() -> void:
+	# [TUTO 1.55] point à garder dans le cadre : zoom qui montre Pinpouin ET
+	# ce point (même pendant le grappin : c'est justement là qu'on grimpe)
+	if focus_point != null:
+		var d: Vector2 = (focus_point - _player.global_position).abs() * 0.5 + FOCUS_MARGIN
+		var vs: Vector2 = get_viewport_rect().size * 0.5
+		_target_zoom = clampf(minf(minf(vs.x / d.x, vs.y / d.y), 1.0), FOCUS_MIN_ZOOM, 1.0)
+		_pending_zoom_in = _target_zoom
+		_pending_since = Time.get_ticks_msec() / 1000.0
+		return
 	# Pendant le grappin la trajectoire n'est pas balistique : on ne change rien.
 	if _player.chain.hooked or _player.chain.flying:
 		return
@@ -194,7 +212,10 @@ func _update_view_offset(delta: float) -> void:
 	position = position.lerp(Vector2.ZERO, 1.0 - exp(-delta * 3.0))  # ancien décalage tactile -> 0
 	var half_view: Vector2 = get_viewport_rect().size * 0.5 / zoom.x   # demi-vue en px du monde
 	var target := Vector2.ZERO
-	if _in_gap and gap_view_enabled:
+	if focus_point != null:
+		# [TUTO 1.55] recentrage à mi-chemin entre Pinpouin et le point
+		target = (focus_point - _player.global_position) * 0.5
+	elif _in_gap and gap_view_enabled:
 		# Au-dessus d'un trou : on recentre sur les prises du grappin
 		target = _gap_offset
 	else:
@@ -216,7 +237,7 @@ func _update_view_offset(delta: float) -> void:
 	var lim := half_view * (1.0 - gap_player_margin * 2.0)
 	target = target.clamp(-lim, lim)
 	var tau := maxf(0.05, look_ahead_time)
-	if _in_gap and gap_view_enabled:
+	if (_in_gap and gap_view_enabled) or focus_point != null:
 		tau *= 2.0   # au-dessus d'un trou : recentrage plus lent (les prises changent à chaque scan)
 	_view_offset = _view_offset.lerp(target, 1.0 - exp(-delta / (tau / 3.0)))
 	offset = _view_offset

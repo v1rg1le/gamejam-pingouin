@@ -189,8 +189,15 @@ func swing(player: CharacterBody2D, delta):
 
 	# si joueur a une vitesse faible et est dans une petite angle sous le grapin
 	# [GRAPPIN] comparaison composante par composante (cf. en-tête, point 5)
+	# [FALAISE 1.55] SAUF si le joueur TIRE ({pull}) : pendu presque à la
+	# verticale sous la prise et presque immobile (contre un mur, par
+	# exemple), cette sortie anticipée empêchait toute traction. Vu avec le
+	# nouvel atelier « Falaise » du tuto : grappin accroché, bouton « tirer »
+	# enfoncé… et Pinpouin restait pendu sans monter. Sans « tirer », rien ne
+	# change (le pingouin pend tranquillement, comme avant).
 	if abs(radius_dir.x) < .35 and abs(player._velocity.x) < player.MIN_SPEED_HOOKED.x \
-			and abs(player._velocity.y) < player.MIN_SPEED_HOOKED.y:
+			and abs(player._velocity.y) < player.MIN_SPEED_HOOKED.y \
+			and not Input.is_action_pressed("pull"):
 		return
 
 	elif sign((player.chain.tip.x - player.global_position.x)) == sign(player.facing):

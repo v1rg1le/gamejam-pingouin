@@ -29,6 +29,10 @@ extends Node
 #                      jeu en pause jusqu'à ce qu'on appuie sur une touche ;
 #   - tutorial_pause : dans le tuto, le jeu se met en pause à chaque panneau
 #                      pour laisser le temps de lire ;
+#                      [TUTO 1.55] il se fige maintenant AU MOMENT du geste
+#                      pour montrer le bouton (ActionPrompt), plus en
+#                      entrant dans un atelier. Option renommée « Tuto :
+#                      figer le jeu sur les gestes » ;
 #   - music_volume   : volume de la musique (0 à 1, bus audio "Music").
 # =============================================================================
 

@@ -109,7 +109,7 @@ theme_override_colors/font_hover_color = Color(1, 1, 1, 1)
 theme_override_colors/font_hover_pressed_color = Color(1, 1, 1, 1)
 custom_minimum_size = Vector2(0, 46)
 layout_mode = 2
-text = "Pause pour lire les panneaux du tuto"
+text = "Tuto : figer le jeu sur les gestes"
 
 [node name="GhostEnabled" type="CheckButton" parent="Margin/VBox/Columns/GamePanel/VBox"]
 theme_override_colors/font_color = Color(0.168627, 0.227451, 0.34902, 1)

@@ -101,52 +101,112 @@ var fish_res = preload("res://src/levels/parts/StaticBody2DFish.tscn")   # [TUTO
 #            bulle passe à la ligne toute seule) ;
 #   hints  : indices de plus en plus précis, un par échec ;
 #   done_text : (option) phrase du maître une fois l'atelier réussi.
+#
+#  [TUTO 1.55] Changements demandés par l'équipe (21/11) :
+#   - UNE seule réussite par atelier (`need` = 1 partout) : on ne redemande
+#     plus plusieurs fois le même geste ;
+#   - `prompts` : les invites « Appuie sur… » qui figent le jeu AU MOMENT du
+#     geste (1re tentative de l'atelier seulement), avec le bon bouton selon
+#     l'appareil (ActionPrompt.gd). Chaque invite : action de l'InputMap,
+#     `when` = le moment (reconnu par TutorialCoach._prompt_ready), `text` =
+#     la phrase sous le bouton, `mode` (option) = "release" (relâcher) ou
+#     "repress" (relâcher puis réappuyer). Les invites passent dans l'ordre ;
+#   - deux ateliers FALAISE avant la course finale (`cliff` : hauteur du
+#     mur, et nombre de prises 1 ou 2), voir _add_cliff().
+#  Moments (`when`) disponibles : ground, ground_descent, lip (bord d'un
+#  tremplin de l'atelier), takeoff (juste après le décollage), land_soon
+#  (juste avant de toucher le sol), land_crash (un peu plus tôt : le temps
+#  de tourner jusque sur le dos), under_roof, hooked, aim:<prise> (la prise
+#  est dans l'axe du grappin, 45° vers l'avant), swing_release, over:<n>
+#  (accroché, au-dessus du n-ième mur de la falaise).
 var workshop_specs = [
-	{"key": "pump", "len": 6500, "need": 3, "title": "PUMP", "short": "PUMP",
+	{"key": "pump", "len": 6500, "need": 1, "title": "PUMP", "short": "PUMP",
 		"text": "Dans les DESCENTES, appuie sur {pump} pour prendre de la vitesse. Relâche dans les montées.",
+		"prompts": [{"action": "pump", "when": "ground_descent", "text": "Ça descend : garde-le enfoncé un moment pour prendre de la vitesse !"}],
 		"hints": ["Appuie sur {pump} quand ça descend, relâche quand ça remonte.",
 			"Garde {pump} un petit moment dans la pente, puis relâche.",
 			"Regarde le sol : {pump} seulement quand Pinpouin glisse vers le bas."]},
-	{"key": "jump", "len": 7000, "need": 3, "title": "SAUT", "short": "SAUT",
+	{"key": "jump", "len": 7000, "need": 1, "title": "SAUT", "short": "SAUT",
 		"text": "Saute avec {jump}, et retombe sans chuter.",
+		"prompts": [{"action": "jump", "when": "ground", "text": "Saute !"}],
 		"hints": ["Appuie sur {jump} quand Pinpouin touche le sol.",
 			"Un saut, on atterrit… et on recommence !"]},
-	{"key": "feet", "len": 11500, "need": 3, "ramps": [800, 4400, 8000], "title": "SUR LES PATTES", "short": "PATTES",
+	{"key": "feet", "len": 11500, "need": 1, "ramps": [800, 4400, 8000], "title": "SUR LES PATTES", "short": "PATTES",
 		"text": "Saute au bout des tremplins ({jump}). En l'air, relève le bec avec {rotate_trigo} : Pinpouin retombe sur ses PATTES, c'est un TAIL (+ points) ! Debout, {rotate_horaire} le couche sur le ventre ; trop de {rotate_trigo}, il tombe en arrière.",
+		"prompts": [{"action": "jump", "when": "lip", "text": "Saute au bord du tremplin !"},
+			{"action": "rotate_trigo", "when": "land_soon", "text": "Un PETIT appui pour relever le bec… puis relâche !"}],
 		"hints": ["Relève le bec avec {rotate_trigo} avant de toucher le sol : les pattes vers la pente.",
 			"Pas trop quand même : tête en bas, c'est la chute !",
 			"Une fois debout, lâche {rotate_trigo} : si tu le tiens, Pinpouin bascule en arrière.",
 			"Prends de l'élan avec {pump} avant le tremplin, puis saute au bord."]},
-	{"key": "nose", "len": 8000, "need": 2, "ramps": [800, 4400], "title": "NOSE", "short": "NOSE",
+	{"key": "nose", "len": 8000, "need": 1, "ramps": [800, 4400], "title": "NOSE", "short": "NOSE",
 		"text": "Comme en skate : retombe le BEC EN AVANT ! Penche Pinpouin avec {rotate_horaire} juste avant le sol. NOSE = points + petit boost.",
+		"prompts": [{"action": "jump", "when": "lip", "text": "Saute au bord du tremplin !"},
+			{"action": "rotate_horaire", "when": "land_soon", "text": "Un petit appui : le bec en avant !"}],
 		"hints": ["Penche vers l'avant avec {rotate_horaire}, un peu plus que pour les pattes.",
 			"Pas trop quand même : sur le dos, c'est la chute !",
 			"Commence à pencher dès que Pinpouin redescend."]},
 	{"key": "crash", "len": 4400, "need": 1, "ramps": [800], "title": "LA CHUTE", "short": "CHUTE",
 		"text": "Sur le dos, ça fait mal ! Essaie UNE fois pour voir : sur le tremplin, tourne longtemps avec {rotate_trigo} et atterris sur le dos.",
+		"prompts": [{"action": "jump", "when": "lip", "text": "Saute au bord du tremplin !"},
+			{"action": "rotate_trigo", "when": "land_crash", "text": "Maintiens-le jusqu'au sol : sur le dos !"}],
 		"hints": ["Tourne plus longtemps avec {rotate_trigo} : il faut toucher le sol la tête en bas.",
 			"Saute au bord du tremplin ({jump}) pour avoir le temps de tourner."],
 		"done_text": "Tu as vu ? Roulade, sonné 1 seconde, et les points du saut\nsont perdus. En course, évite ça !"},
-	{"key": "figure", "len": 8000, "need": 2, "ramps": [800, 4400], "title": "FIGURES", "short": "FIGURE",
+	{"key": "figure", "len": 8000, "need": 1, "ramps": [800, 4400], "title": "FIGURES", "short": "FIGURE",
 		"text": "En l'air, appuie sur {trix} pour une FIGURE (+100 pts). Elle doit être finie AVANT de toucher le sol.",
+		"prompts": [{"action": "jump", "when": "lip", "text": "Saute au bord du tremplin !"},
+			{"action": "trix", "when": "takeoff", "text": "Une figure, tout de suite après le décollage !"}],
 		"hints": ["Lance la figure tout de suite après le décollage.",
 			"Une seule figure par saut, sinon elle ne finit pas à temps.",
 			"Prends de l'élan avec {pump} : plus haut = plus de temps."]},
 	{"key": "combo", "len": 4400, "need": 1, "ramps": [800], "title": "COMBO", "short": "COMBO",
 		"text": "Plusieurs éléments dans le même saut = COMBO, points multipliés ! Une figure ({trix}) puis atterris en NOSE ({rotate_horaire}).",
+		"prompts": [{"action": "jump", "when": "lip", "text": "Saute au bord du tremplin !"},
+			{"action": "trix", "when": "takeoff", "text": "D'abord une figure…"},
+			{"action": "rotate_horaire", "when": "land_soon", "text": "… puis un petit appui : bec en avant pour le NOSE !"}],
 		"hints": ["Figure tout de suite au décollage, puis penche le bec vers l'avant.",
 			"Prends beaucoup d'élan avec {pump} avant le tremplin.",
 			"Une vrille (un tour complet) compte aussi dans le combo."]},
 	{"key": "hook", "len": 6000, "need": 1, "roof": [400, 5000], "title": "GRAPPIN", "short": "GRAPPIN",
 		"text": "Vise le plafond et maintiens {hook} pour t'accrocher et te balancer. Accroché, {pull} te hisse vers le plafond.",
+		"prompts": [{"action": "hook", "when": "under_roof", "text": "Grappin vers le plafond, et GARDE-le enfoncé !"},
+			{"action": "pull", "when": "hooked", "text": "Accroché ! Tu peux tirer pour te hisser."}],
 		"hints": ["Ne relâche pas {hook} : il faut le MAINTENIR une bonne seconde.",
 			"Saute ({jump}) puis lance le grappin vers le plafond.",
 			"Accroché, tu peux te balancer ou tirer avec {pull} : les deux comptent."]},
 	{"key": "swing", "len": 5200, "need": 1, "hole": 1600, "title": "BALANCIER", "short": "BALANCIER",
 		"text": "Un grand trou ! Accroche le bloc de glace avec {hook}, balance-toi, et lâche quand Pinpouin remonte pour passer de l'autre côté.",
+		"prompts": [{"action": "pump", "when": "ground_descent", "text": "Prends de l'élan avant le trou : il faut arriver vite !"},
+			{"action": "hook", "when": "aim:swing", "text": "Le bloc de glace est dans l'axe : grappin !"},
+			{"action": "hook", "when": "swing_release", "text": "Tu remontes : lâche maintenant !", "mode": "release"}],
 		"hints": ["Lance le grappin juste avant le bord du trou.",
 			"Lâche {hook} quand tu as dépassé le bloc et que tu remontes.",
 			"Prends de l'élan avec {pump} avant le trou."]},
+	# [TUTO 1.55] FALAISE : un mur vertical de 500 px, une prise au-dessus du
+	# bord. On s'accroche, on tire ({pull}) pour se hisser, on lâche au-dessus.
+	{"key": "cliff", "len": 6500, "need": 1, "cliff": {"at": 2600, "steps": [500]}, "title": "FALAISE", "short": "FALAISE",
+		"text": "Une falaise ! Accroche la prise du haut avec {hook}, tire avec {pull} pour te hisser, et lâche au-dessus du bord.",
+		"prompts": [{"action": "hook", "when": "aim:hold1", "text": "La prise est dans l'axe : grappin, et garde-le !"},
+			{"action": "pull", "when": "hooked", "text": "Tire pour te hisser le long du mur !"},
+			{"action": "hook", "when": "over:1", "text": "Tu es au-dessus de la falaise : lâche !", "mode": "release"}],
+		"hints": ["Lance le grappin vers la prise un peu avant le pied du mur.",
+			"Une fois accroché, garde {hook} ET tire avec {pull}.",
+			"Accroché au mur, {pump} t'aide aussi à monter.",
+			"Lâche {hook} quand Pinpouin est au-dessus du bord."]},
+	# [TUTO 1.55] GRANDE FALAISE : deux murs de 500 px en escalier, avec un
+	# palier entre les deux : on refait le geste deux fois de suite.
+	{"key": "cliff2", "len": 8800, "need": 1, "cliff": {"at": 2800, "steps": [500, 500], "ledge": 1000}, "title": "GRANDE FALAISE", "short": "SOMMET",
+		"text": "Deux murs en escalier ! Grimpe le premier, pose-toi sur la marche, puis recommence pour le second.",
+		"prompts": [{"action": "hook", "when": "aim:hold1", "text": "Première prise dans l'axe : grappin !"},
+			{"action": "pull", "when": "hooked", "text": "Tire pour monter !"},
+			{"action": "hook", "when": "over:1", "text": "Au-dessus de la marche : lâche !", "mode": "release"},
+			{"action": "hook", "when": "aim:hold2", "text": "Deuxième prise dans l'axe : grappin !"},
+			{"action": "pull", "when": "hooked", "text": "Tire encore !"},
+			{"action": "hook", "when": "over:2", "text": "Au-dessus du sommet : lâche !", "mode": "release"}],
+		"hints": ["Même geste que la falaise d'avant, deux fois de suite.",
+			"Sur la marche, lance le grappin vers la 2e prise assez tôt, loin du mur.",
+			"Accroché, garde {hook} ET tire avec {pull} ; lâche au-dessus du bord."]},
 ]
 
 # Panneaux du décor : position x sur la piste + texte ({action} = touche réelle).
@@ -178,6 +238,9 @@ func _ready() -> void:
 		if spec.has("roof"):
 			roof_start = int(x + spec.roof[0])
 			roof_length = int(spec.roof[1])
+		if spec.has("cliff"):
+			# [TUTO 1.55] falaise : construite après la piste (_add_cliff)
+			w.cliff_x = x + float(spec.cliff.at)
 		if spec.has("hole"):
 			_swing_hole = Vector2(x + spec.hole, x + spec.hole + swing_gap_length)
 			gaps.append({"x": _swing_hole.x, "len": float(swing_gap_length), "rise": float(swing_gap_rise)})
@@ -218,6 +281,13 @@ func _ready() -> void:
 		var fish = fish_res.instantiate()
 		fish.position = Vector2((_swing_hole.x + _swing_hole.y) * 0.5, surface_y(_swing_hole.x) - 600.0)
 		add_child(fish)
+		# [TUTO 1.55] centre du bloc, pour l'invite « dans l'axe : grappin ! »
+		targets["swing"] = fish.position + FISH_CENTER
+
+	# 1 ter. [TUTO 1.55] Les falaises (et leurs prises de glace)
+	for w in _workshops:
+		if w.has("cliff_x"):
+			_add_cliff(w)
 
 	# 2. Plafond d'entraînement au grappin, parallèle à la piste
 	var roof_pos := Vector2(roof_start, surface_y(roof_start) - roof_height)
@@ -343,6 +413,177 @@ func _add_ramp(x0: float) -> void:
 	edge.points = top
 	body.add_child(edge)
 	add_child(body)
+
+
+# =============================================================================
+#  [TUTO 1.55] FALAISES (demande de l'équipe, 21/11 : « un tuto pour grimper
+#  une falaise avant la course de fin », en deux temps : une falaise simple
+#  au grappin + tirer, puis une plus haute avec des prises en escalier).
+# -----------------------------------------------------------------------------
+#  Une falaise = des marches posées SUR la piste (la piste continue dessous :
+#  aucun trou, aucun risque de chute) :
+#    - un ou plusieurs murs verticaux (`steps` : hauteur de chaque mur), avec
+#      entre deux murs un palier de `ledge` px ;
+#    - un dessus plat de CLIFF_TOP_LENGTH px (qui garde la pente de la piste) ;
+#    - une descente douce (profil en cosinus) pour rejoindre la piste.
+#  Atelier FALAISE : un mur de 500 px. Atelier GRANDE FALAISE : deux murs de
+#  500 px, comme un escalier (« prises en escalier ») : on grimpe le premier,
+#  on se pose sur le palier, on grimpe le second.
+#  (Premier essai : un seul mur de 1000 px avec une prise basse DEVANT le
+#  mur. Raté aux bots : en tirant depuis le sol, Pinpouin était projeté
+#  au-dessus de la prise basse et restait posé dessus.)
+#  Même rendu que les tremplins (corps bleu glace + bordure de glace sur les
+#  paliers et le dessus, aucun nouvel asset), collision en SEGMENTS (contour
+#  seul, cf. bug vitesse -> 0). Calque 2 (« ground ») : le grappin s'y
+#  accroche aussi.
+#  Prises : de petites boules de glace (dessinées en code, même bleu que la
+#  piste ; les gros blocs « poisson » du balancier étaient trop larges : le
+#  grappin s'accrochait à leur coin, juste au-dessus du mur, et Pinpouin
+#  restait pendu contre la paroi). Une prise par mur, CLIFF_HOLD_IN px APRÈS
+#  le bord et CLIFF_HOLD_UP px au-dessus : un grappin lancé « par défaut »
+#  (45° vers l'avant, Espace au clavier ou bouton manette sans viser) la
+#  touche, et la ligne à 45° passe ~100 px au-dessus du coin du mur (pas de
+#  grappin planté dans la paroi). En tirant, Pinpouin monte le long du mur
+#  puis passe par-dessus le bord, vers la prise ; il lâche et se pose.
+#  Les centres des prises (« hold1 », « hold2 ») et la forme de la falaise
+#  (cliff_faces, cliff_tops, cliff_top_y) sont gardés dans le dictionnaire
+#  de l'atelier : TutorialCoach s'en sert pour les invites et pour savoir
+#  quand Pinpouin est en haut.
+# =============================================================================
+const CLIFF_TOP_LENGTH := 1400.0
+const CLIFF_DESCENT_PER_PX := 2.2     # longueur de la descente = 2,2 × hauteur
+const CLIFF_HOLD_IN := 200.0
+const CLIFF_HOLD_UP := 300.0
+const HOLD_RADIUS := 55.0             # rayon d'une prise de falaise
+const PLAYER_HALF_H := 35.0           # centre du pingouin au-dessus du sol
+# centre visuel du bloc de glace du balancier par rapport à son origine
+# (StaticBody2DFish.tscn) : pour l'invite « le bloc est dans l'axe »
+const FISH_CENTER := Vector2(190, -55)
+
+## [TUTO 1.55] Centres des prises (pour les invites « dans l'axe »)
+var targets := {}
+
+
+func _add_cliff(w: Dictionary) -> void:
+	var cx: float = w.cliff_x
+	var steps_h: Array = w.cliff.steps          # hauteur de chaque marche
+	var ledge: float = float(w.cliff.get("ledge", 0.0))
+	var base_y := surface_y(cx)
+	# contour : pied du 1er mur, puis chaque marche (mur vertical + palier)
+	var top := PackedVector2Array()
+	var faces := []        # x du pied de chaque mur
+	var tops := []         # y du haut de chaque mur
+	var x := cx
+	var y := base_y
+	for i in steps_h.size():
+		y -= float(steps_h[i])
+		faces.append(x)
+		tops.append(y)
+		var run: float = ledge if i < steps_h.size() - 1 else CLIFF_TOP_LENGTH
+		var n := 8
+		for k in n + 1:
+			var px := x + run * float(k) / n
+			top.append(Vector2(px, y + coeff_pente * (px - x)))
+		y += coeff_pente * run
+		x += run
+	# descente douce jusqu'à la piste (profil en cosinus)
+	var total_h: float = surface_y(x) - y
+	var descent := maxf(total_h, 300.0) * CLIFF_DESCENT_PER_PX
+	var top_end := x
+	var top_end_y := y
+	var n2 := 24
+	for k in range(1, n2 + 1):
+		var t := float(k) / n2
+		var px := top_end + descent * t
+		var kk := 0.5 - 0.5 * cos(PI * t)
+		top.append(Vector2(px, lerpf(top_end_y, surface_y(px), kk)))
+	var end_x := top_end + descent
+	var poly := PackedVector2Array()
+	poly.append(Vector2(cx, base_y + 60))        # sous la piste (pied du mur)
+	poly.append_array(top)                        # murs, paliers, dessus, descente
+	poly.append(Vector2(end_x, surface_y(end_x) + 60))
+	var body := StaticBody2D.new()
+	body.collision_layer = 2
+	var col := CollisionPolygon2D.new()
+	col.build_mode = CollisionPolygon2D.BUILD_SEGMENTS
+	col.polygon = poly
+	body.add_child(col)
+	var fill := Polygon2D.new()
+	fill.color = Color(0.694118, 0.862745, 0.956863, 1)   # même bleu que sol.tscn
+	fill.polygon = poly
+	body.add_child(fill)
+	# bordure de glace sur chaque palier et sur le dessus (pas sur les murs)
+	var seg := PackedVector2Array()
+	for pt in top:
+		if seg.size() > 0 and absf(pt.x - seg[seg.size() - 1].x) < 1.0:
+			_add_edge(body, seg)       # mur vertical : on coupe la bordure ici
+			seg = PackedVector2Array()
+		seg.append(pt)
+	_add_edge(body, seg)
+	add_child(body)
+	w.cliff_faces = faces
+	w.cliff_tops = tops
+	w.cliff_top_y = tops[tops.size() - 1]
+	w.cliff_end = end_x
+	w.targets = {}
+	# une prise par marche : CLIFF_HOLD_IN px après le bord, CLIFF_HOLD_UP
+	# px au-dessus (« hold1 », « hold2 »…)
+	for i in faces.size():
+		var hold := Vector2(faces[i] + CLIFF_HOLD_IN, tops[i] - CLIFF_HOLD_UP)
+		_add_hold(hold)
+		w.targets["hold%d" % (i + 1)] = hold
+
+
+# Bordure de glace (même rendu que la piste) le long de `pts`.
+func _add_edge(body: Node, pts: PackedVector2Array) -> void:
+	if pts.size() < 2:
+		return
+	var edge := Line2D.new()
+	edge.texture = preload("res://sprites/levels/tiles/tile_ice_up_long1.png")
+	edge.texture_mode = Line2D.LINE_TEXTURE_TILE
+	edge.texture_repeat = CanvasItem.TEXTURE_REPEAT_ENABLED
+	edge.width = 64.0
+	edge.position = Vector2(0, 28)   # comme la bordure de sol.tscn
+	edge.points = pts
+	body.add_child(edge)
+
+
+# Une prise de falaise : boule de glace de HOLD_RADIUS px, centrée en `center`
+# (calque 2 « ground » : le grappin s'y accroche). Dessin en code : disque
+# du même bleu que la piste, bordure plus foncée (aucun nouvel asset).
+func _add_hold(center: Vector2) -> void:
+	var body := StaticBody2D.new()
+	body.collision_layer = 2
+	body.position = center
+	var shape := CollisionShape2D.new()
+	var circle := CircleShape2D.new()
+	circle.radius = HOLD_RADIUS
+	shape.shape = circle
+	body.add_child(shape)
+	var pts := PackedVector2Array()
+	for i in 24:
+		pts.append(Vector2.from_angle(TAU * i / 24.0) * HOLD_RADIUS)
+	var fill := Polygon2D.new()
+	fill.color = Color(0.694118, 0.862745, 0.956863, 1)   # même bleu que sol.tscn
+	fill.polygon = pts
+	body.add_child(fill)
+	var rim := Line2D.new()
+	rim.points = pts
+	rim.closed = true
+	rim.width = 8.0
+	rim.default_color = Color(0.25, 0.55, 0.85, 1)        # bord bleu plus foncé
+	body.add_child(rim)
+	add_child(body)
+
+
+## [TUTO 1.55] Bords des tremplins (x) entre x0 et x1 : invite « saute ! ».
+func ramp_lips(x0: float, x1: float) -> Array:
+	var w := 2.0 * ramp_height / tan(deg_to_rad(ramp_lip_angle_deg))
+	var out := []
+	for rx in ramp_positions:
+		if rx >= x0 and rx < x1:
+			out.append(rx + w)
+	return out
 
 
 func _add_wall(pos: Vector2, size: Vector2) -> void:

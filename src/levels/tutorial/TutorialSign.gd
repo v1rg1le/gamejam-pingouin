@@ -164,6 +164,10 @@ static func _binding_text(action: String) -> String:
 				names.append(JOY_BUTTON_NAMES[ev.button_index])
 			elif ev is InputEventJoypadMotion and JOY_AXIS_NAMES.has(ev.axis):
 				names.append(JOY_AXIS_NAMES[ev.axis])
+			elif ev is InputEventJoypadMotion and ev.axis == JOY_AXIS_LEFT_X:
+				# [TUTO 1.55] avancer / reculer au stick gauche : le tuto affichait
+				# « (aucun bouton manette) » pour {move_right}, vu en capture
+				names.append("Stick gauche ▶" if ev.axis_value > 0.0 else "Stick gauche ◀")
 		else:
 			if ev is InputEventKey:
 				var code: int = ev.keycode if ev.keycode != 0 else ev.physical_keycode

@@ -171,11 +171,48 @@ func say(title: String, text: String, pause := false) -> void:
 	# petit rebond de la bulle : on voit tout de suite que le texte a changé
 	_bubble.pivot_offset = Vector2(0, _bubble.size.y * 0.5)
 	_bubble.scale = Vector2(0.85, 0.85)
-	create_tween().tween_property(_bubble, "scale", Vector2.ONE, 0.25).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+	create_tween().set_ignore_time_scale(true).tween_property(_bubble, "scale", Vector2.ONE, 0.25).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
 	if pause and Settings.tutorial_pause and not NetSession.in_race:
 		_start_pause()
 	else:
 		_hint.visible = false
+	_show_then_fade()   # [TUTO 1.55] lisible le temps de lire, puis presque transparente
+
+
+# =============================================================================
+#  [TUTO 1.55] La bulle s'efface toute seule, selon la longueur du texte
+# -----------------------------------------------------------------------------
+#  Demande de l'équipe (21/11) : comme le bandeau « BRAVO ! », la bulle du
+#  maître prend de la place pendant qu'on joue. Choix de l'équipe : elle
+#  reste lisible le temps de la lire (« selon la longueur du texte »), puis
+#  devient presque transparente. Elle redevient bien visible à chaque
+#  nouvelle consigne ou nouvel indice (say()).
+#  Durée : READ_CHARS_PER_S caractères par seconde (lecture tranquille), au
+#  moins READ_MIN_TIME s, au plus READ_MAX_TIME s. Le bouton « Passer »
+#  n'est PAS estompé (il doit rester trouvable).
+#  Le Tween ignore Engine.time_scale : la bulle continue son compte même
+#  pendant un gel du jeu par une invite « Appuie sur… » (ActionPrompt).
+# =============================================================================
+const READ_CHARS_PER_S := 15.0   # vitesse de lecture prise en compte
+const READ_MIN_TIME := 3.0       # s : même durée que les bandeaux d'arrivée
+const READ_MAX_TIME := 10.0      # s
+const FADE_TIME := 0.8           # s de fondu
+const FADE_ALPHA := 0.15         # opacité finale : « à peine visible »
+var _fade_tween: Tween = null
+
+func _show_then_fade() -> void:
+	if _fade_tween != null and _fade_tween.is_valid():
+		_fade_tween.kill()
+	for n in [_master, _tail, _bubble]:
+		n.modulate.a = 1.0
+	if _pausing:
+		return   # pause de lecture (ancienne option) : pas de fondu pendant la pause
+	var chars := float((_title.text + _text.text).length())
+	var wait := clampf(chars / READ_CHARS_PER_S, READ_MIN_TIME, READ_MAX_TIME)
+	_fade_tween = create_tween().set_ignore_time_scale(true).set_parallel(true)
+	for n in [_master, _tail, _bubble]:
+		_fade_tween.tween_property(n, "modulate:a", FADE_ALPHA, FADE_TIME).set_delay(wait) \
+				.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
 
 
 ## Descend le maître et sa bulle de `dy` (course finale : le chrono, le record
@@ -267,6 +304,7 @@ func _end_pause() -> void:
 	_dim.visible = false
 	_hint.visible = false
 	_refresh_text()
+	_show_then_fade()   # [TUTO 1.55] le compte de lecture démarre à la fin de la pause
 	emit_signal("closed")
 
 
