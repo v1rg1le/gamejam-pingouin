@@ -47,6 +47,12 @@ extends CharacterBody2D
 # --- Signaux ajoutés (mort / respawn) : utiles pour l'UI ou le son plus tard ---
 signal died
 signal respawned
+## [ATTERRISSAGES 1.40] émis à chaque atterrissage : "feet" (debout),
+## "nose" (bec en avant) ou "crash" (sur le dos). Écouté par TrickScore.
+signal landed(style: String)
+## [ATTERRISSAGES 1.40] style d'atterrissage, posture debout / à plat ventre,
+## chute en roulade et explosion de neige : voir src/actors/LandingStyle.gd
+var landing: LandingStyle = null
 
 @export var stomp_impulse: = 500.0
 var facing: int = 1
@@ -233,6 +239,11 @@ func _ready():
 	wall_min_slide_angle = 0.0
 	max_slides = 4  # valeur par défaut de Godot 3
 
+	# [ATTERRISSAGES 1.40]
+	landing = LandingStyle.new()
+	landing.name = "LandingStyle"
+	add_child(landing)
+	landing.setup(self)
 	add_to_group("player")  # [NOUVEAU] permet à la caméra / l'arrivée / le niveau de retrouver le joueur
 	_states = $"StateMachine"
 	_states.current._enter(self)
@@ -283,6 +294,7 @@ func _physics_process(delta: float) -> void:
 	move_and_slide()
 	_velocity = _apply_godot3_slide(velocity_before)
 	_unstick_from_ground()   # [SOL 1.9]
+	landing.update(delta)    # [ATTERRISSAGES 1.40] pattes / nose / chute
 	_update_speed_trail()    # [PHYSIQUE 1.10] (en l'air seulement depuis 1.31)
 	_update_snow_spray()     # [NEIGE 1.31] gerbe de neige et de glace au sol
 	_update_sounds()         # [BRUITAGES 1.34] glisse, vent, atterrissage, pump
@@ -697,6 +709,16 @@ func _on_Chain_chain_hooked(current_length):
 	chain_length = current_length
 	Sfx.play("grappin_accroche")   # [BRUITAGES 1.34] le crochet se plante
 
+
+
+# [ATTERRISSAGES 1.40] Joue l'animation d'un état au sol en respectant la
+# posture : debout sur les pattes (« glide_feet ») après un atterrissage bien
+# droit, ou l'animation d'origine (à plat ventre) après un nose.
+func play_ground_anim(anim_name: String) -> void:
+	if landing != null and landing.ride_pose == "feet":
+		anim_player.play("glide_feet")
+	else:
+		anim_player.play(anim_name)
 
 
 # [BOOST FIGURE 1.30] Appelé par TrickScore.bank() quand les points d'un saut

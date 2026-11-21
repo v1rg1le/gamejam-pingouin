@@ -31,7 +31,7 @@ func _handle_input(player: CharacterBody2D, delta: float) -> void:
 	player._velocity = dir * new_speed
 
 func enter(player: CharacterBody2D, _previous_state: PlayerState) -> void:
-	player.anim_player.play("pumping")
+	player.play_ground_anim("pumping")   # [ATTERRISSAGES 1.40] debout ou à plat ventre
 	# [PHYSIQUE 1.10] petite impulsion à chaque nouvel appui (sensation de
 	# boost), seulement en dessous de la vitesse max du pump
 	var speed: float = player._velocity.length()

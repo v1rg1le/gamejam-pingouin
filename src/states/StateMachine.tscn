@@ -1,4 +1,4 @@
-[gd_scene load_steps=14 format=2]
+[gd_scene load_steps=15 format=2]
 
 [ext_resource path="res://src/states/StateMachine.gd" type="Script" id=1]
 [ext_resource path="res://src/states/SlidingState.gd" type="Script" id=2]
@@ -12,6 +12,7 @@
 [ext_resource path="res://src/states/TrixState.gd" type="Script" id=10]
 [ext_resource path="res://src/states/PumpState.gd" type="Script" id=11]
 [ext_resource path="res://src/states/HookingOnGroundState.gd" type="Script" id=12]
+[ext_resource path="res://src/states/CrashState.gd" type="Script" id=13]
 
 [sub_resource type="GDScript" id=1]
 script/source = "extends Timer
@@ -127,3 +128,6 @@ script = ExtResource( 12 )
 
 [node name="HookingInAirState" type="Node2D" parent="."]
 script = ExtResource( 6 )
+
+[node name="CrashState" type="Node2D" parent="."]
+script = ExtResource( 13 )

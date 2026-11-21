@@ -66,6 +66,9 @@ func setup(p) -> void:
 	_prev_state = p._states.current
 	_prev_rotation = p.rotation
 	_last_deaths = p.death_count
+	# [ATTERRISSAGES 1.40] nose = points (dans le combo du saut) ; chute = perdus
+	if p.has_signal("landed"):
+		p.landed.connect(_on_landed)
 
 
 func _physics_process(_delta: float) -> void:
@@ -114,6 +117,19 @@ func _physics_process(_delta: float) -> void:
 	_prev_state = st
 
 
+## [ATTERRISSAGES 1.40] Appelé par le pingouin à chaque atterrissage, dans la
+## même image que l'atterrissage et AVANT la validation des points (étape 6) :
+## le « Nose » s'ajoute donc aux figures du saut et compte dans le combo.
+func _on_landed(style: String) -> void:
+	if not (RaceManager.racing or RaceManager.bonus_active or RaceManager.free_ride):
+		return
+	if style == "nose":
+		_add("Nose", LandingStyle.NOSE_POINTS)
+	elif style == "crash":
+		_lose("Chute !")
+		_reset_spin()
+
+
 ## Valide les points en jeu (atterrissage, ou ligne d'arrivée franchie en l'air).
 func bank() -> void:
 	if _pending.is_empty():
@@ -128,6 +144,11 @@ func bank() -> void:
 	var label := "+%d" % points
 	if combo > 1:
 		label += "  COMBO ×%d" % combo
+	# [ATTERRISSAGES 1.40] « NOSE ! » quand le saut finit sur le bec
+	for item in _pending:
+		if item[0] == "Nose":
+			label += "  NOSE !"
+			break
 	_pending.clear()
 	# [BRUITAGES 1.34] « ding » de figure réussie ; un combo monte d'un cran par figure
 	Sfx.play("figure_ok", -2.0)

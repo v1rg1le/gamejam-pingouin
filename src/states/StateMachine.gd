@@ -11,6 +11,7 @@ class_name StateMachine
 @onready var staggered: StaggeredState = $"StaggeredState"
 @onready var trixing: TrixState = $"TrixState"
 @onready var pumping: PumpState = $"PumpState"
+@onready var crashing = $"CrashState"   # [ATTERRISSAGES 1.40] chute sur le dos : roulade dans la neige
 
 @onready var hooking_in_air: HookingInAirState = $"HookingInAirState"
 @onready var hooking_on_ground: HookingOnGroundState = $"HookingOnGroundState"

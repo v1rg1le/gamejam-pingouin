@@ -819,3 +819,33 @@ Demande de l'équipe : plus de coupure nette du fond, une boucle infinie qui sui
 - **Cause** : le menu pause (`MenuPause`, calque 60) est un `Control` qui couvre tout l'écran. Même caché (seul son fond `PauseOverlay` est masqué), il attrapait la souris par défaut (`mouse_filter = STOP`) et passait au-dessus du HUD (calque 36). Il mangeait donc tous les clics destinés aux boutons du HUD. Trouvé en simulant un clic : le contrôle sous la souris était `MenuPause`, pas le bouton.
 - **Correction** (`MenuPause.gd`) : `mouse_filter = IGNORE` sur ce nœud. Quand la pause est ouverte, c'est `PauseOverlay` (plein écran) qui reçoit les clics, comme avant.
 - **Testé** (clics de souris simulés) : Rejouer (même terrain), Nouveau terrain (terrain neuf), Menu (sélection des niveaux), et « Reprendre » du menu pause ; 125 fichiers OK.
+
+## 49. Atterrissages comme en skate : pattes, nose, chute (21/11, version 1.40)
+
+- **Demande de Manu** : Pinpouin ne doit plus retomber toujours de la même façon. Glisser debout sur les pattes ; un « nose » comme en skate (atterrir le bec en avant, en restant allongé) ; une vraie chute s'il retombe sur le dos, avec une roulade et une petite explosion de neige pour cacher le passage dos → fesses.
+- **Choix de Manu** (questions posées avant de lancer) :
+  - pattes : il reste debout jusqu'au prochain saut, **juste visuel** (même vitesse) ;
+  - nose : **« NOSE ! » + points + petit boost**, comme une figure réussie ;
+  - chute : **roulade puis assis étourdi 1 s** ;
+  - tolérance **généreuse** : chute seulement au-delà de 120° de travers par rapport à la pente.
+- **Comment c'est mesuré** (`src/actors/LandingStyle.gd`, créé par `Player._ready`, appelé par `Player._physics_process` juste après le mouvement) :
+  - à chaque image en l'air, on garde l'écart entre l'angle du pingouin et celui de la pente sous lui (rayon vertical, indépendant de sa rotation), **avant** que `InAirState` ne le redresse tout seul en approchant du sol ;
+  - au contact, cet écart décide : plus de 120° → chute ; bec en avant de plus de 35° → nose ; sinon → pattes ;
+  - les deux capteurs de sol tournent avec le pingouin : sur le dos, ils regardent le ciel. C'est donc le contact du corps (`move_and_slide`) qui détecte la chute ;
+  - seul un **vrai sol** compte (surface tournée vers le haut). Bug trouvé en test et corrigé : à l'envers sous une île, les capteurs touchaient le dessous de l'île, et ça déclenchait une fausse chute en plein vol ;
+  - pas de nose ni de chute pendant le grappin. Une figure pas finie à l'atterrissage reste la « figure ratée » d'avant (2 s sonné), sauf sur le dos, où c'est la chute.
+- **Pattes** : nouvelle animation `glide_feet` avec le dessin de Pinpouin debout déjà dans le jeu (`Ninja-Chinstrap_idle.png`, aucune image ajoutée). Il se penche un peu en arrière quand il va vite, avec un léger rebond, et se tasse quand on tient PUMP. Les états au sol (glisse, course, pump) passent par `Player.play_ground_anim()`, qui choisit debout ou à plat ventre. Au départ d'un niveau, il est à plat ventre, comme avant.
+- **Nose** : à plat ventre (la glisse d'origine). `TrickScore` ajoute « Nose » (`LandingStyle.NOSE_POINTS` = 50) aux figures du saut : il compte dans le combo, s'affiche « +… NOSE ! » et donne le boost de figure.
+- **Chute** (`src/states/CrashState.gd`, nouvel état de la machine à états) :
+  - explosion de neige au contact (gros paquets lents qui masquent le pingouin + éclats rapides), qui part avec l'élan du pingouin ;
+  - roulade 0,5 s avec le dessin « boule » de la figure Boule, qui tourne sur lui-même ; le pingouin freine et se remet dans le sens de la pente ;
+  - deuxième petit nuage au moment où il s'assoit, pour cacher le passage boule → assis ;
+  - puis 1 s assis étourdi, avec les étoiles (`StaggeredState` accepte maintenant une durée et un dessin imposés : `next_time`, `next_anim`) ;
+  - les points du saut en cours sont perdus (« Chute ! »).
+- **Mode enfant** : pas de chute ; un atterrissage sur le dos remet Pinpouin sur ses pattes.
+- **Testé** :
+  - bot qui retombe exprès à 0° (pattes), 59° (nose) et 167 à 177° (chute) : bon classement, captures de chaque cas ;
+  - temps du bot des médailles identiques à la 1.34 (Tutoriel 19,12 s, Nice Slope 52,17 s, Flat 1:05,15) : aucun nose involontaire ;
+  - bot grappin du Sans fin : grappin 20/20, double 15/15, montée 25/25, plafond 11/11, aucune chute après un lâcher de grappin ;
+  - 127 fichiers OK.
+- **À régler en jouant** (en tête de `LandingStyle.gd`) : `CRASH_ANGLE_DEG` (120), `NOSE_ANGLE_DEG` (35), `NOSE_POINTS` (50) ; durées dans `CrashState.gd` (`ROLL_TIME` 0,5 s, `DIZZY_TIME` 1 s).
