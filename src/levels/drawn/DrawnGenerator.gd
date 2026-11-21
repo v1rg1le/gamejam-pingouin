@@ -88,8 +88,9 @@ func _ready() -> void:
 	var sx: float = minf(first[0].x + 150.0, first[first.size() - 1].x)
 	get_parent()._set_spawn_position(Vector2(sx, DrawnLevel.surface_y_of(first, sx) - 80.0))
 
-	# 7. Bouton « ✏ Éditer »
-	_add_edit_button()
+	# 7. Bouton « ✏ Éditer » (pas sur un niveau de la communauté : lecture seule)
+	if not DrawnLevel.is_official:
+		_add_edit_button()
 
 
 ## Un îlot = le trait en haut + le fond plat en bas.

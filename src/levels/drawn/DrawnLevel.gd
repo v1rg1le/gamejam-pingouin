@@ -421,6 +421,8 @@ static func save() -> void:
 	if current_id == "":   # (sécurité) niveau sans id : on lui en donne un, sans toucher au dessin
 		current_id = "n%d_%04d" % [int(Time.get_unix_time_from_system()), randi() % 10000]
 		current_name = next_free_name()
+	if is_official:
+		return   # [PARTAGE 1.47] niveau de la communauté : lecture seule
 	if strokes.is_empty() and hooks.is_empty():
 		return   # niveau vide : pas de fichier (il apparaîtra au 1er trait)
 	DirAccess.make_dir_recursive_absolute(LEVELS_DIR)
@@ -429,6 +431,7 @@ static func save() -> void:
 	data["version"] = SAVE_VERSION
 	data["name"] = current_name
 	data["hash"] = content_hash()
+	data["author"] = current_author   # [PARTAGE 1.47] "" = toi ; sinon l'auteur d'un niveau reçu
 	var old = _read_file(path)
 	data["created"] = old.get("created", Time.get_unix_time_from_system()) if old != null else Time.get_unix_time_from_system()
 	data["modified"] = Time.get_unix_time_from_system()
@@ -506,7 +509,8 @@ static func list_levels() -> Array:
 		if data == null:
 			continue
 		out.append({"id": file.get_basename(), "name": str(data.get("name", "?")),
-			"modified": float(data.get("modified", 0)), "hash": str(data.get("hash", ""))})
+			"modified": float(data.get("modified", 0)), "hash": str(data.get("hash", "")),
+			"author": str(data.get("author", ""))})
 	out.sort_custom(func(a, b): return a.modified > b.modified)
 	return out
 
@@ -521,6 +525,9 @@ static func new_level(level_name: String) -> void:
 	_loaded = true
 	current_id = "n%d_%04d" % [int(Time.get_unix_time_from_system()), randi() % 10000]
 	current_name = level_name
+	current_author = ""
+	current_gold = 0.0
+	is_official = false
 	strokes = []
 	hooks = []
 	auto_hooks = true
@@ -534,6 +541,9 @@ static func open_level(id: String) -> bool:
 	_loaded = true
 	current_id = id
 	current_name = str(data.get("name", "?"))
+	current_author = str(data.get("author", ""))
+	current_gold = 0.0
+	is_official = false
 	_apply(data)
 	return true
 
@@ -580,3 +590,298 @@ static func next_free_name() -> String:
 	while names.has("Mon niveau %d" % n):
 		n += 1
 	return "Mon niveau %d" % n
+
+
+# --- 6. [PARTAGE 1.47] Code de partage, export, niveaux de la communauté ---------
+# Demande de l'équipe (21/11) : partager un niveau dessiné, et pouvoir
+# l'exporter pour ajouter au jeu les niveaux qu'on trouve cool.
+#  - CODE : "PINPOUIN-NIVEAU:1:<taille>:<base64>:FIN" (même principe que les
+#    fantômes en texte de la 1.7 : var_to_bytes -> zstd -> base64). Il
+#    contient le nom, l'auteur, le dessin et, au choix, le meilleur fantôme.
+#    Quelques Ko sans fantôme, ~10 à 25 Ko avec. ":FIN" marque la fin : on
+#    peut coller le code au milieu d'un message.
+#  - IMPORT : le niveau arrive dans « Mes niveaux » avec un nouvel id (le
+#    fantôme éventuel est rangé sous son chemin de record). bytes_to_var
+#    refuse les objets : un code piégé ne peut pas exécuter de code ; tout
+#    est vérifié (tailles, nombres finis) avant d'être gardé.
+#  - EXPORT FICHIER : le même code dans un fichier texte .pinpouin (dossier
+#    ouvrable sur PC, téléchargement dans le navigateur).
+#  - NIVEAUX DE LA COMMUNAUTÉ : fichiers JSON (même format qu'un niveau de
+#    user://niveaux, + "gold_time" mesuré au bot) dans OFFICIAL_DIR, livrés
+#    avec le jeu. Ni modifiables ni supprimables dans le jeu. Records sous
+#    l'id "off-<nom du fichier>".
+
+const CODE_PREFIX = "PINPOUIN-NIVEAU:1:"
+const CODE_VERSION = 1
+## Niveaux de la communauté livrés avec le jeu
+const OFFICIAL_DIR = "res://src/levels/drawn/officiels"
+## Écran des niveaux de la communauté
+const COMMUNITY_SCENE = "res://src/screens/CommunityLevelsScreen.tscn"
+## Fichiers exportés sur PC
+const EXPORT_DIR = "user://niveaux_exportes"
+## Réglage « nom de créateur » (affiché avec les niveaux partagés)
+const CONFIG_PATH = "user://pinpouin.cfg"
+## Limites de sécurité à l'import
+const MAX_STROKES = 300
+const MAX_POINTS = 40000
+const COORD_MAX = 2000000.0
+
+## Auteur du niveau ouvert ("" = toi), temps de l'or (niveaux officiels, 0 = calculé)
+static var current_author: String = ""
+static var current_gold: float = 0.0
+## Le niveau ouvert est-il un niveau de la communauté (lecture seule) ?
+static var is_official: bool = false
+
+
+## Ton nom de créateur (vide tant qu'il n'a pas été choisi)
+static func author_name() -> String:
+	var cfg := ConfigFile.new()
+	cfg.load(CONFIG_PATH)
+	return str(cfg.get_value("creator", "author", ""))
+
+
+static func set_author_name(n: String) -> void:
+	var cfg := ConfigFile.new()
+	cfg.load(CONFIG_PATH)
+	cfg.set_value("creator", "author", n.strip_edges().left(NAME_MAX))
+	cfg.save(CONFIG_PATH)
+
+
+## Auteur à afficher pour un niveau ("" si c'est le tien)
+static func author_of(level_id: String) -> String:
+	var data = _read_file(LEVELS_DIR.path_join(level_id + ".json"))
+	if data == null:
+		return ""
+	return str(data.get("author", ""))
+
+
+## Code de partage du niveau `level_id` (avec son meilleur fantôme si
+## with_ghost et s'il en a un). "" si le niveau n'existe pas.
+static func share_code(level_id: String, with_ghost: bool) -> String:
+	var data = _read_file(LEVELS_DIR.path_join(level_id + ".json"))
+	if data == null:
+		return ""
+	var payload := {"v": CODE_VERSION, "name": str(data.get("name", "?")),
+		"author": str(data.get("author", "")) if str(data.get("author", "")) != "" else author_name(),
+		"auto_hooks": bool(data.get("auto_hooks", true)),
+		"strokes": data.get("strokes", []), "hooks": data.get("hooks", [])}
+	if with_ghost:
+		var g = RaceManager.load_best_ghost(race_path_of({"id": level_id, "hash": str(data.get("hash", ""))}))
+		if g != null:
+			payload["ghost"] = g
+	var raw := var_to_bytes(payload)
+	return CODE_PREFIX + str(raw.size()) + ":" + Marshalls.raw_to_base64(raw.compress(FileAccess.COMPRESSION_ZSTD)) + ":FIN"
+
+
+## Le niveau a-t-il un fantôme (meilleur temps) à partager ?
+static func has_ghost(entry: Dictionary) -> bool:
+	return RaceManager.get_best_time(race_path_of(entry)) >= 0.0
+
+
+## Lit un code collé. Renvoie {ok: true, data: {...}} ou {ok: false, msg: "..."}.
+static func decode_code(text: String) -> Dictionary:
+	text = text.strip_edges()
+	var start := text.find(CODE_PREFIX)
+	if start < 0:
+		if text.contains("PINPOUIN-FANTOME"):
+			return {"ok": false, "msg": "C'est un code de FANTÔME : colle-le dans Options > échange de fantômes."}
+		return {"ok": false, "msg": "Ce texte n'est pas un code de niveau Pinpouin."}
+	var rest := text.substr(start + CODE_PREFIX.length())
+	var end := rest.find(":FIN")
+	if end < 0:
+		return {"ok": false, "msg": "Code incomplet : il a été coupé (il doit finir par :FIN)."}
+	rest = rest.substr(0, end)
+	for ws in [" ", "\n", "\r", "\t"]:   # retours à la ligne ajoutés par les messageries
+		rest = rest.replace(ws, "")
+	var sep := rest.find(":")
+	if sep < 0:
+		return {"ok": false, "msg": "Code incomplet (texte coupé ?)."}
+	var size := int(rest.substr(0, sep))
+	var b64 := rest.substr(sep + 1)
+	if RegEx.create_from_string("^[A-Za-z0-9+/]+=*$").search(b64) == null:
+		return {"ok": false, "msg": "Code abîmé (caractères en trop ?)."}
+	var packed := Marshalls.base64_to_raw(b64)
+	if size <= 0 or size > 8_000_000 or packed.is_empty():
+		return {"ok": false, "msg": "Code incomplet (texte coupé ?)."}
+	var raw := packed.decompress(size, FileAccess.COMPRESSION_ZSTD)
+	if raw.size() != size:
+		return {"ok": false, "msg": "Code abîmé (texte coupé ?)."}
+	var data = bytes_to_var(raw)   # sans objets : pas de code exécutable
+	if typeof(data) != TYPE_DICTIONARY or int(data.get("v", 0)) != CODE_VERSION:
+		return {"ok": false, "msg": "Code d'une autre version du jeu, ou abîmé."}
+	var err := _validate(data)
+	if err != "":
+		return {"ok": false, "msg": err}
+	return {"ok": true, "data": data}
+
+
+## Vérifie un niveau reçu (tailles, nombres). "" si tout va bien.
+static func _validate(data: Dictionary) -> String:
+	if not (data.get("strokes") is Array) or not (data.get("hooks") is Array):
+		return "Code abîmé (dessin illisible)."
+	var strokes_in: Array = data.strokes
+	if strokes_in.is_empty() or strokes_in.size() > MAX_STROKES:
+		return "Ce niveau est vide ou trop grand."
+	var n := 0
+	for flat in strokes_in:
+		if not (flat is Array) or (flat as Array).size() < 4 or (flat as Array).size() % 2 != 0:
+			return "Code abîmé (trait illisible)."
+		n += (flat as Array).size() / 2
+		for v in flat:
+			if not (typeof(v) in [TYPE_FLOAT, TYPE_INT]) or not is_finite(float(v)) or absf(float(v)) > COORD_MAX:
+				return "Code abîmé (nombres invalides)."
+	if n > MAX_POINTS or (data.hooks as Array).size() > 500:
+		return "Ce niveau est trop grand."
+	for h in data.hooks:
+		if not (h is Array) or (h as Array).size() != 2 or not is_finite(float(h[0])) or not is_finite(float(h[1])):
+			return "Code abîmé (bloc de grappin illisible)."
+	return ""
+
+
+## Ajoute dans « Mes niveaux » un niveau lu par decode_code(). Le niveau
+## ouvert n'est pas changé. Renvoie le message à afficher.
+static func import_level(data: Dictionary) -> String:
+	load_once()
+	var keep := _state()
+	# un niveau identique (même dessin) est déjà là ?
+	strokes = []
+	hooks = []
+	_apply({"strokes": data.strokes, "hooks": data.hooks, "auto_hooks": bool(data.get("auto_hooks", true))})
+	var h := content_hash()
+	for e in list_levels():
+		if e.hash == h:
+			var msg := "Tu as déjà ce niveau : « %s »." % e.name
+			if data.has("ghost") and _store_ghost(data.ghost, race_path_of(e)):
+				msg += "\nSon fantôme a été ajouté."
+			_back_to(keep)
+			return msg
+	var level_name := str(data.get("name", "Niveau reçu")).strip_edges().left(NAME_MAX)
+	if level_name == "":
+		level_name = "Niveau reçu"
+	var names := {}
+	for e in list_levels():
+		names[e.name] = true
+	var final_name := level_name
+	var k := 2
+	while names.has(final_name):
+		final_name = "%s (%d)" % [level_name.left(NAME_MAX - 4), k]
+		k += 1
+	var snap := snapshot()
+	new_level(final_name)
+	restore(snap)
+	current_author = str(data.get("author", "")).strip_edges().left(NAME_MAX)
+	save()
+	var msg := "Niveau ajouté : « %s »%s." % [final_name, (" par " + current_author) if current_author != "" else ""]
+	if data.has("ghost") and _store_ghost(data.ghost, race_path()):
+		msg += "\nAvec son fantôme : à toi de le battre (mode Score) !"
+	_back_to(keep)
+	return msg
+
+
+## Range un fantôme reçu sous le chemin de record d'un niveau
+static func _store_ghost(g, path: String) -> bool:
+	if typeof(g) != TYPE_DICTIONARY or typeof(g.get("samples")) != TYPE_PACKED_FLOAT32_ARRAY \
+			or int(g.get("version", 0)) != RaceManager.GHOST_FORMAT_VERSION:
+		return false
+	g.level = path
+	DirAccess.make_dir_recursive_absolute(RaceManager.GHOST_DIR)
+	var file := RaceManager.GHOST_DIR.path_join("%s_ami_%d.ghost" % [path.get_file().get_basename(), Time.get_unix_time_from_system()])
+	var f := FileAccess.open_compressed(file, FileAccess.WRITE, FileAccess.COMPRESSION_ZSTD)
+	if f == null:
+		return false
+	f.store_var(g)
+	f.close()
+	RaceManager._best_cache.erase(path)
+	return true
+
+
+## État complet du niveau ouvert (pour y revenir après un import / un calcul)
+static func _state() -> Dictionary:
+	return {"id": current_id, "name": current_name, "snap": snapshot(), "author": current_author,
+		"gold": current_gold, "official": is_official}
+
+
+## Revient au niveau qui était ouvert avant un import
+static func _back_to(keep: Dictionary) -> void:
+	current_id = keep.id
+	current_name = keep.name
+	restore(keep.snap)
+	current_author = keep.author
+	current_gold = keep.gold
+	is_official = keep.official
+
+
+## Écrit le code dans un fichier .pinpouin. Sur PC : dossier EXPORT_DIR
+## (renvoie le chemin) ; dans le navigateur : téléchargement.
+static func export_file(level_id: String, level_name: String) -> String:
+	var code := share_code(level_id, false)
+	if code == "":
+		return ""
+	var safe := ""
+	for c in level_name:
+		safe += c if (c.is_valid_identifier() or c in "0123456789-") else "_"
+	var file_name := (safe if safe != "" else "niveau") + ".pinpouin"
+	if OS.has_feature("web"):
+		JavaScriptBridge.download_buffer(code.to_utf8_buffer(), file_name, "text/plain")
+		return file_name
+	DirAccess.make_dir_recursive_absolute(EXPORT_DIR)
+	var path := EXPORT_DIR.path_join(file_name)
+	var f := FileAccess.open(path, FileAccess.WRITE)
+	if f == null:
+		return ""
+	f.store_string(code + "\n")
+	f.close()
+	return path
+
+
+## Niveaux de la communauté : [{id ("off-<fichier>"), slug, name, author, hash, gold}]
+static func list_official() -> Array:
+	var out: Array = []
+	var dir := DirAccess.open(OFFICIAL_DIR)
+	if dir == null:
+		return out
+	for file in dir.get_files():
+		# dans le jeu exporté, Godot peut lister « x.json.remap » / « .import » : on garde le nom d'origine
+		var base := file.replace(".remap", "").replace(".import", "")
+		if not base.ends_with(".json"):
+			continue
+		var slug := base.get_basename()
+		var data = _read_file(OFFICIAL_DIR.path_join(base))
+		if data == null:
+			continue
+		var found := false
+		for e in out:
+			found = found or e.slug == slug
+		if found:
+			continue
+		var tmp := {"id": "off-" + slug, "slug": slug, "name": str(data.get("name", slug)),
+			"author": str(data.get("author", "")), "gold": float(data.get("gold_time", 0.0)),
+			"order": int(data.get("order", 999)), "hash": ""}
+		tmp.hash = _hash_of(data)
+		out.append(tmp)
+	out.sort_custom(func(a, b): return a.order < b.order or (a.order == b.order and a.name < b.name))
+	return out
+
+
+## Empreinte d'un niveau lu sur le disque (même calcul que content_hash)
+static func _hash_of(data: Dictionary) -> String:
+	var keep := _state()
+	_apply(data)
+	var h := content_hash()
+	_back_to(keep)
+	return h
+
+
+## Ouvre un niveau de la communauté (lecture seule)
+static func open_official(slug: String) -> bool:
+	var data = _read_file(OFFICIAL_DIR.path_join(slug + ".json"))
+	if data == null:
+		return false
+	_loaded = true
+	current_id = "off-" + slug
+	current_name = str(data.get("name", slug))
+	current_author = str(data.get("author", ""))
+	current_gold = float(data.get("gold_time", 0.0))
+	is_official = true
+	_apply(data)
+	return true

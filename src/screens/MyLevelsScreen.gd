@@ -19,6 +19,14 @@ extends Control
 #  (UiScaler) mais réduite si l'écran est petit.
 # =============================================================================
 
+# [PARTAGE 1.47] le même écran sert aussi aux « Niveaux de la communauté »
+# (CommunityLevelsScreen.tscn, community = true) : niveaux livrés avec le jeu,
+# avec leur auteur, seulement « Jouer » (ni Modifier, ni Partager, ni Supprimer).
+# Dans « Mes niveaux », chaque ligne gagne un bouton « Partager » (code à
+# copier, avec ou sans fantôme, ou fichier .pinpouin) et le bas de l'écran
+# un bouton « Ajouter un code » (niveau reçu d'un ami).
+@export var community: bool = false
+
 const CONFIRM_DELAY := 3.0               # secondes pour confirmer une suppression
 const CONFIRM_TEXT := "Sûr ?"
 
@@ -52,7 +60,10 @@ func _process(delta: float) -> void:
 
 func _unhandled_input(_event: InputEvent) -> void:
 	if Input.is_action_just_pressed("ui_cancel"):
-		_go_back()
+		if _popup != null and is_instance_valid(_popup):
+			_close_popup()   # Échap / retour : ferme d'abord la fenêtre ouverte
+		else:
+			_go_back()
 
 
 var _rebuild_pending := false
@@ -89,13 +100,14 @@ func _build() -> void:
 	margin.add_child(col)
 
 	var title := Label.new()
-	title.text = "MES NIVEAUX"
+	title.text = "NIVEAUX DE LA COMMUNAUTÉ" if community else "MES NIVEAUX"
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	title.add_theme_font_size_override("font_size", 30)
 	title.add_theme_color_override("font_color", Color.WHITE)
 	col.add_child(title)
 	var sub := Label.new()
-	sub.text = "Tes niveaux dessinés. Record, médaille et fantôme en mode Score (comme les autres courses)."
+	sub.text = "Les meilleurs niveaux dessinés par les joueurs. Record, médaille et fantôme en mode Score." if community \
+		else "Tes niveaux dessinés. Record, médaille et fantôme en mode Score (comme les autres courses)."
 	sub.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	sub.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	sub.add_theme_font_size_override("font_size", 16)
@@ -134,9 +146,23 @@ func _build() -> void:
 	var spacer := Control.new()
 	spacer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	bottom.add_child(spacer)
-	var add := _button("+  Nouveau niveau", bottom, 220)
-	add.add_theme_font_size_override("font_size", 21)
-	add.pressed.connect(_on_new)
+	var add: Button = back
+	if community:
+		var info := Label.new()
+		info.text = "Envoie tes meilleurs niveaux à l'équipe (bouton Partager) : les plus cool arrivent ici !"
+		info.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		info.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		info.add_theme_font_size_override("font_size", 15)
+		info.add_theme_color_override("font_color", Color(0.88, 0.93, 1.0))
+		bottom.remove_child(spacer)
+		spacer.queue_free()
+		bottom.add_child(info)
+	else:
+		_button("Ajouter un code", bottom, 170).pressed.connect(_open_import)
+		add = _button("+  Nouveau niveau", bottom, 220)
+		add.add_theme_font_size_override("font_size", 21)
+		add.pressed.connect(_on_new)
+	_root = root
 	if Settings.controls != Settings.TOUCH:
 		var first = _list.get_child(0).get_child(0) if _list.get_child_count() > 0 and _list.get_child(0).get_child_count() > 0 else add
 		if first is Button:
@@ -150,10 +176,10 @@ func _build() -> void:
 func _fill_list() -> void:
 	for c in _list.get_children():
 		c.queue_free()
-	var levels := DrawnLevel.list_levels()
+	var levels := DrawnLevel.list_official() if community else DrawnLevel.list_levels()
 	if levels.is_empty():
 		var empty := Label.new()
-		empty.text = "Pas encore de niveau.\nTouche « + Nouveau niveau » et dessine le premier !"
+		empty.text = "Pas encore de niveau ici." if community else "Pas encore de niveau.\nTouche « + Nouveau niveau » et dessine le premier !"
 		empty.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		empty.add_theme_font_size_override("font_size", 19)
 		empty.add_theme_color_override("font_color", Color.WHITE)
@@ -167,6 +193,8 @@ func _fill_list() -> void:
 		# JOUER : nom + record ; médaille au bout du bouton
 		var path: String = DrawnLevel.race_path_of(e)
 		var text: String = "▶  " + str(e.name)
+		if str(e.get("author", "")) != "":
+			text += "  ·  par " + str(e.author)   # [PARTAGE 1.47] niveau reçu ou de la communauté
 		var best: float = RaceManager.get_best_time(path)
 		if best >= 0.0:
 			text += "  ·  " + RaceManager.format_time(best)
@@ -183,9 +211,15 @@ func _fill_list() -> void:
 		badge.medal = RaceManager.get_best_medal(path)
 		play.add_child(badge)
 		var id: String = e.id
+		if community:
+			var slug: String = e.slug
+			play.pressed.connect(func(): _on_play_official(slug))
+			continue
 		play.pressed.connect(func(): _on_play(id))
-		_button("Modifier", row, 110).pressed.connect(func(): _on_edit(id))
-		var del := _button("Supprimer", row, 120)
+		_button("Modifier", row, 104).pressed.connect(func(): _on_edit(id))
+		var entry: Dictionary = e
+		_button("Partager", row, 104).pressed.connect(func(): _open_share(entry))
+		var del := _button("Supprimer", row, 116)
 		del.pressed.connect(func(): _on_delete(id, del))
 
 
@@ -203,6 +237,14 @@ func _on_play(id: String) -> void:
 		_fill_list()
 		return
 	DrawnLevel.return_scene = DrawnLevel.LIST_SCENE   # après l'arrivée : retour à la liste
+	get_tree().change_scene_to_file(DrawnLevel.LEVEL_SCENE)
+
+
+## [PARTAGE 1.47] niveau de la communauté : après l'arrivée, retour à cette liste
+func _on_play_official(slug: String) -> void:
+	if not DrawnLevel.open_official(slug):
+		return
+	DrawnLevel.return_scene = DrawnLevel.COMMUNITY_SCENE
 	get_tree().change_scene_to_file(DrawnLevel.LEVEL_SCENE)
 
 
@@ -233,3 +275,165 @@ func _on_delete(id: String, b: Button) -> void:
 
 func _go_back() -> void:
 	get_tree().change_scene_to_file("res://src/screens/LevelSelectionScreen.tscn")
+
+
+# --- [PARTAGE 1.47] Fenêtres « Partager » et « Ajouter un code » ---------------------
+var _root: Control                       # Control racine (porte le thème du jeu)
+var _popup: Control                      # fenêtre ouverte (fond assombri + panneau)
+var _popup_msg: Label                    # message en bas de la fenêtre
+
+
+## Ouvre une fenêtre centrée (fond assombri qui bloque les touchers derrière).
+## Renvoie la colonne où mettre le contenu.
+func _open_popup(title_text: String) -> VBoxContainer:
+	_close_popup()
+	_popup = ColorRect.new()
+	(_popup as ColorRect).color = Color(0, 0, 0, 0.45)
+	_popup.set_anchors_preset(Control.PRESET_FULL_RECT)
+	_popup.mouse_filter = Control.MOUSE_FILTER_STOP
+	_root.add_child(_popup)
+	var center := CenterContainer.new()
+	center.set_anchors_preset(Control.PRESET_FULL_RECT)
+	_popup.add_child(center)
+	var panel := PanelContainer.new()
+	var st := StyleBoxFlat.new()
+	st.bg_color = Color(0.105882, 0.152941, 0.270588, 0.96)
+	st.border_color = Color(1, 1, 1, 0.7)
+	st.set_border_width_all(3)
+	st.set_corner_radius_all(14)
+	for side in ["left", "right", "top", "bottom"]:
+		st.set("content_margin_" + side, 18)
+	panel.add_theme_stylebox_override("panel", st)
+	center.add_child(panel)
+	var col := VBoxContainer.new()
+	col.custom_minimum_size = Vector2(560, 0)
+	col.add_theme_constant_override("separation", 10)
+	panel.add_child(col)
+	var t := Label.new()
+	t.text = title_text
+	t.add_theme_font_size_override("font_size", 22)
+	t.add_theme_color_override("font_color", Color(1, 0.95, 0.4))
+	col.add_child(t)
+	_popup_msg = Label.new()
+	_popup_msg.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_popup_msg.add_theme_font_size_override("font_size", 16)
+	_popup_msg.add_theme_color_override("font_color", Color(0.75, 1.0, 0.75))
+	return col
+
+
+func _close_popup() -> void:
+	if _popup != null and is_instance_valid(_popup):
+		_popup.queue_free()
+	_popup = null
+
+
+func _label(parent: Node, text: String, size: int = 17) -> Label:
+	var l := Label.new()
+	l.text = text
+	l.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	l.add_theme_font_size_override("font_size", size)
+	l.add_theme_color_override("font_color", Color.WHITE)
+	parent.add_child(l)
+	return l
+
+
+## « Partager » : nom de créateur, code (avec ou sans fantôme), fichier
+func _open_share(entry: Dictionary) -> void:
+	var col := _open_popup("Partager « %s »" % entry.name)
+	var own: bool = str(entry.get("author", "")) == ""
+	var author_edit := LineEdit.new()
+	if own:
+		_label(col, "Ton nom de créateur (affiché avec ton niveau) :")
+		author_edit.text = DrawnLevel.author_name()
+		author_edit.placeholder_text = "prénom ou pseudo"
+		author_edit.max_length = DrawnLevel.NAME_MAX
+		author_edit.custom_minimum_size = Vector2(0, 44)
+		author_edit.add_theme_font_size_override("font_size", 19)
+		_light_text(author_edit)
+		col.add_child(author_edit)
+	else:
+		_label(col, "Niveau de %s : il garde son auteur." % entry.author)
+	var save_author := func():
+		if own and author_edit.text.strip_edges() != "":
+			DrawnLevel.set_author_name(author_edit.text)
+	var b1 := _button("Copier le code du niveau", col, 0)
+	b1.pressed.connect(func():
+		save_author.call()
+		_copy_code(DrawnLevel.share_code(entry.id, false), false))
+	var has_ghost := DrawnLevel.has_ghost(entry)
+	var b2 := _button("Copier le code + mon fantôme" if has_ghost else "Code + fantôme : fais d'abord un temps (mode Score)", col, 0)
+	b2.disabled = not has_ghost
+	b2.pressed.connect(func():
+		save_author.call()
+		_copy_code(DrawnLevel.share_code(entry.id, true), true))
+	# fichier .pinpouin : PC (dossier) et navigateur (téléchargement) ; pas sur téléphone
+	if not Settings.is_mobile_device:
+		var b3 := _button("Télécharger le fichier" if Settings.is_web else "Exporter un fichier (.pinpouin)", col, 0)
+		b3.pressed.connect(func():
+			save_author.call()
+			var path := DrawnLevel.export_file(entry.id, str(entry.name))
+			if path == "":
+				_popup_msg.text = "Impossible d'écrire le fichier."
+			elif Settings.is_web:
+				_popup_msg.text = "Fichier téléchargé : " + path
+			else:
+				OS.shell_open(ProjectSettings.globalize_path(DrawnLevel.EXPORT_DIR))
+				_popup_msg.text = "Fichier enregistré : " + ProjectSettings.globalize_path(path))
+	col.add_child(_popup_msg)
+	_button("Fermer", col, 0).pressed.connect(_close_popup)
+
+
+func _copy_code(code: String, with_ghost: bool) -> void:
+	if code == "":
+		_popup_msg.text = "Ce niveau n'est pas encore enregistré."
+		return
+	DisplayServer.clipboard_set(code)
+	_popup_msg.text = "Code copié (%d Ko%s) ! Colle-le dans un message ; ton ami le colle dans « Ajouter un code »." % [
+		maxi(1, code.length() / 1024), ", avec ton fantôme" if with_ghost else ""]
+
+
+## « Ajouter un code » : coller le code d'un niveau reçu
+func _open_import() -> void:
+	var col := _open_popup("Ajouter un niveau reçu")
+	_label(col, "Colle ici le code (il commence par PINPOUIN-NIVEAU) :")
+	var box := TextEdit.new()
+	box.custom_minimum_size = Vector2(0, 110)
+	box.wrap_mode = TextEdit.LINE_WRAPPING_BOUNDARY
+	box.add_theme_font_size_override("font_size", 14)
+	_light_text(box)
+	col.add_child(box)
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 8)
+	col.add_child(row)
+	var paste := _button("Coller", row, 120)
+	paste.pressed.connect(func(): box.text = DisplayServer.clipboard_get())
+	var addb := _button("Ajouter", row, 140)
+	addb.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	addb.pressed.connect(func():
+		var res := DrawnLevel.decode_code(box.text)
+		if not res.ok:
+			_popup_msg.add_theme_color_override("font_color", Color(1, 0.7, 0.5))
+			_popup_msg.text = res.msg
+			return
+		_popup_msg.add_theme_color_override("font_color", Color(0.75, 1.0, 0.75))
+		_popup_msg.text = DrawnLevel.import_level(res.data)
+		_fill_list())
+	col.add_child(_popup_msg)
+	_button("Fermer", col, 0).pressed.connect(_close_popup)
+
+
+## Texte blanc sur fond sombre pour les champs de saisie (le thème du jeu met
+## un texte foncé, illisible sur le fond des fenêtres)
+func _light_text(c: Control) -> void:
+	var st := StyleBoxFlat.new()
+	st.bg_color = Color(0.05, 0.08, 0.16)
+	st.border_color = Color(1, 1, 1, 0.5)
+	st.set_border_width_all(2)
+	st.set_corner_radius_all(6)
+	st.content_margin_left = 8
+	st.content_margin_right = 8
+	c.add_theme_stylebox_override("normal", st)
+	c.add_theme_stylebox_override("focus", st)
+	c.add_theme_color_override("font_color", Color.WHITE)
+	c.add_theme_color_override("caret_color", Color.WHITE)
+	c.add_theme_color_override("font_placeholder_color", Color(1, 1, 1, 0.45))

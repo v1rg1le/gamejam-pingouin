@@ -197,6 +197,14 @@ size_flags_vertical = 0
 text = "Mes niveaux  ·  créer"
 next_scene_path = "res://src/screens/MyLevelsScreen.tscn"
 
+[node name="ButtonCommunity" parent="Margin/VBox/Columns/RacesPanel/VBox/Grid" instance=ExtResource("5")]
+custom_minimum_size = Vector2(380, 46)
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 0
+text = "Niveaux de la communauté"
+next_scene_path = "res://src/screens/CommunityLevelsScreen.tscn"
+
 [node name="ChillPanel" type="PanelContainer" parent="Margin/VBox/Columns"]
 visible = false
 custom_minimum_size = Vector2(300, 0)

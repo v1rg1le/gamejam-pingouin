@@ -362,6 +362,9 @@ func _start_race() -> void:
 		ref_time = maxf(10.0, absf(gate.global_position.x - _player.global_position.x) / REF_SPEED)
 	# [MODES 1.25] temps de l'or (mesuré par les bots), sinon le temps de référence
 	gold_time = float(MEDAL_GOLD.get(level_path.get_file().get_basename(), ref_time))
+	# [PARTAGE 1.47] niveau de la communauté : temps de l'or mesuré au bot (dans son fichier)
+	if _is_any_drawn_level() and DrawnLevel.current_gold > 0.0:
+		gold_time = DrawnLevel.current_gold
 	_rec = {"version": GHOST_FORMAT_VERSION, "level": level_path, "seed": race_seed,
 		"anims": [], "samples": PackedFloat32Array(), "time": 0.0}
 	var scene := get_tree().current_scene

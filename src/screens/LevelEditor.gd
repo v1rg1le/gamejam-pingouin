@@ -384,6 +384,7 @@ func _open_rename() -> void:
 	_rename_edit.max_length = DrawnLevel.NAME_MAX
 	_rename_edit.custom_minimum_size = Vector2(340, 46)
 	_rename_edit.add_theme_font_size_override("font_size", 20)
+	_rename_edit.add_theme_color_override("font_color", Color.WHITE)   # lisible sur le fond sombre
 	_rename_edit.select_all_on_focus = true
 	_rename_edit.text_submitted.connect(func(_t): _confirm_rename())
 	col.add_child(_rename_edit)
