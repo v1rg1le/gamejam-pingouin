@@ -144,6 +144,7 @@ func _ready() -> void:
 	counter = SuccessCounter.new()
 	add_child(counter)
 	prompt = ActionPrompt.new()   # [TUTO 1.55]
+	prompt.bubble = bubble        # [TUTO 1.55b] l'invite s'affiche dans la bulle
 	add_child(prompt)
 	prompt.done.connect(_on_prompt_done)
 
@@ -367,10 +368,12 @@ func respawn_sample(x: float):
 #  Étapes du tuto
 # -----------------------------------------------------------------------------
 func _welcome() -> void:
-	var text := "Bienvenue, petit Pinpouin ! Je vais t'apprendre la glisse ninja.\nAvance avec {move_right}. Un atelier raté ? On le recommence !"
+	# [TUTO 1.55b] choix de l'équipe : c'est PINPOUIN qui parle au joueur
+	# (avant : « LE MAÎTRE NINJA »)
+	var text := "Salut, c'est moi, Pinpouin ! Viens, je t'apprends la glisse ninja.\nAvance avec {move_right}. Un atelier raté ? On le recommence !"
 	if _done_before:
 		text += "\nTu connais déjà ? Passe directement à la course."
-	bubble.say("LE MAÎTRE NINJA", text)   # [TUTO 1.55] plus de pause de lecture ici
+	bubble.say("PINPOUIN", text)   # [TUTO 1.55] plus de pause de lecture ici
 	counter.set_goal("", 0)
 	_update_skip()
 	# [TUTO 1.55] première invite : avancer (Pinpouin est arrêté au départ)
@@ -586,6 +589,21 @@ func _update_camera_focus() -> void:
 
 
 func _on_prompt_done() -> void:
+	# [TUTO 1.55b] choix de l'équipe : après l'action, la bulle redit le
+	# geste en cours en UNE phrase courte (`after` de l'invite), qui
+	# s'efface ensuite comme les autres textes
+	var title := "PINPOUIN"
+	var after := ""
+	if _index >= 0 and not _final_started:
+		var w: Dictionary = workshops[_index]
+		var list: Array = w.get("prompts", [])
+		if _prompt_i < list.size():
+			after = list[_prompt_i].get("after", "")
+		title = "ATELIER %d / %d · %s" % [_index + 1, workshops.size(), w.title]
+	elif _index < 0:
+		after = "Garde {move_right} enfoncé : on y va !"   # invite « avance » de l'accueil
+	if after != "" and not _completed:
+		bubble.say(title, after)
 	_prompt_i += 1
 
 

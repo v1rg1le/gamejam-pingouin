@@ -62,6 +62,12 @@ var _was_paused := false
 var _raw_title := ""           # textes AVANT remplacement des touches (pour
 var _raw_text := ""            # suivre un changement de manette / clavier)
 var _skip_to_race := false     # texte du bouton : « Aller à la course »
+# [TUTO 1.55b] Invite « Appuie sur… » DANS la bulle (voir show_prompt)
+var _key: Label                # le bouton à utiliser, en gros
+var _prompt_on := false        # la bulle montre une invite (jeu figé)
+var _prompt_head := ""         # textes déjà prêts (touches remplacées) de l'invite
+var _prompt_key := ""
+var _prompt_sub := ""
 
 
 func _init() -> void:
@@ -125,6 +131,10 @@ func _ready() -> void:
 	_text.custom_minimum_size.x = 0
 	_hint = _label(15, Color(1, 1, 1, 0.7))
 	box.add_child(_title)
+	# [TUTO 1.55b] gros bouton de l'invite, entre le titre et le texte
+	_key = _label(36, Color(1, 0.94, 0.4))
+	_key.visible = false
+	box.add_child(_key)
 	box.add_child(_text)
 	box.add_child(_hint)
 
@@ -163,6 +173,7 @@ func _label(size: int, color: Color) -> Label:
 ## Nouvelle consigne du maître. `pause` : on fige le jeu le temps de lire
 ## (seulement si l'option des Options est active, et jamais en multijoueur).
 func say(title: String, text: String, pause := false) -> void:
+	_prompt_on = false   # [TUTO 1.55b] une nouvelle phrase remplace l'invite
 	_raw_title = title
 	_raw_text = text
 	visible = true
@@ -215,6 +226,51 @@ func _show_then_fade() -> void:
 				.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
 
 
+# =============================================================================
+#  [TUTO 1.55b] L'invite « Appuie sur… » passe DANS la bulle
+# -----------------------------------------------------------------------------
+#  Retour de l'équipe (21/11, capture à l'appui) : la consigne de la bulle et
+#  le panneau « Appuie sur… » au milieu de l'écran faisaient doublon, et le
+#  panneau du milieu cachait l'action. Maintenant, pendant le gel du jeu
+#  (ActionPrompt), la bulle remplace sa consigne par l'invite : petit titre
+#  (« APPUIE SUR »), LE bouton en gros, et ce que ça fait. Le milieu de
+#  l'écran reste libre (en tactile, le cercle jaune autour du bouton reste).
+#  Après l'action, TutorialCoach fait dire à la bulle un rappel court du
+#  geste en cours (say), qui s'efface comme les autres textes.
+#  Pendant l'invite, la bulle est pleinement visible (pas de fondu).
+# =============================================================================
+func show_prompt(head: String, key: String, sub: String) -> void:
+	_prompt_on = true
+	_prompt_head = head
+	_prompt_key = key
+	_prompt_sub = sub
+	visible = true
+	if _fade_tween != null and _fade_tween.is_valid():
+		_fade_tween.kill()
+	for n in [_master, _tail, _bubble]:
+		n.modulate.a = 1.0
+	_refresh_text()
+	_talk_left = TALK_TIME
+	_bubble.pivot_offset = Vector2(0, _bubble.size.y * 0.5)
+	_bubble.scale = Vector2(0.85, 0.85)
+	create_tween().set_ignore_time_scale(true).tween_property(_bubble, "scale", Vector2.ONE, 0.25).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+
+
+## Fin de l'invite : la bulle reprend son texte (say() suit en général).
+func end_prompt() -> void:
+	if not _prompt_on:
+		return
+	_prompt_on = false
+	_refresh_text()
+	_show_then_fade()
+
+
+## Le bouton de l'invite « respire » (appelé par ActionPrompt, temps réel).
+func pulse_key(a: float) -> void:
+	if _key != null:
+		_key.modulate.a = a
+
+
 ## Descend le maître et sa bulle de `dy` (course finale : le chrono, le record
 ## et les points de figures réapparaissent en haut à gauche, juste au-dessus).
 func set_top(dy: float) -> void:
@@ -253,12 +309,23 @@ func _refresh_text() -> void:
 	_title.text = TutorialSign.resolve_text(_raw_title)
 	_title.visible = _raw_title != ""
 	_text.text = TutorialSign.resolve_text(_raw_text)
+	_key.visible = _prompt_on
+	if _prompt_on:
+		# [TUTO 1.55b] invite : « APPUIE SUR » / LE bouton / ce que ça fait
+		_title.text = _prompt_head
+		_title.visible = true
+		_key.text = _prompt_key
+		_text.text = _prompt_sub
+	_text.visible = _text.text != ""
 	# largeur : celle du texte, sans dépasser BUBBLE_MAX_W (ni l'écran)
 	var avail: float = (_root.size.x if _root != null else 1024.0) - BUBBLE_X - 20.0
 	var font := _text.get_theme_font("font")
 	var widest := 0.0
 	for line in _text.text.split("\n"):
 		widest = maxf(widest, font.get_string_size(line, HORIZONTAL_ALIGNMENT_LEFT, -1, 23).x)
+	if _prompt_on:
+		widest = maxf(widest, font.get_string_size(_key.text, HORIZONTAL_ALIGNMENT_LEFT, -1, 36).x)
+		widest = maxf(widest, font.get_string_size(_title.text, HORIZONTAL_ALIGNMENT_LEFT, -1, 19).x)
 	_text.custom_minimum_size.x = minf(minf(widest + 4.0, BUBBLE_MAX_W), avail - 28.0)
 	var how := "Touche l'écran" if Settings.controls == Settings.TOUCH else ("Appuie sur un bouton" if Settings.controls == Settings.GAMEPAD else "Appuie sur une touche")
 	_hint.text = how + " pour continuer"

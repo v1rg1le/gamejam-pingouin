@@ -38,6 +38,12 @@ class_name ActionPrompt
 #   - "repress" : relâcher puis réappuyer (ex. relancer le grappin vers la
 #                 prise suivante de la falaise).
 #  Signal `done` quand le joueur a fait le geste demandé.
+#
+#  [TUTO 1.55b] Retour de l'équipe : le panneau au milieu de l'écran faisait
+#  doublon avec la bulle de Pinpouin et cachait l'action. Quand `bubble` est
+#  donné (TutorialCoach le fait), l'invite s'affiche DANS la bulle
+#  (MasterBubble.show_prompt) ; le panneau du milieu ne sert plus que si
+#  aucune bulle n'est donnée. Le voile léger et le cercle tactile restent.
 # =============================================================================
 
 signal done
@@ -56,6 +62,7 @@ const TOUCH_KEY := {"hook": "GRAPPIN", "pull": "GLISSE-LE LOIN"}
 const TOUCH_HEAD := {"pull": "GARDE LE DOIGT SUR GRAPPIN ET"}
 const TOUCH_EXTRA := {"hook": "(ou touche directement l'endroit visé)"}
 
+var bubble: MasterBubble = null  # [TUTO 1.55b] bulle où afficher l'invite
 var action := ""                # action de l'InputMap attendue
 var mode := "press"
 var _text := ""                 # phrase sous la touche ({action} remplacés)
@@ -75,7 +82,7 @@ var _ring: Control
 
 
 func _init() -> void:
-	layer = 47                               # au-dessus de la bulle du maître (45)
+	layer = 44                               # [TUTO 1.55b] SOUS la bulle (45) : le voile ne l'assombrit pas
 	process_mode = Node.PROCESS_MODE_ALWAYS  # suit le menu pause (voir _process)
 
 
@@ -187,7 +194,10 @@ func _exit_tree() -> void:
 
 func _set_shown(on: bool) -> void:
 	_veil.visible = on and _frozen
-	_panel.visible = on
+	_panel.visible = on and bubble == null   # [TUTO 1.55b] sinon : dans la bulle
+	if bubble != null:
+		if not on:
+			bubble.end_prompt()
 	_ring.visible = on and Settings.controls == Settings.TOUCH
 
 
@@ -210,6 +220,12 @@ func _refresh() -> void:
 		if mode == "press" and TOUCH_EXTRA.has(action):
 			_sub.text += "\n" + TOUCH_EXTRA[action]
 	_sub.visible = _sub.text != ""
+	if bubble != null:
+		if not _active:
+			return   # (changement de manette hors invite : rien à montrer)
+		# [TUTO 1.55b] l'invite passe dans la bulle de Pinpouin
+		bubble.show_prompt(_head.text, _key.text, _sub.text)
+		return
 	_sub.custom_minimum_size.x = 0.0
 	_panel.reset_size()
 	# largeur du texte d'explication : celle du panneau, sans dépasser 560 px
@@ -257,6 +273,8 @@ func _process(_delta: float) -> void:
 	# le gros bouton « respire » (heure réelle : delta vaut 0 quand c'est figé)
 	var pulse := 0.5 + 0.5 * sin(t * 6.0)
 	_key.modulate = Color(1, 1, 1, 0.75 + 0.25 * pulse)
+	if bubble != null:
+		bubble.pulse_key(0.6 + 0.4 * pulse)
 	if _ring.visible:
 		_ring.queue_redraw()
 	if t < MIN_SHOW_TIME:
