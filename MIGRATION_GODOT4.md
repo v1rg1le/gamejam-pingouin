@@ -1142,3 +1142,24 @@ Retour de l'équipe sur la 1.51 : « la chute dans le vide apparaît trop rapide
 - **Non-régression** : Sans fin saut 46/46, grand saut 38/39, grappin 27/27, double 18/18, montée 29/30, plafond 14/14 ; tuto complet (normal et mode enfant) ; défis figures 704 2850 / 917 7900 / Half-pipe 5300 (or inchangés : 3500 / 7000 / 5500) ; Première glisse 12,90 s (or 13,5 inchangé) ; Sans fin Score 3,7 à 5,6 km.
 - **Médailles ajustées** (courses un peu plus rapides avec la glisse lissée) : Corridor 62 → **61,5 s** (bot 61,13 s), Hook you fool 89 → **86,5 s** (bot 86,27 s), Tutoriel 13 → **13,5 s** (bot 12,38 à 13,27 s selon les figures tirées : 13 s était trop juste). Inchangés : Flat 62 s (bot 61,70), Nice Slope 37 s (bot 36,68), Spaghetti 38,5 s (bot 31,7 à 37,5 s sur 8 terrains).
 - **Questionnaire Google** mis à jour pour la 1.53 : titre, version, figure ratée (roulade + 1 s), médailles remesurées, et 5 nouvelles questions (nouvelle glisse, TAIL et équilibre, durée des chutes, compteur de vitesse, option d'essai du grappin).
+
+## 64. Pas de pump pour grimper un mur, sauf accroché au grappin (21/11, pour la 1.54)
+
+- **Le problème** : sur un mur presque vertical (côtés du half-pipe), PUMP donnait quand même de la vitesse. Chaque nouvel appui ajoute `pump_impulse` (+90 px/s) et l'accélération continue s'y ajoute : en tapotant, on battait la gravité et on remontait le mur sans élan ni grappin.
+- **Choix de l'équipe** :
+  - « mur » = surface sous Pinpouin plus raide que **75°** (`Player.PUMP_WALL_DEG`) ;
+  - bloqué **en montée seulement** : en redescendant le mur, le pump accélère comme avant (le geste normal du half-pipe) ;
+  - **autorisé** si Pinpouin est bien accroché : grappin qui tient **et** crochet plus haut que lui.
+- **Code** :
+  - `Player.pump_blocked_on_wall()` décide ; `Player.apply_pump_accel(delta)` et `Player.apply_pump_impulse()` reprennent la formule de `PumpState` (1.10) **sans la changer**, sauf ce blocage.
+  - `PumpState` appelle ces deux fonctions.
+  - `HookingOnGroundState` n'avait aucun pump (accroché au sol, PUMP ne faisait rien) : il l'applique maintenant **uniquement** sur un mur avec le crochet au-dessus. Partout ailleurs, accroché au sol, rien ne change.
+- **Mesuré** (`wallonly_test.gd` : posé au fond du half-pipe à 900 px/s, PUMP pressé seulement sur le mur) :
+
+  | Hauteur atteinte | sans pump | pump tenu | pump tapoté |
+  |---|---|---|---|
+  | 1.53 | 489 px | 564 px | 689 px (sort du half-pipe) |
+  | 1.54 | 489 px | 487 px | 487 px |
+  | 1.54, grappin accroché au-dessus | 661 px | 692 px | 631 px |
+
+- **Non-régression** (même résultat qu'en 1.53) : Nice Slope 41,17 s, Flat 63,02 s (bot sans figures), défi Half-pipe 11 500 points (11 650 en 1.53, figures tirées au hasard), tuto complet (or), Sans fin grappin 11/11, double 5/5, montée 7/7, plafond 2/2 ; check_all 140 fichiers, 0 échec.

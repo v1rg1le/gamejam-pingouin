@@ -52,6 +52,17 @@ func _handle_input(player: CharacterBody2D, delta: float) -> void:
 			player.chain_velocity.x *= 0.6
 		player._velocity += player.chain_velocity
 
+		# [PUMP MUR 1.54] Accroché au sol, il n'y avait pas de pump. On
+		# l'ajoute dans UN seul cas, choisi par l'équipe : sur un mur (plus
+		# de 75°), crochet au-dessus de Pinpouin -> il peut se hisser en
+		# pumpant (même formule et même impulsion que PumpState). Ailleurs,
+		# accroché au sol, rien ne change.
+		if Input.is_action_pressed("pump") and player.chain.tip.y < player.global_position.y \
+				and _on_wall(player):
+			if Input.is_action_just_pressed("pump"):
+				player.apply_pump_impulse()   # +pump_impulse au nouvel appui
+			player.apply_pump_accel(delta)    # accélération continue du pump
+
 	elif player.chain.flying:  # check distance de la chain quand tire dans le vide
 		if player.chain.distance >= player.chain.distance_max:
 			player.chain.release()
@@ -59,6 +70,15 @@ func _handle_input(player: CharacterBody2D, delta: float) -> void:
 	else:
 		# [GRAPPIN] décroché tout seul : retour au sol normal
 		player._states.go_to_state(player, "on_ground")
+
+# [PUMP MUR 1.54] La surface sous Pinpouin est-elle un « mur » (plus raide
+# que Player.PUMP_WALL_DEG = 75°) ? Même calcul que Player.pump_blocked_on_wall.
+func _on_wall(player: CharacterBody2D) -> bool:
+	var n: Vector2 = player._get_ground_normal()
+	if n == Vector2.ZERO:
+		return false
+	return rad_to_deg(acos(clampf(-n.y, -1.0, 1.0))) > player.PUMP_WALL_DEG
+
 
 func exit(player: CharacterBody2D) -> void:
 	player.chain.release()

@@ -15,28 +15,20 @@ func _handle_input(player: CharacterBody2D, delta: float) -> void:
 	#   de la vitesse dès qu'on arrivait plus vite que 980 (après un saut).
 	# Maintenant : accélération le long du mouvement, plus forte en descente,
 	# jusqu'à pump_max_speed ; au-delà, le pump n'enlève rien.
-	var v: Vector2 = player._velocity
-	var speed := v.length()
-	if speed < 1.0 or speed >= player.pump_max_speed:
-		return
-	var dir := v / speed
-	# composante de la direction vers le bas : > 0 en descente, < 0 en montée
-	var slope := clampf(dir.y, -1.0, 1.0)
-	var accel: float = player.pump_accel
-	if slope > 0.0:
-		accel += player.gravity * slope * player.pump_slope_bonus
-	elif slope < 0.0:
-		accel *= player.pump_uphill_factor
-	var new_speed := minf(speed + accel * delta, player.pump_max_speed)
-	player._velocity = dir * new_speed
+	# [PUMP MUR 1.54] Le calcul du pump est maintenant dans
+	# Player.apply_pump_accel() (même formule qu'avant, inchangée) : il est
+	# partagé avec le grappin au sol (HookingOnGroundState), qui pumpe le
+	# long d'un mur quand le crochet tient au-dessus de Pinpouin.
+	# Sur un MUR en montée, sans grappin, le pump n'a plus d'effet (voir
+	# Player.pump_blocked_on_wall) : on ne remonte plus le half-pipe au pump.
+	player.apply_pump_accel(delta)
+
 
 func enter(player: CharacterBody2D, _previous_state: PlayerState) -> void:
 	player.play_ground_anim("pumping")   # [ATTERRISSAGES 1.40] debout ou à plat ventre
 	# [PHYSIQUE 1.10] petite impulsion à chaque nouvel appui (sensation de
 	# boost), seulement en dessous de la vitesse max du pump
-	var speed: float = player._velocity.length()
-	if speed > 1.0 and speed < player.pump_max_speed:
-		player._velocity *= minf(speed + player.pump_impulse, player.pump_max_speed) / speed
+	player.apply_pump_impulse()   # [PUMP MUR 1.54] même impulsion, sauf sur un mur en montée
 
 func _ready():
 	sub_state_name = "PUMPING"

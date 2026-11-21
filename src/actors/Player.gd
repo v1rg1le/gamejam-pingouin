@@ -1068,6 +1068,77 @@ func _on_Chain_chain_hooked(current_length):
 
 
 
+# =============================================================================
+#  [PUMP MUR 1.54] Pas de pump pour grimper un mur, sauf accroché au grappin
+# -----------------------------------------------------------------------------
+#  Retour de l'équipe (21/11) : en tapotant PUMP, on remontait les murs
+#  verticaux du half-pipe sans élan ni grappin (mesuré : +969 px au-dessus du
+#  fond en tapotant, +359 px en le tenant, 0 sans pump ; Pinpouin finissait
+#  par sortir du half-pipe). Chaque appui donne une impulsion (pump_impulse)
+#  et l'accélération continue s'ajoute : sur un mur, ça battait la gravité.
+#  Choix de l'équipe :
+#   - « mur » = surface sous Pinpouin plus raide que PUMP_WALL_DEG (75°) ;
+#   - le pump n'y est bloqué qu'EN MONTÉE (en redescendant le mur, il
+#     accélère comme avant : c'est le geste normal du half-pipe) ;
+#   - il marche quand même si Pinpouin est « correctement agrippé » : le
+#     grappin tient ET le crochet est plus haut que lui (il se hisse le long
+#     du mur). Accroché au sol, l'état est HookingOnGroundState, qui n'avait
+#     pas de pump : il l'appelle maintenant dans ce cas-là seulement.
+#  Partout ailleurs, le pump ne change pas (même formule que PumpState 1.10).
+# =============================================================================
+## Pente (degrés) au-delà de laquelle la surface est un « mur » pour le pump.
+const PUMP_WALL_DEG := 75.0
+
+
+## [PUMP MUR 1.54] Vrai si Pinpouin est sur un mur (> PUMP_WALL_DEG) en train
+## de MONTER, sans être correctement accroché (grappin qui tient, crochet
+## au-dessus de lui) : le pump n'a alors aucun effet.
+func pump_blocked_on_wall() -> bool:
+	var n := _get_ground_normal()
+	if n == Vector2.ZERO:
+		return false
+	# pente de la surface = angle entre sa normale et la verticale
+	var slope_deg := rad_to_deg(acos(clampf(-n.y, -1.0, 1.0)))
+	if slope_deg <= PUMP_WALL_DEG:
+		return false          # pas un mur : pump normal
+	if _velocity.y >= 0.0:
+		return false          # il redescend le mur : pump normal
+	if chain.hooked and chain.tip.y < global_position.y:
+		return false          # bien accroché au-dessus : il peut se hisser
+	return true
+
+
+## [PUMP MUR 1.54] Accélération du pump (formule de PumpState 1.10, inchangée),
+## sauf sur un mur en montée sans grappin.
+func apply_pump_accel(delta: float) -> void:
+	if pump_blocked_on_wall():
+		return
+	var v: Vector2 = _velocity
+	var speed := v.length()
+	if speed < 1.0 or speed >= pump_max_speed:
+		return
+	var dir := v / speed
+	# composante de la direction vers le bas : > 0 en descente, < 0 en montée
+	var slope := clampf(dir.y, -1.0, 1.0)
+	var accel: float = pump_accel
+	if slope > 0.0:
+		accel += gravity * slope * pump_slope_bonus
+	elif slope < 0.0:
+		accel *= pump_uphill_factor
+	var new_speed := minf(speed + accel * delta, pump_max_speed)
+	_velocity = dir * new_speed
+
+
+## [PUMP MUR 1.54] Impulsion d'un nouvel appui sur PUMP (PumpState 1.10,
+## inchangée), sauf sur un mur en montée sans grappin.
+func apply_pump_impulse() -> void:
+	if pump_blocked_on_wall():
+		return
+	var speed: float = _velocity.length()
+	if speed > 1.0 and speed < pump_max_speed:
+		_velocity *= minf(speed + pump_impulse, pump_max_speed) / speed
+
+
 # [ATTERRISSAGES 1.40] Joue l'animation d'un état au sol en respectant la
 # posture : debout sur les pattes (« glide_feet ») après un atterrissage bien
 # droit, ou l'animation d'origine (à plat ventre) après un nose.
