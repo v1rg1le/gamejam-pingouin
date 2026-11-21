@@ -454,6 +454,15 @@ func _add_ramp(x0: float) -> void:
 # =============================================================================
 const CLIFF_TOP_LENGTH := 1400.0
 const CLIFF_DESCENT_PER_PX := 2.2     # longueur de la descente = 2,2 × hauteur
+# [TUTO 1.55c] « Plus montagne » (demande de l'équipe) : la paroi n'est plus
+# un mur droit mais une suite de sections (angle en degrés depuis
+# l'horizontale, part de la hauteur). Choix de l'équipe : 75° et plus, avec
+# des passages à 90° et un petit surplomb à 100°. Les dernières sections
+# arrondissent le haut de la paroi.
+const FACE_PROFILE := [[78.0, 0.22], [90.0, 0.18], [100.0, 0.14], [84.0, 0.22], [76.0, 0.12],
+	[55.0, 0.05], [35.0, 0.04], [18.0, 0.03]]
+const SUMMIT_DOME := 60.0
+const CLIFF_UNDER := 90.0             # px : la falaise descend sous la surface de la piste (couvre sa bordure)             # px : le sommet est bombé (arrondi), pas plat
 const CLIFF_HOLD_IN := 200.0
 const CLIFF_HOLD_UP := 300.0
 const HOLD_RADIUS := 55.0             # rayon d'une prise de falaise
@@ -471,41 +480,86 @@ func _add_cliff(w: Dictionary) -> void:
 	var steps_h: Array = w.cliff.steps          # hauteur de chaque marche
 	var ledge: float = float(w.cliff.get("ledge", 0.0))
 	var base_y := surface_y(cx)
-	# contour : pied du 1er mur, puis chaque marche (mur vertical + palier)
-	var top := PackedVector2Array()
-	var faces := []        # x du pied de chaque mur
-	var tops := []         # y du haut de chaque mur
+	# [TUTO 1.55c] contour « montagne » : pour chaque marche, une paroi
+	# rocheuse (FACE_PROFILE : 75° et plus, avec un passage vertical et un
+	# petit surplomb à 100°), arrondie en haut ; puis un épaulement (marche
+	# intermédiaire) ou le sommet bombé ; puis la descente.
+	var outline := PackedVector2Array()   # tout le contour du dessus (collision + remplissage)
+	var edges := []                       # morceaux qui reçoivent la bordure de glace
+	var faces := []        # x du pied de chaque paroi
+	var face_tops := []    # x du haut de chaque paroi (après l'arrondi)
+	var tops := []         # y du haut de chaque paroi
 	var x := cx
 	var y := base_y
+	outline.append(Vector2(x, y))
 	for i in steps_h.size():
-		y -= float(steps_h[i])
+		var h := float(steps_h[i])
 		faces.append(x)
+		# paroi : on monte section par section (angle mesuré depuis
+		# l'horizontale, côté montée : 90° = vertical, 100° = surplomb)
+		for sec in FACE_PROFILE:
+			var dh: float = h * float(sec[1])
+			var dx: float = dh / tan(deg_to_rad(float(sec[0])))
+			x += dx
+			y -= dh
+			outline.append(Vector2(x, y))
+		face_tops.append(x)
 		tops.append(y)
-		var run: float = ledge if i < steps_h.size() - 1 else CLIFF_TOP_LENGTH
-		var n := 8
-		for k in n + 1:
-			var px := x + run * float(k) / n
-			top.append(Vector2(px, y + coeff_pente * (px - x)))
+		# dessus : épaulement (marche intermédiaire, presque plat) ou sommet
+		# bombé (SUMMIT_DOME px plus haut au milieu : « sommet arrondi »)
+		var last: bool = i == steps_h.size() - 1
+		var run: float = CLIFF_TOP_LENGTH if last else ledge
+		var seg := PackedVector2Array([Vector2(x, y)])
+		var n := 12
+		for k in range(1, n + 1):
+			var t := float(k) / n
+			var px := x + run * t
+			var py := y + coeff_pente * run * t
+			if last:
+				py -= SUMMIT_DOME * sin(PI * t)
+			seg.append(Vector2(px, py))
+			outline.append(Vector2(px, py))
 		y += coeff_pente * run
 		x += run
-	# descente douce jusqu'à la piste (profil en cosinus)
-	var total_h: float = surface_y(x) - y
-	var descent := maxf(total_h, 300.0) * CLIFF_DESCENT_PER_PX
-	var top_end := x
-	var top_end_y := y
-	var n2 := 24
-	for k in range(1, n2 + 1):
-		var t := float(k) / n2
-		var px := top_end + descent * t
-		var kk := 0.5 - 0.5 * cos(PI * t)
-		top.append(Vector2(px, lerpf(top_end_y, surface_y(px), kk)))
-	var end_x := top_end + descent
+		if not last:
+			edges.append(seg)
+		else:
+			# descente douce jusqu'à la piste (profil en cosinus), dans le même
+			# morceau de bordure que le sommet : une seule ligne continue
+			var total_h: float = surface_y(x) - y
+			var descent := maxf(total_h, 300.0) * CLIFF_DESCENT_PER_PX
+			var top_end := x
+			var top_end_y := y
+			var n2 := 24
+			for k in range(1, n2 + 1):
+				var t2 := float(k) / n2
+				var px2 := top_end + descent * t2
+				var kk := 0.5 - 0.5 * cos(PI * t2)
+				var p2 := Vector2(px2, lerpf(top_end_y, surface_y(px2), kk))
+				seg.append(p2)
+				outline.append(p2)
+			x = top_end + descent
+			edges.append(seg)
+	var end_x := x
 	var poly := PackedVector2Array()
-	poly.append(Vector2(cx, base_y + 60))        # sous la piste (pied du mur)
-	poly.append_array(top)                        # murs, paliers, dessus, descente
-	poly.append(Vector2(end_x, surface_y(end_x) + 60))
+	poly.append(Vector2(cx, base_y + CLIFF_UNDER))  # sous la piste (pied de la paroi)
+	poly.append_array(outline)
+	# [TUTO 1.55c] le dessous suit la piste (et plus une ligne droite du pied
+	# à la fin de la descente) : avec les bosses et la pente de la piste, la
+	# ligne droite laissait voir la bordure de la piste sous la falaise
+	var bx := end_x
+	while bx > cx:
+		poly.append(Vector2(bx, surface_y(bx) + CLIFF_UNDER))
+		bx -= 80.0
 	var body := StaticBody2D.new()
 	body.collision_layer = 2
+	# [TUTO 1.55c] retour de l'équipe (vidéo) : la bordure de glace de la
+	# piste passait À TRAVERS la falaise, et se croisait avec celle de la
+	# descente (« deux bouts de terrain l'un dans l'autre »). La falaise est
+	# maintenant dessinée PAR-DESSUS la piste : on ne voit plus qu'un seul
+	# terrain, et la bordure de la descente rejoint celle de la piste en
+	# douceur (même pente au point de rencontre).
+	body.z_index = 5
 	var col := CollisionPolygon2D.new()
 	col.build_mode = CollisionPolygon2D.BUILD_SEGMENTS
 	col.polygon = poly
@@ -514,24 +568,27 @@ func _add_cliff(w: Dictionary) -> void:
 	fill.color = Color(0.694118, 0.862745, 0.956863, 1)   # même bleu que sol.tscn
 	fill.polygon = poly
 	body.add_child(fill)
-	# bordure de glace sur chaque palier et sur le dessus (pas sur les murs)
-	var seg := PackedVector2Array()
-	for pt in top:
-		if seg.size() > 0 and absf(pt.x - seg[seg.size() - 1].x) < 1.0:
-			_add_edge(body, seg)       # mur vertical : on coupe la bordure ici
-			seg = PackedVector2Array()
-		seg.append(pt)
-	_add_edge(body, seg)
+	for e in edges:
+		_add_edge(body, e)   # bordure sur les épaulements, le sommet et la descente (pas sur les parois)
 	add_child(body)
+	# [TUTO 1.55c] l'igloo (et les autres décors de la piste) poussait en
+	# plein milieu de la falaise (vu dans la vidéo de l'équipe) : les décors
+	# de la piste sous la falaise sont cachés (rien n'est supprimé).
+	for segm in _segments:
+		for child in segm.sol.get_children():
+			if child is Node2D and str(child.scene_file_path).contains("/decoration/") \
+					and child.global_position.x > cx - 200.0 and child.global_position.x < end_x + 100.0:
+				child.visible = false
 	w.cliff_faces = faces
+	w.cliff_face_tops = face_tops
 	w.cliff_tops = tops
 	w.cliff_top_y = tops[tops.size() - 1]
 	w.cliff_end = end_x
 	w.targets = {}
-	# une prise par marche : CLIFF_HOLD_IN px après le bord, CLIFF_HOLD_UP
-	# px au-dessus (« hold1 », « hold2 »…)
+	# une prise par paroi : CLIFF_HOLD_IN px après le haut de la paroi,
+	# CLIFF_HOLD_UP px au-dessus (« hold1 », « hold2 »…)
 	for i in faces.size():
-		var hold := Vector2(faces[i] + CLIFF_HOLD_IN, tops[i] - CLIFF_HOLD_UP)
+		var hold := Vector2(face_tops[i] + CLIFF_HOLD_IN, tops[i] - CLIFF_HOLD_UP)
 		_add_hold(hold)
 		w.targets["hold%d" % (i + 1)] = hold
 

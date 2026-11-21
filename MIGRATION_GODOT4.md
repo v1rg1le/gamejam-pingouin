@@ -1199,3 +1199,9 @@ Demande de l'équipe : ne plus redemander plusieurs fois le même geste ; mettre
   - Après l'action, la bulle dit un **rappel court** du geste en cours (champ `after` de chaque invite, ex. « Tire… et lâche Espace une fois au-dessus du bord »), qui s'efface ensuite.
   - Choix de l'équipe : c'est **PINPOUIN** qui parle (titre de la bulle d'accueil, avant « LE MAÎTRE NINJA »), « Salut, c'est moi, Pinpouin ! ».
   - Re-testé : 11 ateliers sur 11 du premier coup au clavier, à la manette et au tactile, 10 sur 10 en mode enfant ; captures PC et téléphone.
+- **Retour de l'équipe sur une vidéo du tuto (même soir, 1.55c)** : un igloo du décor au milieu de la falaise ; en bas de la descente, deux bouts de terrain l'un dans l'autre ; demande d'une falaise « plus montagne », moins verticale.
+  - **Paroi rocheuse** (`BateauGenerator.FACE_PROFILE`) : sections à 78°, 90°, 100° (petit surplomb), 84°, 76°, puis un haut de paroi arrondi. Choix de l'équipe : 75° et plus, jusqu'à 90-100° par endroits. Sommet bombé (`SUMMIT_DOME` = 60 px) au lieu d'un plateau plat, épaulement presque plat entre les deux parois de la grande falaise. Bordure de glace sur les dessus seulement (une seule ligne du sommet jusqu'au bas de la descente).
+  - **Un seul terrain** : la falaise est dessinée par-dessus la piste (`z_index` = 5) et son dessous suit la piste (`CLIFF_UNDER` = 90 px sous la surface) : on ne voit plus la bordure de la piste à travers la falaise, et la descente rejoint la piste en douceur.
+  - **Décors cachés** sous la falaise (igloo, glaçons… de la piste : `visible = false`, rien n'est supprimé).
+  - Prises placées après le HAUT de la paroi (`cliff_face_tops`) ; l'invite « lâche » s'y réfère.
+  - Re-testé : 11 ateliers sur 11 du premier coup au clavier, à la manette et au tactile, 10 sur 10 en mode enfant ; captures des parois et des descentes.

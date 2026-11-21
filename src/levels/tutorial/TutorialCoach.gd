@@ -623,7 +623,8 @@ func _prompt_ready(when: String, w: Dictionary) -> bool:
 		var n := int(when.substr(5)) - 1
 		if not w.has("cliff_faces") or n >= w.cliff_faces.size():
 			return false
-		return _player.chain.hooked and pos.x > w.cliff_faces[n] + 60.0 and pos.y < w.cliff_tops[n] - 30.0
+		var top_x: float = w.get("cliff_face_tops", w.cliff_faces)[n]   # [1.55c] haut de la paroi
+		return _player.chain.hooked and pos.x > top_x + 40.0 and pos.y < w.cliff_tops[n] - 30.0
 	match when:
 		"start":
 			return true
