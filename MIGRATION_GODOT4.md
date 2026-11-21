@@ -958,3 +958,6 @@ Demande de l'équipe : plus de coupure nette du fond, une boucle infinie qui sui
 - **Carte d'aide** : « DÉFI FIGURES : 4 minutes pour faire le plus de points ! ».
 - **Meilleur score / médaille** : enregistrés comme ceux des courses (sections `scores_v3` et `medals`).
 - **Testé** : bot sur les 3 niveaux jusqu'au bout du chrono ; captures de l'aide, du chrono, de la fin et du menu ; 131 fichiers OK.
+
+### Icône de l'exe Windows (21/11, 1.43)
+- L'exe Windows avait l'icône de Godot. Il prend maintenant le pingouin ninja de l'appli Android (`icon.png`, agrandi en pixels nets) : nouveau fichier `icon.ico` (16 à 256 px), preset « Windows Desktop » : `application/icon = res://icon.ico`, `modify_resources = true` (Godot 4.7 l'écrit dans l'exe sans outil externe). Vérifié en relisant l'icône dans l'exe.
