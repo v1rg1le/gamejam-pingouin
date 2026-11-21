@@ -159,7 +159,7 @@ func _mode_button(text: String, group: ButtonGroup) -> Button:
 func _refresh_mode() -> void:
 	var score_mode: bool = Settings.game_mode == Settings.MODE_SCORE
 	# [MENU UNIQUE 1.37] textes valables pour toute la liste (704, 917 et Half-pipe compris)
-	_mode_hint.text = "Chrono, médailles et 30 s de figures bonus (704, 917 et Half-pipe : glisse libre)" if score_mode else "Tranquille : pas de chrono, reste dans le half-pipe autant que tu veux"
+	_mode_hint.text = "Chrono, médailles et 30 s de figures bonus  ·  704, 917, Half-pipe : défi figures chronométré" if score_mode else "Tranquille : pas de chrono, reste dans le half-pipe autant que tu veux"
 	# le fantôme n'existe qu'en mode Score
 	ghost_toggle.visible = score_mode
 	ghost_folder_button.visible = score_mode and not Settings.is_mobile_device and not Settings.is_web   # [WEB 1.17]
@@ -187,7 +187,16 @@ func _refresh_mode() -> void:
 			continue
 		# [MENU UNIQUE 1.37] pas d'arrivée = pas de chrono ni de médaille, même en Score
 		if b.next_scene_path in FREE_RIDE_LEVELS:
-			b.text += "   ·   glisse libre"
+			# [DÉFI FIGURES 1.43] en Score : défi chronométré de figures
+			if TrickAttack.has_challenge(b.next_scene_path):
+				var mins: int = int(TrickAttack.TIME_LIMITS[b.next_scene_path.get_file().get_basename()]) / 60
+				b.text += "  ·  %d min" % mins
+				var bs: int = RaceManager.get_best_score(b.next_scene_path)
+				if bs >= 0:
+					b.text += "  ·  %d pts" % bs
+				badge.medal = RaceManager.get_best_medal(b.next_scene_path)
+			else:
+				b.text += "   ·   glisse libre"
 			continue
 		# [SANS FIN 1.33] record en mètres (pas de chrono ni de points)
 		if b.next_scene_path.ends_with("LevelEndless.tscn"):

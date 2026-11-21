@@ -317,6 +317,12 @@ func _start_race() -> void:
 		get_tree().current_scene.add_child(_hud)
 		_setup_tricks(get_tree().current_scene)
 		_start_endless_ghost()   # [FANTÔME SANS FIN 1.36] (Sans fin en mode Score seulement)
+		# [DÉFI FIGURES 1.43] 704, 917, Half-pipe en mode Score : chrono de
+		# 4 / 3 min pour faire le meilleur score de figures (TrickAttack.gd)
+		if not Settings.is_chill() and TrickAttack.has_challenge(level_path):
+			var attack = preload("res://src/ui/race/TrickAttack.gd").new()
+			attack.setup(_player, level_path)
+			get_tree().current_scene.add_child(attack)
 		return
 	racing = true
 	race_time = 0.0
@@ -616,11 +622,16 @@ func _show_start_help() -> void:
 	# [BONUS 1.20] on prévient qu'il y a des figures bonus après l'arrivée
 	if has_finish and _has_bonus_half_pipe() and not Settings.is_chill():
 		text += "\nAprès l'arrivée : %d s de figures BONUS dans le half-pipe !" % int(BONUS_TIME)
+	# [DÉFI FIGURES 1.43] 704, 917, Half-pipe en mode Score
+	var trick_attack: bool = not Settings.is_chill() and TrickAttack.has_challenge(level_path)
+	if trick_attack:
+		var secs: int = int(TrickAttack.TIME_LIMITS[level_path.get_file().get_basename()])
+		text += "\n\nDÉFI FIGURES : %d minutes pour faire le plus de points !\nFigures, vrilles, nose et combos. Évite les chutes : le saut est perdu." % (secs / 60)
 	# [FANTÔME SANS FIN 1.36] le Sans fin en mode Score n'est pas une « glisse tranquille »
 	var endless_score: bool = level_path.ends_with("LevelEndless.tscn") and not Settings.is_chill()
 	if endless_score and endless_ghost_meters() > 0:
 		text += "\nTon FANTÔME glisse avec toi : il est allé jusqu'à %d m, même terrain !" % endless_ghost_meters()
-	ReadingPause.open(get_tree(), "C'EST PARTI !" if has_finish or endless_score else "GLISSE TRANQUILLE", text)
+	ReadingPause.open(get_tree(), "C'EST PARTI !" if has_finish or endless_score or trick_attack else "GLISSE TRANQUILLE", text)
 
 
 # --- 4. [MULTI] Course en réseau ----------------------------------------------

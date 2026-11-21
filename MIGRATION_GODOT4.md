@@ -935,3 +935,26 @@ Demande de l'équipe : plus de coupure nette du fond, une boucle infinie qui sui
   - Nouveau style d'atterrissage `"belly"` (signal `Player.landed`) ; réglage `FEET_ANGLE_DEG` = 30.
   - Atelier « SUR LES PATTES » du tuto : il faut maintenant relever le bec avec {rotate_trigo} avant de toucher le sol (consigne et indices réécrits).
 - **Testé** : bot du tuto complet, avec et sans tirer au grappin : 9/9 ateliers, or à la course finale ; captures d'un atterrissage à plat (ventre) et bec relevé (debout) ; temps de Nice Slope au bot inchangé (52,17 s) ; 130 fichiers OK.
+
+## 52. Défi figures chronométré : 704, 917 et Half-pipe en mode Score (21/11, version 1.43)
+
+- **Demande de l'équipe** : « Dans le 704 et le 917, lance un chrono en mode Score : le but est juste de faire le meilleur score en figures, chrono 4 minutes. Dans le Half-pipe pareil, un chrono de 3 minutes. »
+- **En mode Score** (`src/ui/race/TrickAttack.gd`, créé par `RaceManager._start_race`) :
+  - compte à rebours en haut au centre : **4:00** pour 704 et 917, **3:00** pour le Half-pipe (`TIME_LIMITS`). Il s'arrête pendant la pause et la carte d'aide ;
+  - dessous : les points de figures, le record et la prochaine médaille à décrocher ;
+  - 10 dernières secondes : chiffres rouges et un bip par seconde ;
+  - à 0 : une figure encore en l'air compte, le pingouin s'arrête, panneau « TEMPS ÉCOULÉ ! » (points, record, médaille), boutons **Rejouer** et **Menu** ;
+  - les points se marquent comme partout (figures, vrilles, nose, combos ; une chute fait perdre le saut en cours).
+- **En mode Chill** : rien ne change, glisse libre sans chrono.
+- **Médailles en points** (`MEDAL_POINTS_GOLD`) : or = points d'un bot « joueur correct » qui fait une figure dès que le vol dure plus de 1,1 s (outil hors projet `trick_bot.gd`) ; argent = 65 % de l'or ; bronze = 35 %.
+
+  | Niveau | Durée | Bot figures seules | Bot figures + nose | Bronze | Argent | Or |
+  |---|---|---|---|---|---|---|
+  | 704 | 4 min | 3450 | 11 800 | 1200 | 2300 | 3500 |
+  | 917 | 4 min | 7100 | 23 000 | 2500 | 4600 | 7000 |
+  | Half-pipe | 3 min | 6500 | 10 000 | 2300 | 4200 | 6500 |
+
+- **Menu** (mode Score) : « 704 · 4 min · 2350 pts » avec la pastille de la meilleure médaille ; le texte sous Chill / Score l'annonce.
+- **Carte d'aide** : « DÉFI FIGURES : 4 minutes pour faire le plus de points ! ».
+- **Meilleur score / médaille** : enregistrés comme ceux des courses (sections `scores_v3` et `medals`).
+- **Testé** : bot sur les 3 niveaux jusqu'au bout du chrono ; captures de l'aide, du chrono, de la fin et du menu ; 131 fichiers OK.
