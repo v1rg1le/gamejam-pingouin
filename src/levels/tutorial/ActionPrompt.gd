@@ -28,6 +28,22 @@ class_name ActionPrompt
 #  Comme delta vaut 0, toutes les animations de ce fichier utilisent l'heure
 #  réelle (Time.get_ticks_msec), et les Tween ignorent le time_scale.
 #
+#  [TUTO 1.55d] CORRECTION : laisser le pingouin « tourner » pendant le gel
+#  était une erreur. Certaines forces du jeu ne sont PAS multipliées par
+#  delta (traction du grappin au sol, HookingOnGroundState : chain_velocity
+#  ajoutée à chaque image) : pendant un gel sur « Tire ! », la vitesse
+#  grimpait image après image jusqu'à 3000 px/s, et Pinpouin partait comme
+#  une fusée à la reprise ; dans la cheminée, le grappin relancé partait du
+#  mauvais côté. Maintenant :
+#   - pendant le gel, le pingouin est ARRÊTÉ (process_mode DISABLED) ;
+#   - quand le joueur appuie sur le bon bouton, on rend la main au pingouin
+#     et on « rejoue » l'appui (Input.action_release puis action_press) :
+#     à l'image suivante, il voit un appui tout neuf (saut, grappin…) ;
+#   - comme cet appui « par le code » ne se relâche pas tout seul, on
+#     surveille le vrai bouton (_input) : quand le joueur le relâche, on
+#     relâche aussi l'action. (En tactile, TouchControls relâche déjà
+#     l'action lui-même.)
+#
 #  Si l'option « Pause du tuto » est coupée (Settings.tutorial_pause), le jeu
 #  ne se fige pas : l'invite s'affiche quand même, et s'en va quand le geste
 #  est fait (ou au bout de UNFROZEN_TIMEOUT s).
@@ -70,6 +86,14 @@ var _active := false
 var _frozen := false
 var _started_ms := 0
 var _released_once := false     # mode "repress" : relâché au moins une fois
+var _player_mode := -1          # [1.55d] process_mode du pingouin avant le gel (-1 : pas figé)
+var _held_by_code := ""         # [1.55d] action « rejouée », à relâcher avec le vrai bouton
+## [1.55d] Cheminée : côté (-1 gauche, 1 droite) vers lequel tourner Pinpouin
+## juste avant de rejouer l'appui du grappin (0 : ne rien changer). Le
+## grappin lancé sans viser part du côté où il regarde ; pendu immobile sous
+## une prise, il ne peut pas se retourner (il regarde du côté où il allait).
+## Le tuto le tourne donc vers la prise montrée, au moment de l'appui.
+var face_dir := 0
 
 var _root: Control              # calque agrandi (UiScaler) : le panneau
 var _veil: ColorRect            # voile léger : « le jeu est figé »
@@ -145,16 +169,22 @@ func _label(size: int, color: Color) -> Label:
 
 ## Montre l'invite pour `p_action` (ex. "jump") et fige le jeu (si l'option
 ## est active). `p_text` : la phrase d'explication ({action} acceptés).
-func show_prompt(p_action: String, p_text: String, p_mode := "press") -> void:
+func show_prompt(p_action: String, p_text: String, p_mode := "press", p_freeze := true) -> void:
 	action = p_action
 	mode = p_mode
 	_text = p_text
 	_active = true
 	_released_once = not Input.is_action_pressed(action)
 	_started_ms = Time.get_ticks_msec()
-	_frozen = Settings.tutorial_pause and not NetSession.in_race
+	# [1.55d] p_freeze = false : invite sans gel (le geste se voit en bougeant)
+	_frozen = p_freeze and Settings.tutorial_pause and not NetSession.in_race
 	if _frozen:
 		Engine.time_scale = 0.0
+		# [1.55d] le pingouin ne « tourne » plus pendant le gel (voir en-tête)
+		var p = get_tree().get_first_node_in_group("player")
+		if p != null:
+			_player_mode = p.process_mode
+			p.process_mode = Node.PROCESS_MODE_DISABLED
 	_refresh()
 	_set_shown(true)
 	# petit « pop » du panneau (en temps réel : le jeu est figé)
@@ -183,6 +213,24 @@ func _unfreeze() -> void:
 	if _frozen:
 		_frozen = false
 		Engine.time_scale = 1.0
+	_wake_player()
+
+
+# [1.55d] Rend la main au pingouin (s'il avait été arrêté pour le gel).
+func _wake_player() -> void:
+	if _player_mode >= 0:
+		var p = get_tree().get_first_node_in_group("player") if is_inside_tree() else null
+		if p != null:
+			p.process_mode = _player_mode
+		_player_mode = -1
+
+
+# [1.55d] L'action « rejouée » par le code suit le vrai bouton : relâchée
+# quand le joueur relâche la touche / le bouton de manette / la souris.
+func _input(event: InputEvent) -> void:
+	if _held_by_code != "" and event.is_action_released(_held_by_code):
+		Input.action_release(_held_by_code)
+		_held_by_code = ""
 
 
 # Changement de scène pendant une invite : on rend TOUJOURS le temps.
@@ -190,6 +238,7 @@ func _exit_tree() -> void:
 	if _frozen:
 		Engine.time_scale = 1.0
 		_frozen = false
+	_wake_player()
 
 
 func _set_shown(on: bool) -> void:
@@ -300,7 +349,20 @@ func _process(_delta: float) -> void:
 		return
 	if ok:
 		_active = false
+		var was_frozen := _frozen
 		_unfreeze()
+		# [1.55d] le pingouin était arrêté : on rejoue l'appui pour qu'il le
+		# voie comme un appui tout neuf à la prochaine image
+		if face_dir != 0:
+			var pl = get_tree().get_first_node_in_group("player")
+			if pl != null:
+				pl.facing = face_dir
+			face_dir = 0
+		if was_frozen and mode != "release":
+			Input.action_release(action)
+			Input.action_press(action)
+			if Settings.controls != Settings.TOUCH:
+				_held_by_code = action
 		_set_shown(false)
 		emit_signal("done")
 

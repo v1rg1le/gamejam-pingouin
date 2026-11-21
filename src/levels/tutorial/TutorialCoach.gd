@@ -262,7 +262,7 @@ func _watch(delta: float) -> void:
 				if _hook_t >= HOOK_MIN_TIME:
 					_success()
 					_hook_t = 0.0
-		"cliff", "cliff2":
+		"cliff", "cliff2", "chimney":
 			# [TUTO 1.55] réussi : posé SUR le dessus de la falaise (dernier mur)
 			var ppos: Vector2 = _player.global_position
 			var last_face: float = w.cliff_faces[w.cliff_faces.size() - 1]
@@ -553,7 +553,13 @@ func _update_prompts() -> void:
 		_prompt_i += 1   # déjà relâché
 		return
 	print("[TUTO] invite ", p.action, " (", p.when, ")")
-	prompt.show_prompt(p.action, p.text, mode)
+	# [1.55d] cheminée : tourner Pinpouin vers la prise montrée (ActionPrompt.face_dir)
+	prompt.face_dir = 0
+	if String(p.when).begins_with("aim_swing:"):
+		var tt = _target(workshops[_index], String(p.when).substr(10))
+		if tt != null:
+			prompt.face_dir = 1 if tt.x > _player.global_position.x else -1
+	prompt.show_prompt(p.action, p.text, mode, p.get("freeze", true))
 
 
 # [TUTO 1.55] Falaises : la caméra garde dans le cadre la prise du mur à
@@ -564,6 +570,22 @@ func _update_camera_focus() -> void:
 	if cam == null or not "focus_point" in cam:
 		return
 	var focus = null
+	if not _final_started and _index >= 0 and workshops[_index].has("chimney_left"):
+		# [TUTO 1.55d] cheminée : la prochaine prise au-dessus de Pinpouin
+		var wc: Dictionary = workshops[_index]
+		var py: float = _player.global_position.y
+		if _player.global_position.x > wc.chimney_left - 1600.0:
+			for k in range(1, 6):
+				var t = wc.targets.get("c%d" % k, null)
+				if t == null:
+					continue
+				if _player.chain.hooked and _player.chain.tip.distance_to(t) < 150.0:
+					continue   # celle où il est accroché : on regarde la suivante
+				if t.y < py - 60.0:
+					focus = t
+					break
+		cam.focus_point = focus
+		return
 	if not _final_started and _index >= 0 and workshops[_index].has("cliff_faces"):
 		var w: Dictionary = workshops[_index]
 		var px: float = _player.global_position.x
@@ -618,6 +640,26 @@ func _prompt_ready(when: String, w: Dictionary) -> bool:
 		# prise devant, sur la ligne à 45° du grappin « par défaut »
 		var t = _target(w, when.substr(4))
 		return t != null and not _player.chain.hooked and not _player.chain.flying and _on_aim_line(pos, t)
+	if when.begins_with("aim_swing:"):
+		# [TUTO 1.55d] cheminée : accroché à une prise (ou en l'air), en train
+		# d'aller VERS la prise suivante (le grappin relancé part du côté où
+		# Pinpouin regarde), et cette prise est dans l'axe à 45°
+		var t4 = _target(w, when.substr(10))
+		if t4 == null or _player.chain.flying:
+			return false
+		if _player.chain.hooked and _player.chain.tip.distance_to(t4) < 150.0:
+			return false   # déjà accroché à celle-là
+		# en train d'aller vers la prise, ou presque immobile (pendu) : le
+		# tuto tournera Pinpouin vers elle au moment de l'appui (face_dir)
+		var side := signf(t4.x - pos.x)
+		return (vel.x * side > 30.0 or vel.length() < 80.0) and _on_aim_line(pos, t4, side)
+	if when.begins_with("turn:"):
+		# [TUTO 1.55d] cheminée : accroché, il faut partir de l'autre côté
+		# (vers la prise suivante) et Pinpouin n'y va pas encore
+		var t5 = _target(w, when.substr(5))
+		if t5 == null or not _player.chain.hooked or _player.chain.tip.distance_to(t5) < 150.0:
+			return false
+		return _hooked_t > 0.4 and vel.x * signf(t5.x - pos.x) < 60.0
 	if when.begins_with("over:"):
 		# accroché, et au-dessus du n-ième mur de la falaise (on peut lâcher)
 		var n := int(when.substr(5)) - 1
@@ -679,8 +721,9 @@ func _target(w: Dictionary, name: String):
 # La prise `t` est-elle devant Pinpouin, sur la ligne à 45° vers le haut
 # (direction du grappin lancé sans viser : Espace, bouton manette, bouton
 # tactile GRAPPIN), et à portée (Chain.distance_max = 1200 px) ?
-func _on_aim_line(pos: Vector2, t: Vector2) -> bool:
-	var dx: float = (t.x - pos.x) * _player.facing
+func _on_aim_line(pos: Vector2, t: Vector2, side := 0.0) -> bool:
+	# side : côté du tir (0 = celui où Pinpouin regarde)
+	var dx: float = (t.x - pos.x) * (side if side != 0.0 else float(_player.facing))
 	var dy: float = pos.y - t.y
 	return dx > 0.0 and dy > 0.0 and absf(dx - dy) < PROMPT_AIM_TOL and dx * 1.414 < 1150.0
 

@@ -110,7 +110,9 @@ var fish_res = preload("res://src/levels/parts/StaticBody2DFish.tscn")   # [TUTO
 #     l'appareil (ActionPrompt.gd). Chaque invite : action de l'InputMap,
 #     `when` = le moment (reconnu par TutorialCoach._prompt_ready), `text` =
 #     la phrase sous le bouton, `mode` (option) = "release" (relâcher) ou
-#     "repress" (relâcher puis réappuyer), `after` (option) = [TUTO 1.55b]
+#     "repress" (relâcher puis réappuyer), `freeze` (option, [1.55d]) = false
+#     pour une invite qui ne fige PAS le jeu (se balancer dans la cheminée :
+#     il faut voir le mouvement), `after` (option) = [TUTO 1.55b]
 #     le rappel court que dit la bulle une fois le geste fait. Les invites
 #     passent dans l'ordre ;
 #   - deux ateliers FALAISE avant la course finale (`cliff` : hauteur du
@@ -209,6 +211,29 @@ var workshop_specs = [
 		"hints": ["Même geste que la falaise d'avant, deux fois de suite.",
 			"Sur la marche, lance le grappin vers la 2e prise assez tôt, loin du mur.",
 			"Accroché, garde {hook} ET tire avec {pull} ; lâche au-dessus du bord."]},
+	# [TUTO 1.55d] CHEMINÉE (dernier atelier, demande de l'équipe) : un couloir
+	# vertical entre un rocher (à gauche, on passe dessous) et un grand massif
+	# (à droite). On grimpe en zigzag : prise de droite, de gauche, de droite,
+	# de gauche, puis la prise au bord du sommet de droite (5 prises, choix de
+	# l'équipe), on se pose sur le replat et on redescend vers la course.
+	{"key": "chimney", "len": 11500, "need": 1, "chimney": {"at": 2600, "width": 600, "tunnel": 340}, "title": "CHEMINÉE", "short": "CHEMINÉE",
+		"text": "La cheminée ! Grimpe en zigzag : une prise à droite, une à gauche… jusqu'au sommet. Relance le grappin quand tu pars vers l'autre paroi.",
+		"prompts": [{"action": "hook", "when": "aim:c1", "text": "Prise de droite dans l'axe : grappin !", "after": "Tire pour monter vers la prise."},
+			{"action": "pull", "when": "hooked", "text": "Tire !", "after": "Maintenant, balance-toi vers la gauche."},
+			{"action": "move_left", "when": "turn:c2", "text": "Maintiens-le pour te balancer vers la gauche.", "freeze": false},
+			{"action": "hook", "when": "aim_swing:c2", "text": "Prise de GAUCHE dans l'axe : relance le grappin !", "mode": "repress", "after": "Tire… puis balance-toi vers la droite."},
+			{"action": "move_right", "when": "turn:c3", "text": "Maintiens-le pour te balancer vers la droite.", "freeze": false},
+			{"action": "hook", "when": "aim_swing:c3", "text": "À droite maintenant : relance !", "mode": "repress", "after": "Encore vers la gauche…"},
+			{"action": "move_left", "when": "turn:c4", "text": "Balance-toi vers la gauche.", "freeze": false},
+			{"action": "hook", "when": "aim_swing:c4", "text": "À gauche : relance !", "mode": "repress", "after": "Dernière prise : celle du sommet, à droite."},
+			{"action": "move_right", "when": "turn:c5", "text": "Balance-toi vers la droite.", "freeze": false},
+			{"action": "hook", "when": "aim_swing:c5", "text": "La prise du sommet est dans l'axe : relance !", "mode": "repress", "after": "Accroché au sommet !"},
+			{"action": "pull", "when": "hooked", "text": "Tire pour te hisser jusqu'en haut !", "after": "Tire… et lâche au-dessus du bord."},
+			{"action": "hook", "when": "over:1", "text": "Au-dessus du sommet : lâche !", "mode": "release", "after": "Pose-toi, puis descends vers la course !"}],
+		"hints": ["Lance le grappin vers la prise de droite juste après être passé sous le rocher.",
+			"Accroché, tire avec {pull} ; quand tu repars vers l'autre paroi, lâche et relance {hook}.",
+			"Le grappin part du côté où Pinpouin regarde : attends d'aller vers la prise suivante.",
+			"La dernière prise est au bord du sommet, à droite : tire, puis lâche au-dessus."]},
 ]
 
 # Panneaux du décor : position x sur la piste + texte ({action} = touche réelle).
@@ -243,6 +268,10 @@ func _ready() -> void:
 		if spec.has("cliff"):
 			# [TUTO 1.55] falaise : construite après la piste (_add_cliff)
 			w.cliff_x = x + float(spec.cliff.at)
+		if spec.has("chimney"):
+			# [TUTO 1.55d] cheminée : rocher de gauche (pied à chimney_x) et
+			# massif de droite construits après la piste (_add_chimney)
+			w.chimney_x = x + float(spec.chimney.at)
 		if spec.has("hole"):
 			_swing_hole = Vector2(x + spec.hole, x + spec.hole + swing_gap_length)
 			gaps.append({"x": _swing_hole.x, "len": float(swing_gap_length), "rise": float(swing_gap_rise)})
@@ -290,6 +319,8 @@ func _ready() -> void:
 	for w in _workshops:
 		if w.has("cliff_x"):
 			_add_cliff(w)
+		elif w.has("chimney_x"):
+			_add_chimney(w)   # [TUTO 1.55d]
 
 	# 2. Plafond d'entraînement au grappin, parallèle à la piste
 	var roof_pos := Vector2(roof_start, surface_y(roof_start) - roof_height)
@@ -461,6 +492,11 @@ const CLIFF_DESCENT_PER_PX := 2.2     # longueur de la descente = 2,2 × hauteur
 # arrondissent le haut de la paroi.
 const FACE_PROFILE := [[78.0, 0.22], [90.0, 0.18], [100.0, 0.14], [84.0, 0.22], [76.0, 0.12],
 	[55.0, 0.05], [35.0, 0.04], [18.0, 0.03]]
+# [TUTO 1.55d] paroi de cheminée : droite (90°), juste arrondie tout en haut
+# (entièrement droite : la prise du sommet, posée par _add_cliff à
+# CLIFF_HOLD_IN px du haut de la paroi, tombe ainsi pile où _add_chimney l'a
+# calculée ; un arrondi en haut la décalait de ~130 px, vu aux bots)
+const WALL_PROFILE := [[90.0, 1.0]]
 const SUMMIT_DOME := 60.0
 const CLIFF_UNDER := 90.0             # px : la falaise descend sous la surface de la piste (couvre sa bordure)             # px : le sommet est bombé (arrondi), pas plat
 const CLIFF_HOLD_IN := 200.0
@@ -497,7 +533,8 @@ func _add_cliff(w: Dictionary) -> void:
 		faces.append(x)
 		# paroi : on monte section par section (angle mesuré depuis
 		# l'horizontale, côté montée : 90° = vertical, 100° = surplomb)
-		for sec in FACE_PROFILE:
+		var profile: Array = FACE_PROFILE if w.cliff.get("profile", "") != "wall" else WALL_PROFILE
+		for sec in profile:
 			var dh: float = h * float(sec[1])
 			var dx: float = dh / tan(deg_to_rad(float(sec[0])))
 			x += dx
@@ -605,6 +642,106 @@ func _add_edge(body: Node, pts: PackedVector2Array) -> void:
 	edge.position = Vector2(0, 28)   # comme la bordure de sol.tscn
 	edge.points = pts
 	body.add_child(edge)
+
+
+# =============================================================================
+#  [TUTO 1.55d] CHEMINÉE
+# -----------------------------------------------------------------------------
+#  Demande de l'équipe : avant la course, une paroi « style cheminée » où l'on
+#  grimpe au grappin une fois à droite, une fois à gauche, deux fois, puis
+#  une prise au bord du sommet de droite (5 prises en tout, choix de
+#  l'équipe), un replat et la descente vers la course.
+#  Construction (la piste continue dessous, aucun trou) :
+#    - à gauche, un gros ROCHER suspendu (comme le plafond de l'atelier
+#      grappin) : on glisse dessous (CHIMNEY_TUNNEL px de passage) pour
+#      entrer dans la cheminée ; sa face droite est la paroi de gauche ;
+#    - à droite, un grand MASSIF à paroi droite (_add_cliff, profil
+#      WALL_PROFILE) avec sa prise au bord du sommet, son replat et sa descente ;
+#    - entre les deux, `width` px : le couloir.
+#  Les prises sont calculées DE BAS EN HAUT pour que chacune soit, depuis
+#  l'endroit où Pinpouin arrive sous la précédente en tirant (CHIMNEY_HANG),
+#  dans l'axe du grappin lancé sans viser (45° vers le haut, du côté où il
+#  regarde) : c1 (droite) est dans l'axe depuis le sol du couloir, c2
+#  (gauche) depuis sous c1, etc. ; c5 est la prise du sommet du massif, ce
+#  qui fixe la hauteur du massif. Centres gardés dans w.targets (c1 à c5).
+# =============================================================================
+const CHIMNEY_R1_UP := 420.0          # hauteur de la 1re prise au-dessus du sol du couloir
+const CHIMNEY_HANG := Vector2(60, 140) # où Pinpouin arrive sous une prise en tirant (x : vers le couloir)
+const CHIMNEY_ROCK_W := 700.0         # largeur du rocher de gauche
+
+func _add_chimney(w: Dictionary) -> void:
+	var wid := float(w.chimney.width)
+	var xl: float = w.chimney_x                 # paroi de gauche (face droite du rocher)
+	var xr: float = xl + wid                     # paroi de droite (pied du massif)
+	var floor_y := surface_y(xr)
+	var r := HOLD_RADIUS
+	# prises de bas en haut (zigzag), puis prise du sommet
+	var holds := []
+	var h := Vector2(xr - r, floor_y - CHIMNEY_R1_UP)       # c1 : paroi de droite
+	holds.append(h)
+	for k in 3:
+		var right_side: bool = k % 2 == 1                   # c2 gauche, c3 droite, c4 gauche
+		var prev: Vector2 = holds[holds.size() - 1]
+		var hang: Vector2 = prev + Vector2(CHIMNEY_HANG.x if right_side else -CHIMNEY_HANG.x, CHIMNEY_HANG.y)
+		var nx: float = (xr - r) if right_side else (xl + r)
+		var d: float = absf(nx - hang.x)
+		holds.append(Vector2(nx, hang.y - d))
+	# c5 : prise au bord du sommet de droite, dans l'axe depuis sous c4
+	var hang4: Vector2 = holds[3] + Vector2(CHIMNEY_HANG.x, CHIMNEY_HANG.y)
+	var c5x: float = xr + CLIFF_HOLD_IN
+	var c5 := Vector2(c5x, hang4.y - (c5x - hang4.x))
+	var top_r := c5.y + CLIFF_HOLD_UP                       # haut du massif de droite
+	# massif de droite : une falaise à paroi droite, dont la prise est c5
+	w.cliff = {"at": 0, "steps": [floor_y - top_r], "profile": "wall"}
+	w.cliff_x = xr
+	_add_cliff(w)
+	# rocher de gauche (suspendu, on passe dessous), sommet au-dessus de c4
+	var top_l: float = holds[3].y - 220.0
+	var rock := PackedVector2Array()
+	var x0 := xl - CHIMNEY_ROCK_W
+	# dessous : suit la piste, CHIMNEY_TUNNEL px au-dessus
+	var tunnel := float(w.chimney.tunnel)
+	var bx := xl
+	while bx > x0:
+		rock.append(Vector2(bx, surface_y(bx) - tunnel))
+		bx -= 70.0
+	rock.append(Vector2(x0, surface_y(x0) - tunnel - 60.0))
+	# face gauche rocheuse (penchée, quelques ressauts), puis dessus
+	var lh: float = (surface_y(x0) - tunnel) - top_l
+	var left_face := [[0.0, 0.0], [90.0, 0.25], [150.0, 0.45], [120.0, 0.6], [230.0, 0.85], [300.0, 1.0]]
+	var top_edge := PackedVector2Array()
+	for lf in left_face:
+		var pt := Vector2(x0 + float(lf[0]), surface_y(x0) - tunnel - 60.0 - (lh - 60.0) * float(lf[1]))
+		rock.append(pt)
+	var tx := x0 + 300.0
+	while tx < xl - 40.0:
+		var pt2 := Vector2(tx, top_l)
+		rock.append(pt2)
+		top_edge.append(pt2)
+		tx += 80.0
+	rock.append(Vector2(xl - 20.0, top_l + 10.0))
+	top_edge.append(Vector2(xl - 20.0, top_l + 10.0))
+	rock.append(Vector2(xl, top_l + 40.0))     # coin arrondi
+	var body := StaticBody2D.new()
+	body.collision_layer = 2
+	body.z_index = 5
+	var col := CollisionPolygon2D.new()
+	col.build_mode = CollisionPolygon2D.BUILD_SEGMENTS
+	col.polygon = rock
+	body.add_child(col)
+	var fill := Polygon2D.new()
+	fill.color = Color(0.694118, 0.862745, 0.956863, 1)
+	fill.polygon = rock
+	body.add_child(fill)
+	_add_edge(body, top_edge)
+	add_child(body)
+	# prises (c5 est déjà posée par _add_cliff comme « hold1 »)
+	for k in 4:
+		_add_hold(holds[k])
+		w.targets["c%d" % (k + 1)] = holds[k]
+	w.targets["c5"] = w.targets["hold1"]
+	w.chimney_left = xl
+	w.chimney_right = xr
 
 
 # Une prise de falaise : boule de glace de HOLD_RADIUS px, centrée en `center`
