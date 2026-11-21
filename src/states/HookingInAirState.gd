@@ -36,6 +36,8 @@ var stretch_factor = stretch_factor_default
 # [GRAPPIN] mode de traction courant + marge d'hystérésis
 const MODE_SWITCH_MARGIN = 48.0  # px
 var mode_pull := true            # true = pull_original, false = swing
+var _was_hooked := false         # [GRAPPIN SANS FREIN 1.53] déjà accroché à l'image d'avant ?
+var _just_hooked := false        # [GRAPPIN SANS FREIN 1.53] 1re image où le crochet tient
 var _mode_initialised := false   # le mode est choisi au moment où le crochet s'accroche
 
 func _handle_input(player: CharacterBody2D, delta: float) -> void:
@@ -55,6 +57,9 @@ func _handle_input(player: CharacterBody2D, delta: float) -> void:
 
 # Hook physics
 	if player.chain.hooked:
+		# [GRAPPIN SANS FREIN 1.53] vrai seulement à la 1re image accrochée
+		_just_hooked = not _was_hooked
+		_was_hooked = true
 		_update_mode(player)
 		if mode_pull:  # grapping vers le bas
 			pull_original(player)
@@ -110,6 +115,14 @@ func pull_original(player: CharacterBody2D):
 	player._velocity += player.chain_velocity
 
 	# clamp vitesse map reelle en mode hook
+	# [GRAPPIN SANS FREIN 1.53] Ce plafond (1000 px/s par axe) est GARDÉ tel
+	# quel dans ce mode « traction » (crochet au niveau ou sous le joueur).
+	# Essai fait puis abandonné : ne plus brider sous la vitesse d'arrivée.
+	# Résultat aux bots : Pinpouin fonçait à 1400 px/s droit dans le bloc de
+	# glace accroché (prise à sa hauteur, devant lui), s'y écrasait et restait
+	# pendu dessous (grappin double du Sans fin : 7 réussites sur 18 au lieu
+	# de 18/19). Le vrai coup de frein mesuré (1525 -> 826 px/s) venait du
+	# balancier (swing, plus bas) : c'est là qu'il est corrigé.
 	player._velocity.x = clamp(player._velocity.x, -player.MAX_SPEED_HOOKED.x, player.MAX_SPEED_HOOKED.x)
 	player._velocity.y = clamp(player._velocity.y, -player.MAX_SPEED_HOOKED.y, player.MAX_SPEED_HOOKED.y)
 
@@ -127,7 +140,45 @@ func swing(player: CharacterBody2D, delta):
 	var rad_vel = player._velocity.dot(radius_dir)
 
 	# vitesse angulaire
-	player._velocity += radius_dir * -rad_vel
+	# [GRAPPIN SANS FREIN 1.53, EN OPTION] (Player.hook_keep_speed, panneau F2,
+	# COUPÉ par défaut : le comportement d'origine reste celui du jeu tant que
+	# l'équipe ne l'a pas essayé en jouant. Voir section 63 de la doc.)
+	# Ce calcul supprime, à chaque image, la vitesse
+	# dans l'axe de la corde (balancier « rigide », comportement d'origine,
+	# gardé tel quel ensuite). Problème : à l'image où le crochet ACCROCHE,
+	# Pinpouin fonce souvent VERS la prise (prise devant lui) ; toute cette
+	# vitesse était effacée d'un coup : un tiers de la vitesse perdue en une
+	# image (mesuré aux bots : 1525 -> 826 px/s en vitesse horizontale,
+	# section 58 de la doc de migration).
+	# Maintenant, à cette seule image-là, la vitesse est RÉORIENTÉE le long de
+	# la corde (direction du balancier) au lieu d'être effacée, en gardant sa
+	# valeur quand on arrive de biais (voir le détail juste en dessous).
+	# On ne le fait PAS aux images suivantes : la petite traction élastique
+	# vers le crochet (stretch, plus bas) redonne de la vitesse vers
+	# l'intérieur à chaque image ; la réorienter à chaque fois créerait de la
+	# vitesse de nulle part. (Une 1re version « corde molle » laissait cette
+	# traction s'accumuler et aspirait Pinpouin vers la prise : abandonnée.)
+	# Réorientation PROGRESSIVE, selon l'angle d'arrivée (part de la vitesse
+	# déjà le long du balancier, « tangentielle ») :
+	#   - arrivée de biais (prise devant et au-dessus, le cas mesuré) : part
+	#     tangentielle >= 70 % -> toute la vitesse est gardée ;
+	#   - Pinpouin fonce DROIT sur la prise (part tangentielle <= 30 %) :
+	#     comportement d'origine (vitesse dans l'axe effacée). Sans cette
+	#     limite, toute la vitesse partait à angle droit : vu aux bots, prise
+	#     à la même hauteur droit devant -> Pinpouin envoyé à la verticale à
+	#     1450 px/s ;
+	#   - entre les deux : mélange progressif.
+	if _just_hooked and rad_vel < 0.0 and player.hook_keep_speed >= 0.5:
+		var speed_before: float = player._velocity.length()
+		var tangential: Vector2 = player._velocity - radius_dir * rad_vel
+		var t_len: float = tangential.length()
+		if t_len > 1.0 and speed_before > 1.0:
+			var keep: float = clampf((t_len / speed_before - 0.3) / 0.4, 0.0, 1.0)
+			player._velocity = tangential / t_len * lerpf(t_len, speed_before, keep)
+		else:
+			player._velocity = tangential
+	else:
+		player._velocity += radius_dir * -rad_vel
 	# mode corde fixe (avec encore un peu de gravite)
 	if player.global_position.distance_to(player.chain.tip) > player.chain.max_length and player.chain_fixed:
 		return
@@ -165,6 +216,8 @@ func enter(player: CharacterBody2D, _previous_state: PlayerState) -> void:
 	pull_factor = 1  # par default
 	Sfx.play("grappin_lancer", -2.0)   # [BRUITAGES 1.34]
 	_mode_initialised = false  # [GRAPPIN] le mode sera choisi à l'accroche
+	_was_hooked = false        # [GRAPPIN SANS FREIN 1.53] nouvelle accroche à venir
+	_just_hooked = false
 	player.chain_velocity = Vector2.ZERO
 
 	var angle_aimed = player._get_aim_direction()

@@ -96,12 +96,12 @@ const MEDAL_GOLD := {
 	# les ateliers) : temps remesuré au bot sur ce seul tronçon.
 	# [PHYSIQUE RÉELLE 1.49] tout remesuré avec la résistance de l'air (bot
 	# « bon joueur », dossier joueur neuf). Valeurs 1.48 en fin de ligne.
-	"LevelBateau": 13.0,          # bot 12,72 à 12,97 s (1.48 : 13,5)
+	"LevelBateau": 13.5,          # [1.53] bot 12,38 à 13,27 s selon les figures tirées (1.49 : 13, trop juste ; 1.48 : 13,5)
 	"LevelRandomFlat": 62.0,      # bot 61,55 s avec figures, 64,15 sans (1.48 : 64)
-	"LevelRandomCorridor": 62.0,  # bot 62,00 s avec figures, 64,85 sans (1.48 : 66,5)
+	"LevelRandomCorridor": 61.5,  # [1.53] bot 61,13 s avec figures (glisse lissée) ; 1.49 : 62 (bot 62,00) ; 1.48 : 66,5
 	"LevelRandomNiceSlope": 37.0, # bot 36,88 s avec figures, 41,32 sans : grandes descentes plus rapides (1.48 : 49,5)
 	"LevelRandomSpaghetti": 38.5, # bot 32,3 à 38,4 s selon le terrain (40,5 sur un terrain difficile) (1.48 : 33,5)
-	"LevelRandomGap": 89.0,       # gap_bot 89,03 s avec figures, sans chute (1.48 : 86)
+	"LevelRandomGap": 86.5,       # [1.53] gap_bot 86,27 s avec figures, sans chute ; 1.49 : 89 ; 1.48 : 86
 }
 const SILVER_FACTOR := 1.25       # argent = or × 1,25
 const BRONZE_FACTOR := 1.6        # bronze = or × 1,6

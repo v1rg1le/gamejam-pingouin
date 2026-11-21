@@ -40,6 +40,8 @@ const PARAMS = [
 	["air_max_speed", "(ancien) Vitesse max en l'air", 800.0, 3000.0, 25.0],
 	["over_speed_drag", "(ancien) Frottement au-dessus du max", 0.0, 3.0, 0.05],
 	["landing_speed_keep", "Vitesse gardée à l'atterrissage", 0.0, 1.0, 0.05],
+	# [GRAPPIN SANS FREIN 1.53] essai : garder la vitesse à l'accroche (0 = origine)
+	["hook_keep_speed", "Grappin : garder la vitesse à l'accroche (1/0)", 0.0, 1.0, 1.0],
 	["air_pump_gravity", "Gravité en pumpant en l'air (×)", 1.0, 4.0, 0.1],   # [PUMP EN L'AIR 1.27]
 	["trick_boost_base", "Boost d'une figure réussie (px/s)", 0.0, 600.0, 10.0],   # [BOOST FIGURE 1.30]
 	["trick_boost_per_combo", "Boost en plus par figure du combo", 0.0, 300.0, 10.0],

@@ -1130,3 +1130,15 @@ Retour de l'équipe sur la 1.51 : « la chute dans le vide apparaît trop rapide
   | Sans fin | 3,0 s | 2,25 s | 2,25 s |
 
 - Non-régression : tuto complet (or), Hook you fool 89,03 s sans chute, Sans fin (grappin 25/25, double 18/18, plafond 14/14…) ; check_all 140 fichiers, 0 échec.
+
+## 63. Grappin (option d'essai), glisse lissée, médailles ajustées (21/11, version 1.53)
+
+- **Coup de frein du grappin à l'accroche** (enquête 1.48 : un tiers de la vitesse perdue en une image) : essayé de trois façons, gardé **en option** (`Player.hook_keep_speed`, panneau F2 « Grappin : garder la vitesse à l'accroche », **0 par défaut** : comportement d'origine).
+  1. « Corde molle » (ne retenir que quand la corde est tendue) : la petite traction élastique vers le crochet s'accumulait et aspirait Pinpouin vers la prise. Abandonné.
+  2. Garder toute la vitesse à l'image de l'accroche (réorientée le long du balancier) : prise droit devant à la même hauteur → Pinpouin envoyé à la verticale à 1450 px/s. Dans le mode « traction », ne plus brider à 1000 px/s → il s'écrasait dans le bloc de glace et restait pendu dessous. Grappin double du Sans fin : 6-7 sur 17 au lieu de 18/19.
+  3. Version gardée en option (`HookingInAirState.swing`, seulement à l'image de l'accroche) : réorientation progressive selon l'angle d'arrivée (toute la vitesse gardée si on arrive de biais, comportement d'origine si on fonce droit sur la prise). Encore 7 sur 16 au grappin double pour le bot : à essayer en jouant avant de décider. Le mode « traction » garde son plafond de 1000 px/s.
+  Par défaut, rien ne change (vérifié : Hook you fool 89,03 s, grappin double 19/19, comme en 1.52).
+- **Glisse lissée** (`Player._apply_godot3_slide`, `SMOOTH_KINK_MAX_DEG` = 25°, `was_grounded_before_move`) : au sol, sur une cassure de pente de moins de 25° (un plat qui rejoint une montée…), Pinpouin garde la vitesse qu'il avait le long de l'ancien sol au lieu de perdre 3-4 % en une image. Ne crée pas de vitesse (seule la vitesse le long de l'ancien sol est reprise), ne touche pas aux atterrissages ni aux chocs (grand angle). Mesuré : plus aucun à-coup de plus de 30 px/s en une image sur Flat, Corridor, Nice Slope, Spaghetti.
+- **Non-régression** : Sans fin saut 46/46, grand saut 38/39, grappin 27/27, double 18/18, montée 29/30, plafond 14/14 ; tuto complet (normal et mode enfant) ; défis figures 704 2850 / 917 7900 / Half-pipe 5300 (or inchangés : 3500 / 7000 / 5500) ; Première glisse 12,90 s (or 13,5 inchangé) ; Sans fin Score 3,7 à 5,6 km.
+- **Médailles ajustées** (courses un peu plus rapides avec la glisse lissée) : Corridor 62 → **61,5 s** (bot 61,13 s), Hook you fool 89 → **86,5 s** (bot 86,27 s), Tutoriel 13 → **13,5 s** (bot 12,38 à 13,27 s selon les figures tirées : 13 s était trop juste). Inchangés : Flat 62 s (bot 61,70), Nice Slope 37 s (bot 36,68), Spaghetti 38,5 s (bot 31,7 à 37,5 s sur 8 terrains).
+- **Questionnaire Google** mis à jour pour la 1.53 : titre, version, figure ratée (roulade + 1 s), médailles remesurées, et 5 nouvelles questions (nouvelle glisse, TAIL et équilibre, durée des chutes, compteur de vitesse, option d'essai du grappin).

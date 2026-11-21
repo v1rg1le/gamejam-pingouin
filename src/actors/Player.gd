@@ -191,6 +191,23 @@ var direction: Vector2
 const DRAG_REF_SLOPE_DEG := 10.0
 
 # =============================================================================
+#  [GRAPPIN SANS FREIN 1.53] Option d'essai (panneau F2), COUPÉE par défaut
+# -----------------------------------------------------------------------------
+#  Enquête 1.48 : à l'accroche du grappin, Pinpouin perd souvent un tiers de
+#  sa vitesse en une image (HookingInAirState.swing efface la vitesse dans
+#  l'axe de la corde, même quand il fonce vers la prise). Avec 1, à l'image
+#  de l'accroche, cette vitesse est réorientée le long du balancier au lieu
+#  d'être effacée (progressivement selon l'angle d'arrivée).
+#  Pas activée par défaut : aux bots, garder la vitesse changeait beaucoup
+#  le comportement du grappin selon l'angle d'arrivée (Pinpouin envoyé à la
+#  verticale, ou dans le bloc de glace accroché ; grappin double du Sans fin
+#  7/16 au lieu de 18/19). À essayer en jouant avant de décider.
+#  (Un float et pas un bool : le panneau F2 ne règle que des nombres.)
+# =============================================================================
+## 1 = garder la vitesse à l'accroche du grappin (essai) ; 0 = comportement d'origine.
+@export var hook_keep_speed: float = 0.0
+
+# =============================================================================
 #  [BOOST FIGURE 1.30] Une figure réussie donne de l'élan (idée de Manu, façon
 #  Alto's Odyssey). Au moment où les points d'un saut sont gagnés (atterrissage
 #  propre, cf. TrickScore.bank()), le pingouin reçoit une poussée dans le sens
@@ -403,6 +420,7 @@ func _physics_process(delta: float) -> void:
 	# [MIGRATION GODOT 4.7] équivalent de `_velocity = move_and_slide(_velocity)`
 	var velocity_before: Vector2 = _velocity
 	velocity = _velocity
+	was_grounded_before_move = is_on_ground   # [GLISSE LISSE 1.53]
 	move_and_slide()
 	_velocity = _apply_godot3_slide(velocity_before)
 	_unstick_from_ground()   # [SOL 1.9]
@@ -580,6 +598,13 @@ func _unstick_from_ground() -> void:
 #  Reproduit le `lv = lv.slide(collision.normal)` de Godot 3 pour chaque
 #  collision, en remplaçant les normales "fantômes" par la normale du sol.
 # =============================================================================
+## [GLISSE LISSE 1.53] Pente au-delà de laquelle une cassure n'est plus
+## « lissée » (c'est un vrai choc : mur, bord de tremplin…).
+const SMOOTH_KINK_MAX_DEG := 25.0
+## [GLISSE LISSE 1.53] vrai si le pingouin touchait le sol AVANT le mouvement
+## de cette image (mis à jour dans _physics_process).
+var was_grounded_before_move := false
+
 func _apply_godot3_slide(v: Vector2) -> Vector2:
 	var count := get_slide_collision_count()
 	if count == 0:
@@ -618,6 +643,27 @@ func _apply_godot3_slide(v: Vector2) -> Vector2:
 				if dir.dot(v_in) < 0.0:
 					dir = -dir
 			v = dir * (v.length() + lost * landing_speed_keep)
+
+	# [GLISSE LISSE 1.53] Petits à-coups au pied des montées (enquête 1.48 :
+	# 3 à 4 % de vitesse perdue en une image, ex. 1443 -> 1376 px/s). Quand un
+	# plat rejoint une montée (ou une descente s'adoucit), Pinpouin touche les
+	# deux surfaces dans la même image et la projection « à la Godot 3 »
+	# (v.slide sur chaque normale) enlève la vitesse qui « rentre » dans la
+	# nouvelle pente. Sur une vraie piste courbe, il n'y aurait pas de perte :
+	# la vitesse tourne avec la pente.
+	# Donc : s'il GLISSAIT DÉJÀ (au sol à l'image d'avant) et que la pente ne
+	# change que d'un petit angle (< SMOOTH_KINK_MAX_DEG), on garde la vitesse
+	# qu'il avait le long de l'ANCIEN sol, dans la direction du nouveau.
+	# - Ne crée pas de vitesse : on reprend seulement la vitesse le long de
+	#   l'ancien sol (la gravité qui « appuie » dans le sol n'est pas comptée).
+	# - Ne touche pas aux vrais atterrissages (il était en l'air), ni aux
+	#   chocs contre un mur (grand angle) : ceux-là gardent leur règle.
+	if was_grounded_before_move and impact_normal != Vector2.ZERO and ground_normal != Vector2.ZERO:
+		var kink_deg: float = absf(rad_to_deg(ground_normal.angle_to(impact_normal)))
+		if kink_deg > 0.5 and kink_deg < SMOOTH_KINK_MAX_DEG:
+			var along_old: float = absf(v_in.dot(ground_normal.orthogonal()))
+			if v.length() > 1.0 and v.length() < along_old:
+				v = v.normalized() * along_old
 
 	# Sécurité "vrai mur" : si le filtre agit mais qu'on n'avance plus du tout
 	# pendant plusieurs frames, c'est qu'il y a un véritable obstacle.
