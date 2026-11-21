@@ -156,6 +156,18 @@ const TUTO_LEVEL := "LevelBateau"
 const TUTO_GHOST_VERSION := 2       # fantômes du tuto 1.41 (les anciens couvraient tout le niveau)
 var tutorial_intro := false         # vrai pendant les ateliers du tuto
 
+# --- [CRÉATEUR 1.45] Niveau dessiné dans l'éditeur ---------------------------------
+# LevelDrawn.tscn change à chaque dessin : un record, un fantôme, un score ou
+# une médaille enregistrés pour « LevelDrawn » ne voudraient rien dire au
+# dessin suivant. On y garde le chrono, les figures et le score affichés à
+# l'arrivée, mais RIEN n'est enregistré, et pas de fantôme ni de carte d'aide
+# au départ (on enchaîne vite dessin -> test -> dessin).
+const DRAWN_LEVEL := "LevelDrawn"
+
+
+func _is_drawn_level() -> bool:
+	return level_path.get_file().get_basename() == DRAWN_LEVEL
+
 
 func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_PAUSABLE   # le chrono s'arrête pendant la pause
@@ -211,6 +223,8 @@ func _prepare_level(path: String) -> void:
 	endless_new_terrain = false
 	if Settings.is_chill():
 		_ghost_data = null   # [MODES 1.25] pas de fantôme en mode Chill
+	if _is_drawn_level():
+		_ghost_data = null   # [CRÉATEUR 1.45] pas de fantôme sur un niveau dessiné
 	# [MULTI] en course réseau : seed imposé par l'hôte, pas de fantôme
 	if NetSession.in_race:
 		_ghost_data = null
@@ -414,6 +428,9 @@ func finish_race() -> bool:
 	_record_sample()  # dernière position exacte
 	var previous_best := get_best_time(level_path)
 	var is_record := previous_best < 0.0 or race_time < previous_best
+	if _is_drawn_level():   # [CRÉATEUR 1.45] rien d'enregistré (voir DRAWN_LEVEL)
+		previous_best = -1.0
+		is_record = false
 	if is_record:
 		_rec.time = race_time
 		_save_ghost(_rec)
@@ -543,9 +560,12 @@ func _complete_race() -> void:
 	last_score = {"speed": speed, "tricks": tricks, "score": speed + tricks, "gold_time": gold_time,
 		"medal": medal, "new_medal": medal > previous_medal,
 		"best_score": previous_best_score, "is_best_score": speed + tricks > previous_best_score}
+	if _is_drawn_level():   # [CRÉATEUR 1.45] score affiché mais pas enregistré
+		last_score.new_medal = false
+		last_score.is_best_score = false
 	if last_score.is_best_score:
 		_save_best_score(level_path, speed + tricks)
-	if medal > previous_medal:
+	if medal > previous_medal and not _is_drawn_level():
 		_save_best_medal(level_path, medal)
 	print("[COURSE] arrivée en ", format_time(race_time), " | record : ", is_record, " | score ", last_score)
 	if NetSession.in_race:
@@ -605,7 +625,8 @@ const KID_HELP_TEXT = "Pinpouin avance tout seul !\nSauter : {jump}    Grappin :
 
 func _show_start_help() -> void:
 	# Pas dans le tuto (ses panneaux expliquent déjà tout), pas en multijoueur
-	if not Settings.help_on_start or NetSession.in_race or level_path.ends_with("LevelBateau.tscn"):
+	# [CRÉATEUR 1.45] ni dans un niveau dessiné (on y revient à chaque essai)
+	if not Settings.help_on_start or NetSession.in_race or level_path.ends_with("LevelBateau.tscn") or _is_drawn_level():
 		return
 	var text := TutorialSign.resolve_text(START_HELP_TEXT + (START_HELP_SCORE if has_finish and not Settings.is_chill() else ""))
 	# [MODES 1.25] en Chill : pas de score, on reste dans le half-pipe d'arrivée

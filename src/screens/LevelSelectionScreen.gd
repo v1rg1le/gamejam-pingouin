@@ -185,6 +185,10 @@ func _refresh_mode() -> void:
 		badge.medal = 0
 		if not score_mode:
 			continue
+		# [CRÉATEUR 1.45] le bouton « Créer un niveau » ouvre un ÉCRAN (l'éditeur),
+		# pas un niveau : ni record, ni score, ni médaille à afficher dessus
+		if b.next_scene_path.begins_with("res://src/screens/"):
+			continue
 		# [MENU UNIQUE 1.37] pas d'arrivée = pas de chrono ni de médaille, même en Score
 		if b.next_scene_path in FREE_RIDE_LEVELS:
 			# [DÉFI FIGURES 1.43] en Score : défi chronométré de figures
