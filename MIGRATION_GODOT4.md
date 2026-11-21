@@ -1143,7 +1143,7 @@ Retour de l'équipe sur la 1.51 : « la chute dans le vide apparaît trop rapide
 - **Médailles ajustées** (courses un peu plus rapides avec la glisse lissée) : Corridor 62 → **61,5 s** (bot 61,13 s), Hook you fool 89 → **86,5 s** (bot 86,27 s), Tutoriel 13 → **13,5 s** (bot 12,38 à 13,27 s selon les figures tirées : 13 s était trop juste). Inchangés : Flat 62 s (bot 61,70), Nice Slope 37 s (bot 36,68), Spaghetti 38,5 s (bot 31,7 à 37,5 s sur 8 terrains).
 - **Questionnaire Google** mis à jour pour la 1.53 : titre, version, figure ratée (roulade + 1 s), médailles remesurées, et 5 nouvelles questions (nouvelle glisse, TAIL et équilibre, durée des chutes, compteur de vitesse, option d'essai du grappin).
 
-## 64. Pas de pump pour grimper un mur, sauf accroché au grappin (21/11, pour la 1.54)
+## 64. Pas de pump pour grimper un mur, sauf accroché au grappin (21/11, version 1.54)
 
 - **Le problème** : sur un mur presque vertical (côtés du half-pipe), PUMP donnait quand même de la vitesse. Chaque nouvel appui ajoute `pump_impulse` (+90 px/s) et l'accélération continue s'y ajoute : en tapotant, on battait la gravité et on remontait le mur sans élan ni grappin.
 - **Choix de l'équipe** :
