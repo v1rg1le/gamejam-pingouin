@@ -35,13 +35,12 @@ extends RefCounted
 #   d. ré-échantillonnage tous les RESAMPLE_STEP px ;
 #   e. pente limitée à MAX_SLOPE_DEG (pas de mur vertical infranchissable).
 #
-#  Le dessin est sauvegardé dans user://niveau_dessine.json à chaque
-#  changement : on le retrouve en revenant dans l'éditeur, même après avoir
-#  quitté le jeu. (Plusieurs niveaux nommés = étape 3 de la feuille de route.)
+#  Le dessin est sauvegardé à chaque changement : on le retrouve en revenant
+#  dans l'éditeur, même après avoir quitté le jeu.
+#  [MES NIVEAUX 1.46] plusieurs niveaux nommés, un fichier chacun dans
+#  user://niveaux/ (voir la partie 5 en bas de ce fichier).
 # =============================================================================
 
-## Fichier de sauvegarde du dessin en cours
-const SAVE_PATH = "user://niveau_dessine.json"
 ## Version du format (pour pouvoir le faire évoluer plus tard sans tout casser)
 const SAVE_VERSION = 1
 ## Scènes : l'éditeur et le niveau jouable
@@ -336,7 +335,7 @@ static func is_playable() -> bool:
 	return not strokes.is_empty()
 
 
-# --- 4. Annuler / sauvegarder -------------------------------------------------
+# --- 4. Annuler ----------------------------------------------------------------
 
 ## Copie complète de l'état (pour « Annuler »)
 static func snapshot() -> Dictionary:
@@ -355,9 +354,47 @@ static func restore(snap: Dictionary) -> void:
 	auto_hooks = snap.auto
 
 
-## Écrit le dessin dans user://niveau_dessine.json
-static func save() -> void:
-	var data := {"version": SAVE_VERSION, "auto_hooks": auto_hooks, "strokes": [], "hooks": []}
+# --- 5. [MES NIVEAUX 1.46] Plusieurs niveaux nommés -------------------------------
+# Demande de l'équipe (21/11, étape 3 de la feuille de route) : garder
+# plusieurs niveaux dessinés, avec un nom, et les retrouver dans « Mes
+# niveaux » avec record, médaille et fantôme comme les vrais niveaux.
+#  - Un fichier par niveau : user://niveaux/<id>.json (nom, dessin, dates).
+#    L'id est fixe (créé une fois) : renommer ne change pas l'id.
+#  - Le niveau ouvert est mémorisé (current_id, current_name) ; save() écrit
+#    ce niveau-là. Un niveau sans aucun trait n'est pas écrit sur le disque
+#    (pas de niveaux vides dans la liste).
+#  - Records / médailles / scores / fantômes : RaceManager range tout par
+#    « chemin de niveau ». Un niveau dessiné reçoit un chemin VIRTUEL
+#    res://src/levels/LevelDrawn_<id>_<empreinte>.tscn (race_path()), où
+#    l'empreinte change dès qu'on modifie le dessin : un record fait sur
+#    l'ancien dessin ne compte plus pour le nouveau (sinon on pourrait
+#    raccourcir le niveau puis garder le record). Les fantômes de l'ancien
+#    dessin sont effacés en quittant l'éditeur (prune_ghosts).
+#  - Reprise de la 1.45 : l'ancien fichier unique user://niveau_dessine.json
+#    devient « Mon niveau 1 » (le fichier d'origine est laissé en place).
+
+## Dossier des niveaux dessinés
+const LEVELS_DIR = "user://niveaux"
+## Ancien fichier unique de la 1.45 (repris une fois comme « Mon niveau 1 »)
+const OLD_SAVE_PATH = "user://niveau_dessine.json"
+## Longueur max d'un nom de niveau
+const NAME_MAX = 24
+
+## Niveau ouvert : identifiant (nom du fichier) et nom affiché
+static var current_id: String = ""
+static var current_name: String = ""
+## Où revenir après une course sur un niveau dessiné : l'éditeur (après
+## TESTER) ou la liste « Mes niveaux » (après JOUER)
+static var return_scene: String = EDITOR_SCENE
+## Écran « Mes niveaux »
+const LIST_SCENE = "res://src/screens/MyLevelsScreen.tscn"
+
+
+## Le dessin en dictionnaire (coordonnées arrondies au 1/10 de px) : sert à
+## l'écriture du fichier ET à l'empreinte (mêmes arrondis = même empreinte
+## avant et après un passage par le disque).
+static func _drawing_data() -> Dictionary:
+	var data := {"auto_hooks": auto_hooks, "strokes": [], "hooks": []}
 	for s in strokes:
 		var flat: Array = []
 		for p in s:
@@ -366,22 +403,61 @@ static func save() -> void:
 		data.strokes.append(flat)
 	for h in hooks:
 		data.hooks.append([snappedf(h.x, 0.1), snappedf(h.y, 0.1)])
-	var f := FileAccess.open(SAVE_PATH, FileAccess.WRITE)
+	return data
+
+
+## Empreinte du dessin (8 caractères) : change dès que le dessin change
+static func content_hash() -> String:
+	return JSON.stringify(_drawing_data()).md5_text().substr(0, 8)
+
+
+## Chemin « virtuel » du niveau ouvert pour RaceManager (records, fantômes…)
+static func race_path() -> String:
+	return "res://src/levels/LevelDrawn_%s_%s.tscn" % [current_id, content_hash()]
+
+
+## Écrit le niveau ouvert dans user://niveaux/<id>.json
+static func save() -> void:
+	if current_id == "":   # (sécurité) niveau sans id : on lui en donne un, sans toucher au dessin
+		current_id = "n%d_%04d" % [int(Time.get_unix_time_from_system()), randi() % 10000]
+		current_name = next_free_name()
+	if strokes.is_empty() and hooks.is_empty():
+		return   # niveau vide : pas de fichier (il apparaîtra au 1er trait)
+	DirAccess.make_dir_recursive_absolute(LEVELS_DIR)
+	var path := LEVELS_DIR.path_join(current_id + ".json")
+	var data := _drawing_data()
+	data["version"] = SAVE_VERSION
+	data["name"] = current_name
+	data["hash"] = content_hash()
+	var old = _read_file(path)
+	data["created"] = old.get("created", Time.get_unix_time_from_system()) if old != null else Time.get_unix_time_from_system()
+	data["modified"] = Time.get_unix_time_from_system()
+	var f := FileAccess.open(path, FileAccess.WRITE)
 	if f != null:
 		f.store_string(JSON.stringify(data))
+		f.close()
 
 
-## Relit le dessin sauvegardé (une seule fois par lancement du jeu : ensuite
-## la version en mémoire est la plus récente).
-static func load_once() -> void:
-	if _loaded:
-		return
-	_loaded = true
-	if not FileAccess.file_exists(SAVE_PATH):
-		return
-	var data = JSON.parse_string(FileAccess.get_file_as_string(SAVE_PATH))
+## Efface les fantômes des anciens dessins du niveau ouvert (appelé en
+## quittant l'éditeur : tant qu'on y est, « Annuler » peut revenir au
+## dessin d'origine et retrouver son record).
+static func prune_ghosts() -> void:
+	if current_id != "":
+		_delete_ghosts(current_id, content_hash())
+
+
+## Lit un fichier de niveau (Dictionary) ou null s'il est absent / illisible
+static func _read_file(path: String):
+	if not FileAccess.file_exists(path):
+		return null
+	var data = JSON.parse_string(FileAccess.get_file_as_string(path))
 	if not (data is Dictionary) or int(data.get("version", 0)) != SAVE_VERSION:
-		return
+		return null
+	return data
+
+
+## Met le dessin d'un dictionnaire lu sur le disque dans les variables du niveau
+static func _apply(data: Dictionary) -> void:
 	strokes = []
 	for flat in data.get("strokes", []):
 		var s := PackedVector2Array()
@@ -393,3 +469,114 @@ static func load_once() -> void:
 	for h in data.get("hooks", []):
 		hooks.append(Vector2(float(h[0]), float(h[1])))
 	auto_hooks = bool(data.get("auto_hooks", true))
+
+
+## Au 1er appel : reprise de l'ancien fichier 1.45, puis ouverture du dernier
+## niveau modifié (ou d'un nouveau niveau vide s'il n'y en a aucun).
+static func load_once() -> void:
+	if _loaded:
+		return
+	_loaded = true
+	if list_levels().is_empty():
+		var old = _read_file(OLD_SAVE_PATH)
+		if old != null and not (old.get("strokes", []) as Array).is_empty():
+			new_level("Mon niveau 1")
+			_apply(old)
+			save()
+			print("[CRÉATEUR] dessin de la 1.45 repris : « Mon niveau 1 »")
+			return
+	var all := list_levels()
+	if all.is_empty():
+		new_level(next_free_name())
+	else:
+		open_level(all[0].id)
+
+
+## Tous les niveaux enregistrés, du plus récemment modifié au plus ancien :
+## [{id, name, modified, hash}]
+static func list_levels() -> Array:
+	var out: Array = []
+	var dir := DirAccess.open(LEVELS_DIR)
+	if dir == null:
+		return out
+	for file in dir.get_files():
+		if not file.ends_with(".json"):
+			continue
+		var data = _read_file(LEVELS_DIR.path_join(file))
+		if data == null:
+			continue
+		out.append({"id": file.get_basename(), "name": str(data.get("name", "?")),
+			"modified": float(data.get("modified", 0)), "hash": str(data.get("hash", ""))})
+	out.sort_custom(func(a, b): return a.modified > b.modified)
+	return out
+
+
+## Chemin virtuel (records, médaille…) d'un niveau de la liste
+static func race_path_of(entry: Dictionary) -> String:
+	return "res://src/levels/LevelDrawn_%s_%s.tscn" % [entry.id, entry.hash]
+
+
+## Nouveau niveau vide (pas encore écrit : il le sera au 1er trait)
+static func new_level(level_name: String) -> void:
+	_loaded = true
+	current_id = "n%d_%04d" % [int(Time.get_unix_time_from_system()), randi() % 10000]
+	current_name = level_name
+	strokes = []
+	hooks = []
+	auto_hooks = true
+
+
+## Ouvre un niveau enregistré
+static func open_level(id: String) -> bool:
+	var data = _read_file(LEVELS_DIR.path_join(id + ".json"))
+	if data == null:
+		return false
+	_loaded = true
+	current_id = id
+	current_name = str(data.get("name", "?"))
+	_apply(data)
+	return true
+
+
+## Renomme le niveau ouvert (le fichier garde son id)
+static func rename(level_name: String) -> void:
+	level_name = level_name.strip_edges().left(NAME_MAX)
+	if level_name == "":
+		return
+	current_name = level_name
+	save()
+
+
+## Supprime un niveau et ses fantômes. Si c'était le niveau ouvert, le
+## plus récent restant est ouvert (ou un nouveau niveau vide).
+static func delete_level(id: String) -> void:
+	DirAccess.remove_absolute(LEVELS_DIR.path_join(id + ".json"))
+	_delete_ghosts(id, "")
+	if id == current_id:
+		var all := list_levels()
+		if all.is_empty():
+			new_level(next_free_name())
+		else:
+			open_level(all[0].id)
+
+
+## Efface les fantômes d'un niveau dessiné (sauf ceux de l'empreinte `keep`)
+static func _delete_ghosts(id: String, keep: String) -> void:
+	var dir := DirAccess.open("user://ghosts")
+	if dir == null:
+		return
+	var prefix := "LevelDrawn_%s_" % id
+	for file in dir.get_files():
+		if file.begins_with(prefix) and file.ends_with(".ghost") and (keep == "" or not file.contains(keep)):
+			dir.remove(file)
+
+
+## « Mon niveau N » avec le premier N libre
+static func next_free_name() -> String:
+	var names := {}
+	for e in list_levels():
+		names[e.name] = true
+	var n := 1
+	while names.has("Mon niveau %d" % n):
+		n += 1
+	return "Mon niveau %d" % n

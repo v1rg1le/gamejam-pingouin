@@ -157,14 +157,25 @@ const TUTO_GHOST_VERSION := 2       # fantômes du tuto 1.41 (les anciens couvra
 var tutorial_intro := false         # vrai pendant les ateliers du tuto
 
 # --- [CRÉATEUR 1.45] Niveau dessiné dans l'éditeur ---------------------------------
-# LevelDrawn.tscn change à chaque dessin : un record, un fantôme, un score ou
-# une médaille enregistrés pour « LevelDrawn » ne voudraient rien dire au
-# dessin suivant. On y garde le chrono, les figures et le score affichés à
-# l'arrivée, mais RIEN n'est enregistré, et pas de fantôme ni de carte d'aide
-# au départ (on enchaîne vite dessin -> test -> dessin).
+# LevelDrawn.tscn change à chaque dessin. 1.45 : rien n'y était enregistré.
+# [MES NIVEAUX 1.46] chaque niveau dessiné a maintenant un chemin VIRTUEL
+# (DrawnLevel.race_path() : res://src/levels/LevelDrawn_<id>_<empreinte>.tscn),
+# remplacé dans _prepare_level : record, fantôme, score et médaille sont
+# rangés sous ce chemin comme pour un vrai niveau ; l'empreinte change quand
+# on modifie le dessin, donc un ancien record ne compte plus.
+# Seul cas sans rien d'enregistré : le chemin réel LevelDrawn.tscn (niveau
+# ouvert sans passer par l'éditeur, ex. depuis l'éditeur Godot).
+# Pas de carte d'aide au départ dans un niveau dessiné (on enchaîne vite
+# dessin -> test -> dessin).
 const DRAWN_LEVEL := "LevelDrawn"
 
 
+## Vrai dans tous les niveaux dessinés
+func _is_any_drawn_level() -> bool:
+	return level_path.get_file().get_basename().begins_with(DRAWN_LEVEL)
+
+
+## Vrai seulement si le niveau dessiné n'a pas de chemin virtuel : rien n'est enregistré
 func _is_drawn_level() -> bool:
 	return level_path.get_file().get_basename() == DRAWN_LEVEL
 
@@ -215,6 +226,10 @@ func _on_node_added(node: Node) -> void:
 
 func _prepare_level(path: String) -> void:
 	_reset_race()
+	# [MES NIVEAUX 1.46] niveau dessiné : chemin virtuel propre au dessin
+	if path.ends_with(DRAWN_LEVEL + ".tscn") and not NetSession.in_race:
+		DrawnLevel.load_once()
+		path = DrawnLevel.race_path()
 	level_path = path
 	_ghost_data = load_best_ghost(path) if ghost_enabled else null
 	# [FANTÔME SANS FIN 1.36] bouton « Nouveau terrain » : pas de fantôme, terrain neuf
@@ -224,7 +239,7 @@ func _prepare_level(path: String) -> void:
 	if Settings.is_chill():
 		_ghost_data = null   # [MODES 1.25] pas de fantôme en mode Chill
 	if _is_drawn_level():
-		_ghost_data = null   # [CRÉATEUR 1.45] pas de fantôme sur un niveau dessiné
+		_ghost_data = null   # [CRÉATEUR 1.45] pas de fantôme sur un niveau dessiné sans chemin virtuel
 	# [MULTI] en course réseau : seed imposé par l'hôte, pas de fantôme
 	if NetSession.in_race:
 		_ghost_data = null
@@ -626,7 +641,7 @@ const KID_HELP_TEXT = "Pinpouin avance tout seul !\nSauter : {jump}    Grappin :
 func _show_start_help() -> void:
 	# Pas dans le tuto (ses panneaux expliquent déjà tout), pas en multijoueur
 	# [CRÉATEUR 1.45] ni dans un niveau dessiné (on y revient à chaque essai)
-	if not Settings.help_on_start or NetSession.in_race or level_path.ends_with("LevelBateau.tscn") or _is_drawn_level():
+	if not Settings.help_on_start or NetSession.in_race or level_path.ends_with("LevelBateau.tscn") or _is_any_drawn_level():
 		return
 	var text := TutorialSign.resolve_text(START_HELP_TEXT + (START_HELP_SCORE if has_finish and not Settings.is_chill() else ""))
 	# [MODES 1.25] en Chill : pas de score, on reste dans le half-pipe d'arrivée

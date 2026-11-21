@@ -37,15 +37,28 @@ static func apply(layer: CanvasLayer, scale_value: float = -1.0) -> Control:
 		for c in children:
 			c.reparent(root, false)   # garde ancrages, marges et positions
 		# l'écran change de taille (rotation, fenêtre PC redimensionnée…)
-		layer.get_viewport().size_changed.connect(func():
+		# [MES NIVEAUX 1.46] la connexion est retirée quand le calque quitte
+		# l'arbre : sinon, après sa libération, Godot affichait « Lambda capture
+		# was freed » à chaque changement de taille de l'écran
+		var vp := layer.get_viewport()
+		var on_size := func():
 			if is_instance_valid(layer) and is_instance_valid(root):
-				_resize(layer, root))
+				_resize(layer, root)
+		vp.size_changed.connect(on_size)
+		layer.tree_exiting.connect(func():
+			if is_instance_valid(vp) and vp.size_changed.is_connected(on_size):
+				vp.size_changed.disconnect(on_size), CONNECT_ONE_SHOT)
 	layer.scale = Vector2(s, s)
 	_resize(layer, root)
 	return root
 
 
 static func _resize(layer: CanvasLayer, root: Control) -> void:
+	# [MES NIVEAUX 1.46] calque déjà retiré de l'arbre (interface reconstruite
+	# par l'éditeur / « Mes niveaux », ou changement d'écran) : plus de
+	# viewport, rien à redimensionner
+	if not layer.is_inside_tree():
+		return
 	var s: float = maxf(layer.scale.x, 0.01)
 	root.position = Vector2.ZERO
 	root.size = layer.get_viewport().get_visible_rect().size / s

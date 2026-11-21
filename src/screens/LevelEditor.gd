@@ -94,6 +94,7 @@ func _ready() -> void:
 	cam.position_smoothing_enabled = false
 	add_child(cam)
 	cam.make_current()
+	_opened_race_path = DrawnLevel.race_path()
 	_build_ui()
 	_frame_content()
 	_refresh_ui()
@@ -107,8 +108,8 @@ var _opened_at := Time.get_ticks_msec()   # ouverture de l'éditeur (ms)
 
 ## Reconstruit l'interface à la bonne échelle (une seule fois par frame)
 func _rebuild_ui() -> void:
-	if _rebuild_pending:
-		return
+	if _rebuild_pending or not is_inside_tree():
+		return   # (signal reçu pendant un changement d'écran : rien à faire)
 	_rebuild_pending = true
 	await get_tree().process_frame
 	_rebuild_pending = false
@@ -291,9 +292,16 @@ func _push_undo() -> void:
 
 ## Après chaque modification : sauvegarde, boutons et aperçu à jour
 func _changed() -> void:
+	# [MES NIVEAUX 1.46] un record existait pour le dessin d'avant : il ne compte
+	# plus (sinon on raccourcirait le niveau en gardant le record) ; on prévient
+	# une fois. (Annuler qui revient au dessin d'origine le fait revenir.)
+	var had_record: bool = _opened_race_path != "" and RaceManager.get_best_time(_opened_race_path) >= 0.0
 	DrawnLevel.save()
 	_refresh_ui()
 	queue_redraw()
+	if had_record and not _record_warned and DrawnLevel.race_path() != _opened_race_path:
+		_record_warned = true
+		_flash("Niveau modifié : le record repart de zéro (Annuler pour revenir).")
 
 
 func _on_undo() -> void:
@@ -326,12 +334,74 @@ func _on_test() -> void:
 		_flash("Dessine d'abord un sol !")
 		return
 	DrawnLevel.save()
+	DrawnLevel.return_scene = DrawnLevel.EDITOR_SCENE   # après la course : retour ici
 	get_tree().change_scene_to_file(DrawnLevel.LEVEL_SCENE)
 
 
+## [MES NIVEAUX 1.46] en quittant l'éditeur (Retour, TESTER…), les fantômes des
+## anciens dessins de ce niveau sont effacés (plus de retour possible par Annuler)
+func _exit_tree() -> void:
+	DrawnLevel.prune_ghosts()
+
+
+## [MES NIVEAUX 1.46] « Retour » mène à la liste « Mes niveaux »
 func _on_back() -> void:
 	DrawnLevel.save()
-	get_tree().change_scene_to_file("res://src/screens/LevelSelectionScreen.tscn")
+	get_tree().change_scene_to_file(DrawnLevel.LIST_SCENE)
+
+
+# --- [MES NIVEAUX 1.46] Nom du niveau ------------------------------------------------
+var _name_button: Button
+var _ui_root: Control              # Control racine de l'interface (porte le thème)
+var _rename_panel: PanelContainer
+var _rename_edit: LineEdit
+## Chemin « record » du dessin à l'ouverture : s'il avait un record et que le
+## dessin change, on prévient une fois que le record repart de zéro
+var _opened_race_path := ""
+var _record_warned := false
+
+
+## Petite fenêtre « Nom du niveau » (clavier du téléphone compris)
+func _open_rename() -> void:
+	if _rename_panel != null and is_instance_valid(_rename_panel):
+		_rename_panel.queue_free()
+	_rename_panel = PanelContainer.new()
+	_rename_panel.add_theme_stylebox_override("panel", _panel_style())
+	_rename_panel.set_anchors_preset(Control.PRESET_CENTER_TOP)
+	_rename_panel.offset_left = -190
+	_rename_panel.offset_right = 190
+	_rename_panel.offset_top = 70
+	var col := VBoxContainer.new()
+	col.add_theme_constant_override("separation", 8)
+	_rename_panel.add_child(col)
+	var lab := Label.new()
+	lab.text = "Nom du niveau"
+	lab.add_theme_color_override("font_color", Color.WHITE)
+	lab.add_theme_font_size_override("font_size", 19)
+	col.add_child(lab)
+	_rename_edit = LineEdit.new()
+	_rename_edit.text = DrawnLevel.current_name
+	_rename_edit.max_length = DrawnLevel.NAME_MAX
+	_rename_edit.custom_minimum_size = Vector2(340, 46)
+	_rename_edit.add_theme_font_size_override("font_size", 20)
+	_rename_edit.select_all_on_focus = true
+	_rename_edit.text_submitted.connect(func(_t): _confirm_rename())
+	col.add_child(_rename_edit)
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 8)
+	row.alignment = BoxContainer.ALIGNMENT_END
+	col.add_child(row)
+	_button("Annuler", row, 100).pressed.connect(func(): _rename_panel.queue_free())
+	_button("OK", row, 100).pressed.connect(_confirm_rename)
+	_ui_root.add_child(_rename_panel)   # dans le Control qui porte le thème du jeu
+	_rename_edit.grab_focus()
+
+
+func _confirm_rename() -> void:
+	DrawnLevel.rename(_rename_edit.text)
+	if is_instance_valid(_rename_panel):
+		_rename_panel.queue_free()
+	_refresh_ui()
 
 
 ## Cadre la vue sur tout le dessin (ou une vue de départ si c'est vide)
@@ -496,11 +566,11 @@ func _button(text: String, parent: Node, min_w: float = 0.0) -> Button:
 
 ## [CRÉATEUR 1.45] Échelle de l'interface de l'éditeur : celle du jeu
 ## (option + bonus téléphone), mais réduite si l'écran est trop petit pour
-## la barre du haut (~800 px) et les deux barres + un peu de dessin (~330 px).
+## la barre du haut (~960 px avec le nom du niveau) et les deux barres + un peu de dessin (~330 px).
 ## Sur un téléphone 20:9, l'écran logique ne fait que ~1024 x 460 px.
 func _ui_scale() -> float:
 	var vp: Vector2 = get_viewport().get_visible_rect().size
-	return clampf(minf(Settings.hud_scale(), minf(vp.x / 800.0, vp.y / 330.0)), 0.6, 2.0)
+	return clampf(minf(Settings.hud_scale(), minf(vp.x / 960.0, vp.y / 330.0)), 0.6, 2.0)
 
 
 ## Interface (deux barres, pour laisser le maximum de place au dessin, même
@@ -516,10 +586,11 @@ func _build_ui() -> void:
 	root.set_anchors_preset(Control.PRESET_FULL_RECT)
 	root.mouse_filter = Control.MOUSE_FILTER_IGNORE   # les clics hors des boutons vont au dessin
 	root.theme = preload("res://src/theme_main.tres")
+	_ui_root = root
 	_ui_layer.add_child(root)
 	add_child(_ui_layer)
 	var s := _ui_scale()
-	var wide: bool = get_viewport().get_visible_rect().size.x / s > 960.0
+	var wide: bool = get_viewport().get_visible_rect().size.x / s > 1080.0
 
 	# Barre du haut
 	var top := PanelContainer.new()
@@ -535,10 +606,16 @@ func _build_ui() -> void:
 	_button("◀  Retour", row, 100).pressed.connect(_on_back)
 	if wide:
 		var title := Label.new()
-		title.text = "  CRÉER UN NIVEAU  "
+		title.text = " CRÉER "
 		title.add_theme_font_size_override("font_size", 22)
 		title.add_theme_color_override("font_color", Color(1, 0.95, 0.4))
 		row.add_child(title)
+	# [MES NIVEAUX 1.46] nom du niveau : toucher pour le renommer
+	_name_button = _button(DrawnLevel.current_name, row, 150)
+	_name_button.add_theme_color_override("font_color", Color(0.10, 0.15, 0.30))
+	_name_button.clip_text = true
+	_name_button.tooltip_text = "Renommer le niveau"
+	_name_button.pressed.connect(_open_rename)
 	_undo_button = _button("Annuler", row, 96)
 	_undo_button.pressed.connect(_on_undo)
 	_button("Tout effacer", row, 110).pressed.connect(_on_clear)
@@ -641,9 +718,14 @@ func _refresh_ui() -> void:
 			isl.size(), "s" if isl.size() > 1 else "",
 			isl.size() - 1, "s" if isl.size() > 2 else "",
 			n_hooks, "s" if n_hooks > 1 else "", length_m]
+		# [MES NIVEAUX 1.46] record du dessin actuel (mode Score)
+		var best: float = RaceManager.get_best_time(DrawnLevel.race_path())
+		if best >= 0.0:
+			_info.text += "  ·  record " + RaceManager.format_time(best)
 		if unsafe > 0:
 			_info.text += "   ·   %d grand%s trou%s sans grappin (en orange)" % [unsafe, "s" if unsafe > 1 else "", "s" if unsafe > 1 else ""]
 	_undo_button.disabled = _undo.is_empty()
+	_name_button.text = "✏  " + DrawnLevel.current_name
 	_test_button.disabled = isl.is_empty()
 	if _auto_check.button_pressed != DrawnLevel.auto_hooks:
 		_auto_check.set_pressed_no_signal(DrawnLevel.auto_hooks)

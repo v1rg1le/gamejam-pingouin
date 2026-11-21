@@ -78,8 +78,9 @@ func _ready() -> void:
 	_add_wall(Vector2(end_p.x, end_p.y - 1500.0), Vector2(80, 3000))
 
 	# 5. Arrivée au bout du trait ; après la course, retour dans l'éditeur
+	#    (après TESTER) ou dans « Mes niveaux » (après JOUER) [MES NIVEAUX 1.46]
 	var gate = finish_gate_res.instantiate()
-	gate.next_scene_path = DrawnLevel.EDITOR_SCENE
+	gate.next_scene_path = DrawnLevel.return_scene
 	gate.position = finish_pos
 	add_child(gate)
 
@@ -151,6 +152,7 @@ func _add_edit_button() -> void:
 	btn.pressed.connect(func():
 		get_tree().paused = false
 		Engine.time_scale = 1.0
+		DrawnLevel.return_scene = DrawnLevel.EDITOR_SCENE   # on revient tester depuis l'éditeur
 		get_tree().change_scene_to_file(DrawnLevel.EDITOR_SCENE))
 	layer.add_child(btn)
 	add_child(layer)
