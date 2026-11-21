@@ -127,7 +127,11 @@ var direction: Vector2
 ## Impulsion (px/s) à chaque nouvel appui sur pump.
 @export var pump_impulse: float = 90.0
 ## Le pump n'accélère plus au-delà de cette vitesse (sans jamais freiner).
-@export var pump_max_speed: float = 1450.0
+## [PHYSIQUE RÉELLE 1.49] 1450 -> 1650 : avec la résistance de l'air, la
+## pente ne pousse plus au-delà de l'ancien plafond ; le pump (le geste du
+## joueur) doit pouvoir rendre la vitesse d'approche d'avant aux trous du
+## Sans fin (~1550-1630 px/s). Réglé aux bots : trou « grappin » 22/23.
+@export var pump_max_speed: float = 1650.0
 ## Au sol, au-delà de cette vitesse, frottement doux.
 @export var ground_max_speed: float = 1450.0
 ## En l'air (hors grappin), au-delà de cette vitesse, frottement doux.
@@ -136,6 +140,55 @@ var direction: Vector2
 @export var over_speed_drag: float = 1.5
 ## Traînée visuelle derrière le pingouin à partir de cette vitesse (0 = jamais).
 @export var speed_trail_from: float = 1200.0
+
+# =============================================================================
+#  [PHYSIQUE RÉELLE 1.49] Résistance de l'air + frottement de glisse
+# -----------------------------------------------------------------------------
+#  Décision de l'équipe (21/11), après l'enquête « ralentissements » (section
+#  58 de MIGRATION_GODOT4.md) : partir de principes physiques plutôt que des
+#  deux plafonds « doux » ci-dessus (1450 au sol, 1750 en l'air).
+#  Ces plafonds freinaient fort d'un coup en touchant le sol après un saut
+#  (ex. 1990 -> 1566 px/s en 1,5 s, même en descente), et freinaient pareil
+#  sur le plat et dans une descente raide.
+#
+#  Maintenant, deux forces, comme sur une vraie piste :
+#   1. RÉSISTANCE DE L'AIR, en k·v² (k par unité de masse), opposée à la
+#      vitesse, la MÊME au sol et en l'air : plus de changement de règle à
+#      l'atterrissage. Avec la gravité, elle crée toute seule une vitesse
+#      limite qui dépend de la pente :   v_lim = √(g·sin θ / k).
+#      On ne règle pas k directement (peu parlant) mais `drag_terminal_speed`,
+#      la vitesse limite sur une pente de 10° (DRAG_REF_SLOPE_DEG) :
+#          k = g·sin(10°) / drag_terminal_speed²
+#      Avec 2000 px/s (défaut, réglé aux bots) : ~1790 px/s sur 8° (pente
+#      typique mesurée aux bots), ~2440 sur 15°, ~2830 sur 20° ; sur le plat
+#      on ralentit doucement (~73 px/s² à 1450 px/s, ~140 px/s² à 2000 px/s,
+#      contre ~800 px/s² avec l'ancien frein après un gros saut).
+#      k est recalculé à partir de `gravity` : si l'équipe change la gravité
+#      dans le panneau F2, la vitesse limite affichée reste vraie.
+#   2. FROTTEMENT DE GLISSE au sol (Coulomb) : décélération constante
+#      μ·g·cos θ, opposée à la vitesse, qui ne la fait jamais changer de sens.
+#      Très faible sur la glace (`ground_friction` = μ = 0,02 -> 16 px/s²) :
+#      il sert surtout à ce que Pinpouin finisse par s'arrêter sur le plat.
+#  Le grappin garde sa propre physique (HookingInAirState) : rien ici
+#  pendant HOOKING, comme avant.
+#  Le PUMP n'est volontairement PAS physique (il ajoute de l'énergie) : c'est
+#  le geste du joueur pour garder ou prendre de la vitesse.
+#  Le boost des figures [1.30] est préservé : pendant le boost, l'air ne
+#  freine que la vitesse « hors boost » (voir _apply_soft_speed_caps).
+#  `realistic_physics` = 0 remet exactement l'ancien système (plafonds doux
+#  ci-dessus) : interrupteur dans le panneau F2 pour comparer en jouant.
+#  (C'est un float et pas un bool : le panneau F2 ne règle que des nombres.)
+# =============================================================================
+## 1 = physique réelle (air + frottement) ; 0 = anciens plafonds doux (1.10).
+@export var realistic_physics: float = 1.0
+## Vitesse limite (px/s) atteinte tout seul sur une pente de 10° (règle l'air).
+## Réglée aux bots (section 59 de MIGRATION_GODOT4.md) : 1600 freinait trop les
+## sauts et le plat ; 2000 = ~1790 sur 8°, ~2440 sur 15°, ~2830 sur 20°.
+@export var drag_terminal_speed: float = 2000.0
+## Coefficient de frottement de glisse au sol (μ, glace : très faible).
+@export var ground_friction: float = 0.02
+## Pente de référence pour drag_terminal_speed (degrés).
+const DRAG_REF_SLOPE_DEG := 10.0
 
 # =============================================================================
 #  [BOOST FIGURE 1.30] Une figure réussie donne de l'élan (idée de Manu, façon
@@ -314,6 +367,11 @@ func _physics_process(delta: float) -> void:
 func _apply_soft_speed_caps(delta: float) -> void:
 	if _states == null or _states.current == null or _states.current.sub_state_name == "HOOKING":
 		return
+	# [PHYSIQUE RÉELLE 1.49] nouveau calcul (air + frottement) ; l'ancien
+	# (plafonds doux) reste juste en dessous, utilisé si realistic_physics = 0
+	if realistic_physics >= 0.5:
+		_apply_air_drag_and_friction(delta)
+		return
 	var cap := ground_max_speed if is_on_ground else air_max_speed
 	# [BOOST FIGURE 1.30] plafond relevé pendant le boost (et qui redescend doucement)
 	if _trick_boost_left > 0.0:
@@ -323,6 +381,60 @@ func _apply_soft_speed_caps(delta: float) -> void:
 	if speed > cap:
 		var new_speed := cap + (speed - cap) * (1.0 - clampf(over_speed_drag * delta, 0.0, 1.0))
 		_velocity = _velocity * (new_speed / speed)
+
+
+## [PHYSIQUE RÉELLE 1.49] Coefficient k de la résistance de l'air (par unité
+## de masse, en 1/px), déduit de la vitesse limite voulue sur 10° de pente.
+func drag_coefficient() -> float:
+	if drag_terminal_speed <= 1.0:
+		return 0.0
+	return gravity * sin(deg_to_rad(DRAG_REF_SLOPE_DEG)) / (drag_terminal_speed * drag_terminal_speed)
+
+
+## [PHYSIQUE RÉELLE 1.49] Vitesse limite sur une pente donnée (degrés, > 0 =
+## descente) : √(g·sin θ / k). 0 si plat ou montée (pas de vitesse limite :
+## l'air et le frottement finissent par arrêter le pingouin). Sert au
+## compteur de vitesse (SpeedMeter) pour placer son repère.
+func terminal_speed_on_slope(slope_deg: float) -> float:
+	var k := drag_coefficient()
+	if k <= 0.0 or slope_deg <= 0.0:
+		return 0.0
+	return sqrt(gravity * sin(deg_to_rad(slope_deg)) / k)
+
+
+## [PHYSIQUE RÉELLE 1.49] Applique la résistance de l'air (partout) et le
+## frottement de glisse (au sol) sur _velocity, avant move_and_slide().
+## Appelée par _apply_soft_speed_caps (donc jamais pendant le grappin).
+func _apply_air_drag_and_friction(delta: float) -> void:
+	var speed := _velocity.length()
+	if speed < 0.5:
+		return
+	var dir := _velocity / speed
+
+	# --- Boost de figure [1.30] : la poussée reçue ne doit pas être mangée
+	# tout de suite par l'air. Pendant trick_boost_time, la part « boost »
+	# (qui décroît linéairement, comme l'ancien plafond relevé) n'est pas
+	# freinée : l'air ne s'applique qu'à la vitesse au-delà de cette part.
+	var boost_part := 0.0
+	if _trick_boost_left > 0.0:
+		_trick_boost_left -= delta
+		boost_part = _trick_boost_extra * clampf(_trick_boost_left / trick_boost_time, 0.0, 1.0)
+	var dragged_speed := maxf(speed - boost_part, 0.0)
+
+	# --- 1. Résistance de l'air : décélération k·v², au sol comme en l'air
+	var decel := drag_coefficient() * dragged_speed * dragged_speed
+
+	# --- 2. Frottement de glisse (au sol seulement) : μ·g·cos θ.
+	# cos θ = composante verticale de la normale du sol (1 sur le plat).
+	if is_on_ground and ground_friction > 0.0:
+		var n := _get_ground_normal()
+		var cos_theta := absf(n.y) if n != Vector2.ZERO else 1.0
+		decel += ground_friction * gravity * cos_theta
+
+	# On retire la vitesse le long du mouvement, sans jamais changer de sens
+	# (un frottement arrête, il ne fait pas repartir en arrière).
+	var new_speed := maxf(speed - decel * delta, 0.0)
+	_velocity = dir * new_speed
 
 
 # [PHYSIQUE 1.10] Traînée blanche derrière le pingouin à grande vitesse :

@@ -37,10 +37,13 @@ const TIME_LIMITS := {
 ## Avec en plus un NOSE à chaque atterrissage (combos ×2), le même bot fait
 ## 11 800 / 23 000 / 10 000 pts : l'or est donc à portée d'un joueur qui
 ## enchaîne figures et nose, sans être parfait.
+## [PHYSIQUE RÉELLE 1.49] remesuré avec la résistance de l'air (bot figures
+## seules) : 704 = 3600 pts, 917 = 7100, Half-pipe = 5300 (6500 avant : l'air
+## raccourcit un peu les sauts du half-pipe). Arrondi au 500 le plus proche.
 const MEDAL_POINTS_GOLD := {
 	"LevelChill704": 3500,
 	"LevelChill917": 7000,
-	"LevelHalfPipe": 6500,
+	"LevelHalfPipe": 5500,   # 1.48 : 6500
 }
 const SILVER_SHARE := 0.65
 const BRONZE_SHARE := 0.35

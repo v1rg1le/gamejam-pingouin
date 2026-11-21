@@ -10,9 +10,9 @@ extends CanvasLayer
 #    ┌───────────────────────┐
 #    │        95 km/h        │  <- grande valeur, facile à lire en jouant
 #    │   1450 px/s · au sol  │  <- valeur « moteur » + sol / en l'air / grappin
-#    │ ▓▓▓▓▓▓▓▓▓▓▓▓▓░░|░░|░░ │  <- jauge 0 → 2200 px/s
+#    │ ▓▓▓▓▓▓▓▓▓▓▓▓▓░░|░░|░░ │  <- jauge 0 → 3000 px/s (2200 avant la 1.49)
 #    └───────────────────────┘
-#  Sur la jauge, deux traits verticaux :
+#  Sur la jauge (ancienne physique, realistic_physics = 0), deux traits :
 #    - trait BLANC  = plafond au sol   (Player.ground_max_speed, 1450 px/s)
 #    - trait BLEU   = plafond en l'air (Player.air_max_speed,    1750 px/s)
 #  Quand Pinpouin va plus vite que le plafond de là où il est (sol ou air),
@@ -31,6 +31,19 @@ extends CanvasLayer
 #  en pleine partie avec la touche F3 (clavier), sans relancer le niveau.
 #
 #  Aucun nouvel asset : tout est dessiné en code (comme RaceHud.gd).
+#
+#  [PHYSIQUE RÉELLE 1.49] Avec la nouvelle physique (résistance de l'air +
+#  frottement, Player.realistic_physics = 1, réglage par défaut), il n'y a
+#  plus de plafonds fixes. La jauge change donc de sens :
+#    - un seul repère BLANC = la VITESSE LIMITE de la pente sous Pinpouin
+#      (Player.terminal_speed_on_slope) : au-dessus, l'air le ralentit plus
+#      que la pente ne le pousse ; en dessous, il accélère encore. Pas de
+#      repère en l'air, sur le plat ni en montée (pas de vitesse limite) ;
+#    - ORANGE = Pinpouin est en train de PERDRE de la vitesse (accélération
+#      lissée < -150 px/s²), BLEU = il garde ou prend de la vitesse ;
+#    - la ligne du dessous indique aussi la pente : « au sol · descente 8° ».
+#  Avec l'ancienne physique (realistic_physics = 0), l'affichage d'avant
+#  (deux plafonds, orange = frein doux) est conservé tel quel.
 # =============================================================================
 
 ## Même échelle que les distances du mode Sans fin (EndlessScore.PX_PER_METER).
@@ -39,7 +52,7 @@ extends CanvasLayer
 const PX_PER_METER := 55.0
 ## Vitesse correspondant à une jauge pleine (un peu au-dessus du plafond en
 ## l'air pour qu'on voie le dépassement après un pump ou une figure boostée).
-const GAUGE_MAX := 2200.0
+const GAUGE_MAX := 3000.0   # [1.49] jusqu'à SUPER_MAX_SPEED : la physique réelle va plus vite dans les grosses descentes
 ## Touche pour allumer / éteindre le compteur en jeu (F2 = panneau physique).
 const TOGGLE_KEY := KEY_F3
 
@@ -49,7 +62,10 @@ var _kmh_label: Label             # « 95 km/h »
 var _detail_label: Label          # « 1450 px/s · au sol »
 var _gauge: Control               # la jauge dessinée en code (_draw_gauge)
 var _speed := 0.0                 # vitesse affichée (px/s), un peu lissée
-var _over_cap := false            # vrai = frein doux en cours (jauge orange)
+var _over_cap := false            # vrai = jauge orange (frein doux / perte de vitesse)
+var _accel := 0.0                 # [1.49] accélération lissée (px/s²), pour l'orange
+var _last_raw := -1.0             # [1.49] vitesse brute de l'image précédente
+var _limit_mark := 0.0            # [1.49] vitesse limite de la pente (0 = pas de repère)
 
 
 ## Appelé par RaceManager avant add_child().
@@ -142,6 +158,12 @@ func _process(delta: float) -> void:
 	var hooking: bool = player.chain.hooked
 	var on_ground: bool = player.is_on_ground
 	var where := "grappin" if hooking else ("au sol" if on_ground else "en l'air")
+
+	# [PHYSIQUE RÉELLE 1.49] nouvel affichage (voir l'en-tête)
+	if player.realistic_physics >= 0.5:
+		_show_realistic(raw, delta, hooking, on_ground, where)
+		return
+	_limit_mark = 0.0
 	# Plafond qui s'applique là où il est. Pendant le grappin, il n'y a pas
 	# de frein doux (HookingInAirState a son propre réglage) : pas d'orange.
 	var cap: float = player.ground_max_speed if on_ground else player.air_max_speed
@@ -151,6 +173,37 @@ func _process(delta: float) -> void:
 	var kmh: float = _speed / PX_PER_METER * 3.6
 	_kmh_label.text = "%d km/h" % roundi(kmh)
 	_detail_label.text = "%d px/s · %s" % [roundi(_speed), where]
+	_gauge.queue_redraw()
+
+
+# [PHYSIQUE RÉELLE 1.49] Affichage avec la résistance de l'air : repère =
+# vitesse limite de la pente actuelle, orange = Pinpouin ralentit.
+func _show_realistic(raw: float, delta: float, hooking: bool, on_ground: bool, where: String) -> void:
+	# accélération mesurée d'une image à l'autre, lissée (~0,25 s) pour que
+	# la couleur ne clignote pas sur chaque petite bosse
+	if _last_raw >= 0.0 and delta > 0.0:
+		_accel = lerpf(_accel, (raw - _last_raw) / delta, clampf(delta * 4.0, 0.0, 1.0))
+	_last_raw = raw
+	_over_cap = _accel < -150.0
+
+	# pente sous Pinpouin, en degrés (+ = descente dans le sens où il va) :
+	# angle de la normale du sol, retourné si on glisse vers la gauche
+	_limit_mark = 0.0
+	var slope_text := ""
+	if on_ground and not hooking:
+		var n: Vector2 = player._get_ground_normal()
+		if n != Vector2.ZERO:
+			var slope := rad_to_deg(atan2(n.x, -n.y)) * signf(player._velocity.x if absf(player._velocity.x) > 1.0 else 1.0)
+			_limit_mark = player.terminal_speed_on_slope(slope)
+			if slope > 1.0:
+				slope_text = " · descente %d°" % roundi(slope)
+			elif slope < -1.0:
+				slope_text = " · montée %d°" % roundi(-slope)
+			else:
+				slope_text = " · plat"
+
+	_kmh_label.text = "%d km/h" % roundi(_speed / PX_PER_METER * 3.6)
+	_detail_label.text = "%d px/s · %s%s" % [roundi(_speed), where, slope_text]
 	_gauge.queue_redraw()
 
 
@@ -172,6 +225,12 @@ func _draw_gauge() -> void:
 	var fill := Color(1.0, 0.6, 0.15) if _over_cap else Color(0.45, 0.8, 1.0)
 	_gauge.draw_rect(Rect2(0, 0, w * f, h), fill)
 	if player == null or not is_instance_valid(player):
+		return
+	# [PHYSIQUE RÉELLE 1.49] un seul repère : la vitesse limite de la pente
+	if player.realistic_physics >= 0.5:
+		if _limit_mark > 0.0:
+			var xl: float = w * clampf(_limit_mark / GAUGE_MAX, 0.0, 1.0)
+			_gauge.draw_line(Vector2(xl, -2), Vector2(xl, h + 2), Color(1, 1, 1), 2.0)
 		return
 	for mark in [[player.ground_max_speed, Color(1, 1, 1)], [player.air_max_speed, Color(0.55, 0.85, 1.0)]]:
 		var x: float = w * clampf(mark[0] / GAUGE_MAX, 0.0, 1.0)

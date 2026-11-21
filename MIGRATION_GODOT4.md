@@ -1035,3 +1035,41 @@ Demande de l'équipe (21/11) : partager un niveau, et pouvoir l'exporter pour aj
 - `src/ui/race/SpeedMeter.gd` : en haut à droite, sous le bouton pause tactile : km/h (55 px = 1 m, même échelle que les distances du Sans fin), px/s et « au sol / en l'air / grappin », jauge 0 → 2200 px/s avec un trait blanc (plafond au sol) et un trait bleu (plafond en l'air). La jauge devient **orange** quand le frein doux agit.
 - Créé par `RaceManager._start_race()` dans tous les niveaux, solo et multi (pingouin local). En multi, le classement de `RaceHud` passe sous le compteur quand il est affiché.
 - **Tests** : check_all 140 fichiers, 0 échec ; captures PC (course + Sans fin) et téléphone (Options).
+
+## 59. Physique réelle : résistance de l'air + frottement à la place des plafonds (21/11, pour la 1.49)
+
+**Décision de l'équipe** après l'enquête de la section 58 : partir de principes physiques plutôt que de freiner le pingouin au-dessus de 1450 px/s au sol et 1750 en l'air.
+
+- **Ce qui change** (`Player._apply_air_drag_and_friction`, appelée par `_apply_soft_speed_caps`) :
+  - **Résistance de l'air** en k·v², la même au sol et en l'air : plus de changement de règle en touchant le sol. Avec la gravité, elle crée toute seule une vitesse limite qui dépend de la pente, v_lim = √(g·sin θ / k). Réglage `drag_terminal_speed` = vitesse limite sur 10° de pente (k en est déduit, avec la gravité du moment).
+  - **Frottement de glisse** au sol (Coulomb), μ·g·cos θ, très faible sur la glace (`ground_friction` = 0,02, soit 16 px/s²). Il ne fait jamais changer de sens.
+  - Rien pendant le grappin, comme avant. Le PUMP reste volontairement « non physique » (il ajoute de l'énergie).
+  - Boost de figure préservé : pendant le boost, l'air ne freine que la vitesse au-delà de la part « boost » (qui décroît comme l'ancien plafond relevé).
+  - `realistic_physics = 0` remet exactement l'ancien système. C'est le premier curseur du panneau F2, pour comparer en jouant.
+- **Réglage aux bots** :
+  - 1600 px/s sur 10° (premier essai) : le plat était trop freiné (Flat 73,95 s au lieu de 65,15) et le trou « grappin » du Sans fin ne passait plus (0/14).
+  - Cause du trou raté : la vitesse d'APPROCHE. Avant, la gravité poussait au-delà de 1450 sur les îles en légère descente (le bot arrivait à 1550-1630). Maintenant, l'air le retient et le PUMP s'arrêtait à 1450.
+  - **Retenu : `drag_terminal_speed` = 2000** (≈ 1790 px/s sur 8°, 2440 sur 15°, 2830 sur 20°) et **`pump_max_speed` 1450 → 1650**.
+- **Validation** :
+  - Sans fin par type de trou : saut 37/37, grand saut 30/31, grappin 22/23, double 15/15, montée 24/24, plafond 11/11.
+  - Tuto complet 9/9 ateliers.
+  - Toutes les courses terminées, Hook you fool sans chute.
+  - Atterrissage rapide dans une descente : 1981 → 2027 px/s une seconde plus tard (avant : 1989 → 1566).
+  - Vitesse max relevée : 2534 px/s (Nice Slope).
+- **Médailles remesurées** (`RaceManager.MEDAL_GOLD`, `TrickAttack.MEDAL_POINTS_GOLD`) :
+
+  | Niveau | Bot avec figures | Bot sans | Or 1.49 | Or 1.48 |
+  |---|---|---|---|---|
+  | Tutoriel (course finale) | — | 12,72 à 12,97 s | 13 s | 13,5 s |
+  | Flat and fun | 61,55 s | 64,15 s | 62 s | 64 s |
+  | Corridor | 62,00 s | 64,85 s | 62 s | 66,5 s |
+  | Nice Slope | 36,88 s | 41,32 s | 37 s | 49,5 s |
+  | Spaghetti (12 terrains) | 32,3 à 40,5 s | 32,9 à 38,4 s | 38,5 s | 33,5 s |
+  | Hook, you fool ! | 89,03 s | chute | 89 s | 86 s |
+  | Défi figures 704 / 917 / Half-pipe | 3600 / 7100 / 5300 pts | — | 3500 / 7000 / 5500 | 3500 / 7000 / 6500 |
+  | Première glisse (communauté) | 13,08 s | 13,07 s | 13,5 s (inchangé) | 13,5 s |
+
+  Spaghetti : terrain au hasard à chaque partie, l'or couvre 11 terrains sur 12 (un terrain difficile à 40,5 s). Half-pipe : l'air raccourcit un peu les sauts.
+- **Sans fin** : échelle des mètres inchangée (55 px = 1 m, pour ne pas fausser les records). Le bot grappin fait maintenant 3,5 à 5,7 km avant sa 3e chute (avant : 5,0 à 8,0) : l'or (5 km) est un peu plus dur.
+- **Records et fantômes** : ceux faits avant restent, mais la physique a changé ; sur Nice Slope en particulier, les anciens temps seront faciles à battre.
+- **Compteur de vitesse** (`SpeedMeter.gd`), avec la nouvelle physique : un seul repère blanc = la vitesse limite de la pente sous Pinpouin ; orange = il perd de la vitesse ; pente affichée (« au sol · descente 11° »). Jauge jusqu'à 3000 px/s.

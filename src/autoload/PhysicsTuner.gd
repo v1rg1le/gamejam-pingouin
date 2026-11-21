@@ -31,9 +31,14 @@ const PARAMS = [
 	["pump_uphill_factor", "Pump : efficacité en montée", 0.0, 1.0, 0.05],
 	["pump_impulse", "Pump : impulsion à l'appui", 0.0, 400.0, 5.0],
 	["pump_max_speed", "Vitesse max du pump", 500.0, 3000.0, 25.0],
-	["ground_max_speed", "Vitesse max au sol", 800.0, 3000.0, 25.0],
-	["air_max_speed", "Vitesse max en l'air", 800.0, 3000.0, 25.0],
-	["over_speed_drag", "Frottement au-dessus du max", 0.0, 3.0, 0.05],
+	# [PHYSIQUE RÉELLE 1.49] 1 = résistance de l'air + frottement (nouveau),
+	# 0 = anciens plafonds doux (les 3 réglages « ancien » ci-dessous)
+	["realistic_physics", "Physique réelle (1) / ancienne (0)", 0.0, 1.0, 1.0],
+	["drag_terminal_speed", "Air : vitesse limite sur 10° de pente", 600.0, 3000.0, 25.0],
+	["ground_friction", "Frottement de glisse au sol (μ)", 0.0, 0.3, 0.005],
+	["ground_max_speed", "(ancien) Vitesse max au sol", 800.0, 3000.0, 25.0],
+	["air_max_speed", "(ancien) Vitesse max en l'air", 800.0, 3000.0, 25.0],
+	["over_speed_drag", "(ancien) Frottement au-dessus du max", 0.0, 3.0, 0.05],
 	["landing_speed_keep", "Vitesse gardée à l'atterrissage", 0.0, 1.0, 0.05],
 	["air_pump_gravity", "Gravité en pumpant en l'air (×)", 1.0, 4.0, 0.1],   # [PUMP EN L'AIR 1.27]
 	["trick_boost_base", "Boost d'une figure réussie (px/s)", 0.0, 600.0, 10.0],   # [BOOST FIGURE 1.30]
@@ -176,7 +181,10 @@ func _refresh_sliders(player) -> void:
 
 
 func _fmt(v: float) -> String:
-	return str(int(v)) if absf(v) >= 10.0 else "%.2f" % v
+	# [PHYSIQUE RÉELLE 1.49] 3 décimales pour les petits coefficients (μ = 0,005…)
+	if absf(v) >= 10.0:
+		return str(int(v))
+	return "%.3f" % v if absf(v) < 0.1 and v != 0.0 else "%.2f" % v
 
 
 # --- Construction de l'interface (en code, aucun asset) ---------------------------

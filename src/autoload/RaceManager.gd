@@ -94,12 +94,14 @@ const SCORES_SECTION = "scores_v3"   # [MODES 1.25] barème à médailles (avant
 const MEDAL_GOLD := {
 	# [TUTO 1.41] le chrono du tuto ne couvre plus que la COURSE FINALE (après
 	# les ateliers) : temps remesuré au bot sur ce seul tronçon.
-	"LevelBateau": 13.5,          # [TUTO 1.41] course finale seule : bot 13,28 à 13,55 s (sans figures)
-	"LevelRandomFlat": 64.0,      # bot : 63,60 s avec figures (65,15 sans)
-	"LevelRandomCorridor": 66.5,  # bot : 66,40 s sans figures (74,33 avec : figures risquées ici)
-	"LevelRandomNiceSlope": 49.5, # bot : 49,07 s avec figures (52,17 sans)
-	"LevelRandomSpaghetti": 33.5, # bot : 31,3 à 33,6 s selon le terrain (32,55 sans figures)
-	"LevelRandomGap": 86.0,       # [MÉDAILLES 1.48] bot : 85,57 s avec figures, sans chute (avant : 97 estimé)
+	# [PHYSIQUE RÉELLE 1.49] tout remesuré avec la résistance de l'air (bot
+	# « bon joueur », dossier joueur neuf). Valeurs 1.48 en fin de ligne.
+	"LevelBateau": 13.0,          # bot 12,72 à 12,97 s (1.48 : 13,5)
+	"LevelRandomFlat": 62.0,      # bot 61,55 s avec figures, 64,15 sans (1.48 : 64)
+	"LevelRandomCorridor": 62.0,  # bot 62,00 s avec figures, 64,85 sans (1.48 : 66,5)
+	"LevelRandomNiceSlope": 37.0, # bot 36,88 s avec figures, 41,32 sans : grandes descentes plus rapides (1.48 : 49,5)
+	"LevelRandomSpaghetti": 38.5, # bot 32,3 à 38,4 s selon le terrain (40,5 sur un terrain difficile) (1.48 : 33,5)
+	"LevelRandomGap": 89.0,       # gap_bot 89,03 s avec figures, sans chute (1.48 : 86)
 }
 const SILVER_FACTOR := 1.25       # argent = or × 1,25
 const BRONZE_FACTOR := 1.6        # bronze = or × 1,6
