@@ -1111,3 +1111,22 @@ Retour de l'équipe : « on chute pendant longtemps, raccourcir ce temps pour qu
 - **Sans fin** : on réapparaît à **1000 px/s** au lieu de 450 (`EndlessGenerator.RESPAWN_SPEED`), pour ne plus « ramer » après une chute. Le bot grappin fait maintenant 5,1 à 7,2 km avant sa 3e chute (3,5 à 5,7 en 1.49-1.50) ; le pont magique du mode enfant marche toujours.
 - Non-régression : tuto complet, Flat 61,55 s, Nice Slope 36,88 s, Hook you fool 89,03 s, défis figures et niveau de la communauté inchangés ; check_all 140 fichiers, 0 échec.
 - **Au passage** : les figures sont tirées au hasard à chaque saut (`TrixState`, `randomize()`). Le temps du bot qui fait des figures varie donc d'une partie à l'autre : une figure longue qui n'a pas le temps de finir donne une roulade. Exemple : Corridor 62,00 s ou 76,82 s.
+
+## 62. Chute sans retour plus prudente : grappin à portée et longs sauts (21/11, version 1.52)
+
+Retour de l'équipe sur la 1.51 : « la chute dans le vide apparaît trop rapidement des fois ; ne l'active que quand chaque plateforme aux alentours est trop loin pour être grappinée. Attention aux longs sauts, qu'ils ne soient pas pris pour une chute. »
+
+- **Longs sauts** : la trajectoire est maintenant suivie jusqu'au fond du niveau (6 s max, `DOOMED_LOOKAHEAD`), plus seulement 1,2 s. Test sur un niveau dessiné (outil hors projet `longjump_setup.gd`) : tremplin, grand vide sans grappin, piste 3000 px plus bas et loin devant. En 1.51, Pinpouin réapparaissait en plein vol (à x = 6237) alors qu'il allait atterrir ; en 1.52, il atterrit. Si la piste est ratée (3500 px plus bas, à partir de x = 8500), la réapparition n'arrive qu'une fois la piste dépassée.
+- **Prises à portée** (`Player._has_rescue_hook_in_reach`, 32 rayons tout autour, longueur du grappin 1200 px, masque du grappin) : pas de réapparition tant qu'une prise UTILE est à portée :
+  - tout ce qui est à la hauteur du bord d'où il est parti, ou plus haut (blocs, plafonds, coin du bord) ;
+  - le dessus d'une plateforme, même plus bas sur le côté.
+  Ne comptent pas : le dessous d'une plateforme et les murs plus bas que ce bord. Premier essai avec les dessous : en tombant, Pinpouin dérive souvent sous l'île suivante, et la règle ne se déclenchait plus jamais dans le Sans fin (3 s, comme en 1.50).
+- **Vérifié à blanc** (`doom_check.gd`) : 0 fausse alerte (Sans fin 6 types de trous, sans grappin, sans saut ; LevelRandom, SlightOffset, Hook you fool avec et sans grappin, Spaghetti).
+- **Durée des chutes** (quitter le sol → réapparition) :
+
+  | | 1.50 | 1.51 | 1.52 |
+  |---|---|---|---|
+  | Courses (LevelRandom, SlightOffset) | 4,3 à 6,1 s | 1,4 s | 1,7 à 1,9 s |
+  | Sans fin | 3,0 s | 2,25 s | 2,25 s |
+
+- Non-régression : tuto complet (or), Hook you fool 89,03 s sans chute, Sans fin (grappin 25/25, double 18/18, plafond 14/14…) ; check_all 140 fichiers, 0 échec.

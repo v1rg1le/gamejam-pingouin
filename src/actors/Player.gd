@@ -267,7 +267,7 @@ const GHOST_FILTER_MAX_BLOCKED_FRAMES = 6
 @export var fast_fall_speed: float = 900.0
 
 # =============================================================================
-#  [CHUTE COURTE 1.51] « Chute sans retour » : on réapparaît plus vite
+#  [CHUTE COURTE 1.51, revue en 1.52] « Chute sans retour » : on réapparaît plus vite
 # -----------------------------------------------------------------------------
 #  Demande de l'équipe (21/11) : « on chute pendant longtemps, raccourcir ce
 #  temps pour que ce soit moins frustrant d'attendre ». Mesuré aux bots : 3 à
@@ -287,6 +287,22 @@ const GHOST_FILTER_MAX_BLOCKED_FRAMES = 6
 #     atterrir dessus : on ne fait rien) ;
 #   - sa trajectoire (gravité, ~1,2 s devant lui) ne touche rien non plus
 #     (il pourrait encore retomber sur une île plus basse, devant lui) ;
+#     [1.52] suivie jusqu'au fond du niveau (6 s max), plus seulement 1,2 s :
+#     un long saut vers une piste bien plus basse n'est pas une chute ;
+#   - [1.52] aucune prise UTILE pour le grappin à portée (1200 px,
+#     Chain.distance_max). Demande de l'équipe (21/11) : « ne l'active que
+#     quand chaque plateforme aux alentours est trop loin pour être
+#     grappinée ». Une prise est utile si s'y accrocher peut ramener
+#     Pinpouin sur une piste :
+#       * tout ce qui est à la hauteur du bord d'où il est parti, ou plus
+#         haut : blocs de grappin, plafonds, coin du bord lui-même ;
+#       * le DESSUS d'une plateforme (surface tournée vers le haut), même
+#         plus basse, sur le côté : il peut s'y hisser ou y retomber.
+#     Ne comptent PAS : le dessous d'une plateforme et les murs plus bas que
+#     ce bord (pendu dessous ou collé au mur, on ne remonte pas). Vu en test :
+#     en tombant, Pinpouin dérive souvent SOUS l'île suivante ; si son
+#     dessous comptait, la règle ne se déclenchait plus jamais dans le
+#     Sans fin ;
 #   - et tout cela pendant doomed_confirm_time s d'affilée (pas sur 1 image).
 #  Résultat mesuré aux bots : voir section 61 de MIGRATION_GODOT4.md.
 #  doomed_fall_depth = 0 désactive la règle (retour au comportement 1.50).
@@ -296,8 +312,14 @@ const GHOST_FILTER_MAX_BLOCKED_FRAMES = 6
 @export var doomed_fall_depth: float = 600.0
 ## Temps (s) pendant lequel la chute doit rester « sans retour » avant la réapparition.
 @export var doomed_confirm_time: float = 0.15
-## Durée (s) de trajectoire vérifiée devant le pingouin.
-const DOOMED_LOOKAHEAD := 1.2
+## Durée max (s) de trajectoire vérifiée devant le pingouin.
+## [1.52] 1,2 -> 6 s (la simulation s'arrête au fond du niveau) : les longs
+## sauts vers une piste beaucoup plus basse ne sont plus pris pour une chute.
+const DOOMED_LOOKAHEAD := 6.0
+## [1.52] Nombre de rayons lancés tout autour du pingouin pour chercher une
+## prise de grappin utile à portée (un tous les 11,25°, comme les 32 rayons
+## de la caméra AdaptiveCamera).
+const DOOMED_HOOK_RAYS := 32
 var _last_support_y: float = 0.0   # hauteur du dernier appui (sol ou grappin accroché)
 var _doomed_timer: float = 0.0     # depuis combien de temps la chute est « sans retour »
 var last_safe_position: Vector2 = Vector2.ZERO  # dernier endroit sûr (au sol, sans grappin)
@@ -743,12 +765,15 @@ func _is_doomed_fall() -> bool:
 	var q := PhysicsRayQueryParameters2D.create(global_position, Vector2(global_position.x, maxf(bottom, global_position.y + 50.0)), collision_mask, [get_rid()])
 	if not space.intersect_ray(q).is_empty():
 		return false
-	# 2. sa trajectoire ne touche rien (pas de 0,05 s, même gravité que lui)
+	# 2. sa trajectoire ne touche rien (pas de 0,05 s, même gravité que lui).
+	# [1.52] suivie jusqu'au fond du niveau (au plus DOOMED_LOOKAHEAD s). La
+	# résistance de l'air est volontairement ignorée : la trajectoire simulée
+	# va un peu plus loin que la vraie, donc dans le doute on ne tue pas.
 	var pos := global_position
 	var vel := _velocity
 	var step := 0.05
 	var t := 0.0
-	while t < DOOMED_LOOKAHEAD:
+	while t < DOOMED_LOOKAHEAD and pos.y < bottom:
 		var next_vel := vel + Vector2(0.0, gravity * step)
 		var next_pos := pos + next_vel * step
 		var seg := PhysicsRayQueryParameters2D.create(pos, next_pos, collision_mask, [get_rid()])
@@ -757,7 +782,36 @@ func _is_doomed_fall() -> bool:
 		pos = next_pos
 		vel = next_vel
 		t += step
+	# 3. [1.52] aucune prise de grappin à portée
+	if _has_rescue_hook_in_reach(space):
+		return false
 	return true
+
+
+## [CHUTE COURTE 1.52] Vrai s'il existe, à portée du grappin, une prise
+## UTILE qui pourrait encore sauver Pinpouin (voir l'en-tête « CHUTE
+## COURTE »). Rayons de la longueur du grappin (Chain.distance_max) tout
+## autour de lui, sur le même masque de collision que le grappin
+## (Chain.tscn : 2, comme le sol).
+func _has_rescue_hook_in_reach(space: PhysicsDirectSpaceState2D) -> bool:
+	var reach: float = chain.distance_max
+	var origin := global_position
+	for i in DOOMED_HOOK_RAYS:
+		var dir := Vector2.RIGHT.rotated(TAU * float(i) / float(DOOMED_HOOK_RAYS))
+		var q := PhysicsRayQueryParameters2D.create(origin, origin + dir * reach, 2, [get_rid()])
+		var hit := space.intersect_ray(q)
+		if hit.is_empty():
+			continue
+		# à la hauteur du bord d'où il est parti, ou plus haut : bloc, plafond,
+		# coin du bord… (marge de 50 px pour le coin du bord)
+		if hit.position.y <= _last_support_y + 50.0:
+			return true
+		# le DESSUS d'une plateforme (normale vers le haut) : il peut s'y hisser
+		var n: Vector2 = hit.normal
+		if n.y < -0.4:
+			return true
+		# sinon : dessous d'une plateforme ou mur plus bas que le bord -> inutile
+	return false
 
 
 func die() -> void:
