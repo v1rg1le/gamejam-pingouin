@@ -164,6 +164,15 @@ func _input(event: InputEvent) -> void:
 		var pos := _to_reference(event.position)
 		if event.pressed:
 			var b = _button_at(pos)
+			# [GRAPPIN 1.44] retour de Léo : « des fois le grappin part vers
+			# l'arrière ». Cause trouvée : un pouce qui rate de peu un bouton
+			# de GAUCHE (◀ ▶ ↺ ↻, ou l'espace entre eux) touchait la « zone de
+			# jeu » : le grappin partait vers ce point, donc DERRIÈRE et sous
+			# Pinpouin. Maintenant, tout le pavé de gauche appartient aux
+			# boutons : un toucher dedans prend le bouton le plus proche et ne
+			# lance jamais le grappin.
+			if b == null:
+				b = _left_pad_button(pos)
 			if b != null:
 				_finger_down(event.index, b, pos)
 				get_viewport().set_input_as_handled()
@@ -359,10 +368,43 @@ func _button_at(pos: Vector2):
 		# [MODE ENFANT 1.23] zone de toucher encore plus large pour les petits
 		# doigts peu précis (le test enfant ratait souvent les boutons de peu,
 		# ce qui lançait le grappin à la place). 1,25 = réglage normal.
-		var reach: float = 1.6 if Settings.kid_mode else 1.25
+		# [GRAPPIN 1.44] 1,25 -> 1,4 : Léo et Manu lançaient « parfois » le
+		# grappin en visant un bouton (questionnaire).
+		var reach: float = 1.6 if Settings.kid_mode else 1.4
 		if d <= b.r * reach and d < best_d:  # zone de toucher un peu plus large que le dessin
 			best = b
 			best_d = d
+	return best
+
+
+## [GRAPPIN 1.44] Pavé de gauche (◀ ▶ ↺ ↻) : rectangle qui englobe les 4
+## boutons avec une marge (LEFT_PAD_MARGIN). Un toucher dedans = le bouton le
+## plus proche, jamais le grappin libre. null hors du pavé.
+const LEFT_PAD_MARGIN = 70.0
+const LEFT_PAD_IDS = ["left", "right", "rot_l", "rot_r"]
+
+func _left_pad_button(pos: Vector2):
+	var rect := Rect2()
+	var first := true
+	for b in _buttons:
+		if b.id in LEFT_PAD_IDS:
+			var r := Rect2(_pos(b) - Vector2(b.r, b.r), Vector2(b.r, b.r) * 2.0)
+			rect = r if first else rect.merge(r)
+			first = false
+	# jusqu'au bord gauche et au bord bas de l'écran (le pouce y glisse)
+	var vis: Vector2 = get_viewport().get_visible_rect().size
+	rect = rect.grow(LEFT_PAD_MARGIN)
+	rect = rect.expand(Vector2(0, vis.y))
+	if not rect.has_point(pos):
+		return null
+	var best = null
+	var best_d := INF
+	for b in _buttons:
+		if b.id in LEFT_PAD_IDS:
+			var d: float = pos.distance_to(_pos(b))
+			if d < best_d:
+				best = b
+				best_d = d
 	return best
 
 

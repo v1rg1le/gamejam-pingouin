@@ -961,3 +961,20 @@ Demande de l'équipe : plus de coupure nette du fond, une boucle infinie qui sui
 
 ### Icône de l'exe Windows (21/11, 1.43)
 - L'exe Windows avait l'icône de Godot. Il prend maintenant le pingouin ninja de l'appli Android (`icon.png`, agrandi en pixels nets) : nouveau fichier `icon.ico` (16 à 256 px), preset « Windows Desktop » : `application/icon = res://icon.ico`, `modify_resources = true` (Godot 4.7 l'écrit dans l'exe sans outil externe). Vérifié en relisant l'icône dans l'exe.
+
+## 53. Retours du questionnaire : grappin vers l'arrière, interface trop petite (21/11, version 1.44)
+
+Réponses relues dans Google Forms. Léo et Manu ont tous les deux testé sur téléphone Android.
+
+- **Léo : « des fois le grappin part vers l'arrière, mais je sais pas trop dans quels cas »** ; Léo et Manu : grappin lancé « parfois » en visant un bouton.
+  - **Cause trouvée (tactile)** : toucher la zone de jeu lance le grappin vers le point touché (1.11). Un pouce qui rate de peu un bouton de GAUCHE (◀ ▶ ↺ ↻, ou l'espace entre eux) touchait la zone de jeu : le grappin partait vers ce point, donc **derrière et sous** Pinpouin.
+  - **Correction** (`TouchControls.gd`) : tout le pavé de gauche (rectangle autour des 4 boutons, marge 70 px, jusqu'au bas de l'écran) appartient aux boutons. Un toucher dedans prend le bouton le plus proche et ne lance jamais le grappin. Ailleurs, la zone de toucher des boutons passe de ×1,25 à ×1,4 leur taille.
+  - **Même problème au clavier** : Espace visait la souris, même posée et oubliée dans un coin (souvent à gauche, derrière le pingouin). Maintenant (`Player._get_aim_direction`) : clic, ou souris bougée depuis moins de 2 s → on vise la souris ; sinon (Espace, souris immobile) → visée par défaut, vers l'avant et le haut.
+  - Testé : touchers simulés entre les boutons de gauche, au bord de l'écran, sous ◀ → bouton ; au-dessus du pavé et à droite → grappin. Clavier : souris immobile → avant-haut ; clic ou souris bougée → vers la souris.
+- **Manu : « taille de l'interface par défaut : trop petite »** (textes lisibles 3/5).
+  - Sur téléphone, l'interface est agrandie de 15 % de plus (`Settings.MOBILE_UI_BOOST`) : ×1,15 à ×1,5 selon la taille de l'écran (avant ×1,0 à ×1,4). Toujours réglable dans Options → Taille de l'interface.
+  - Les cartes d'aide (`ReadingPause`) se réduisent toutes seules si elles ne tiennent plus à l'écran (la plus longue, celle du Sans fin, dépassait à ×1,6).
+  - Vérifié en captures sur un écran de téléphone simulé (2400 × 1080) à ×1,5 : menus, tuto, carte d'aide, HUD de course, défi figures.
+- **« Appli non sûre » à l'installation (Léo)** : message d'Android pour tout APK installé hors du Play Store, impossible à supprimer depuis le jeu. Texte d'explication FR/EN à mettre sous le téléchargement Android sur itch.io (feuille de route).
+- **Au passage** : si la scène changeait pendant une pause de lecture du maître ninja, le niveau suivant démarrait en pause (`MasterBubble._exit_tree`).
+- Testé : tuto complet au bot (or), 131 fichiers OK.

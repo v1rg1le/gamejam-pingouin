@@ -183,15 +183,22 @@ func _notification(what: int) -> void:
 # multiplié par le réglage « Taille de l'interface » des Options.
 
 ## Échelle automatique (1 sur PC, jusqu'à 1,4 sur un petit téléphone).
+## [INTERFACE 1.44] agrandissement de base de l'interface sur téléphone
+const MOBILE_UI_BOOST := 1.15
+
 func auto_ui_scale() -> float:
 	if not is_mobile_device:
 		return 1.0
 	var screen := DisplayServer.screen_get_size()
 	var dpi := float(DisplayServer.screen_get_dpi())
 	if dpi <= 0.0:
-		return 1.25
+		return 1.25 * MOBILE_UI_BOOST
 	var inches := float(mini(screen.x, screen.y)) / dpi
-	return clampf(1.0 + (5.0 - inches) * 0.17, 1.0, 1.4)
+	# [INTERFACE 1.44] retour de Manu (questionnaire, téléphone Android) :
+	# « taille de l'interface par défaut : trop petite », textes lisibles 3/5.
+	# Tout est agrandi de 15 % sur téléphone : ×1,15 à ×1,5 selon la taille
+	# de l'écran (avant : ×1,0 à ×1,4). Toujours réglable dans les Options.
+	return clampf((1.0 + (5.0 - inches) * 0.17) * MOBILE_UI_BOOST, 1.15, 1.5)
 
 
 ## Échelle du HUD et des menus EN JEU (calques agrandis par UiScaler).

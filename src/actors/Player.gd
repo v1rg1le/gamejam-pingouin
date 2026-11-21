@@ -674,6 +674,12 @@ func teleport_to(pos: Vector2, vel: Vector2) -> void:
 
 
 func _input(event):
+	# [GRAPPIN 1.44] clavier + souris : on retient si la souris sert vraiment
+	# (mouvement récent ou clic du grappin), voir _get_aim_direction()
+	if event is InputEventMouseMotion and event.device != InputEvent.DEVICE_ID_EMULATION:
+		_mouse_moved_at = Time.get_ticks_msec() / 1000.0
+	if event.is_action_pressed("hook"):
+		_hook_by_mouse = event is InputEventMouseButton
 	if Input.is_action_pressed("debug_cam_right") and DEBUG_CAM:
 		camera.offset += Vector2(1000,0)
 #		camera.offset += lerp(camera.offset, Vector2(1000,0), 0.1)
@@ -726,6 +732,11 @@ func handle_input(delta: float) -> void:
 func update() -> void:
 	_states.current._update(self)
 
+## [GRAPPIN 1.44] souris bougée depuis moins de ce temps (s) = on vise avec elle
+const MOUSE_AIM_MEMORY := 2.0
+var _mouse_moved_at := -100.0     # dernier mouvement réel de la souris (s)
+var _hook_by_mouse := false       # dernier grappin lancé au clic (et pas à Espace)
+
 func _get_aim_direction() -> Vector2:
 	match Settings.controls:
 		Settings.GAMEPAD:
@@ -738,7 +749,18 @@ func _get_aim_direction() -> Vector2:
 			# (vers l'avant et le haut), comme quand on ne vise pas à la manette.
 			return Settings.touch_aim
 		Settings.KBD_MOUSE, _:
-			return (get_global_mouse_position() - global_position).normalized()
+			# [GRAPPIN 1.44] retour de Léo : « des fois le grappin part vers
+			# l'arrière ». Au clavier, la touche Espace visait la SOURIS, même
+			# posée et oubliée dans un coin de l'écran (souvent à gauche,
+			# derrière le pingouin qui file vers la droite). Maintenant :
+			#  - clic du grappin, ou souris bougée depuis moins de
+			#    MOUSE_AIM_MEMORY s : on vise la souris, comme avant ;
+			#  - sinon (Espace, souris immobile) : visée par défaut, vers
+			#    l'avant et le haut (Vector2.ZERO, comme manette sans stick).
+			var mouse_recent: bool = Time.get_ticks_msec() / 1000.0 - _mouse_moved_at < MOUSE_AIM_MEMORY
+			if _hook_by_mouse or mouse_recent:
+				return (get_global_mouse_position() - global_position).normalized()
+			return Vector2.ZERO
 
 
 func _on_Chain_chain_hooked(current_length):

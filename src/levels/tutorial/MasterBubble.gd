@@ -252,6 +252,15 @@ func _start_pause() -> void:
 	_refresh_text()
 
 
+# [TUTO 1.44] Si la scène change pendant une pause de lecture (bouton retour
+# Android, outil de test…), on rend la main : sinon le niveau suivant
+# démarrerait encore en pause.
+func _exit_tree() -> void:
+	if _pausing:
+		_pausing = false
+		get_tree().paused = _was_paused
+
+
 func _end_pause() -> void:
 	_pausing = false
 	get_tree().paused = _was_paused

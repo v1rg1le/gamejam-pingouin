@@ -52,6 +52,7 @@ static func is_open() -> bool:
 var _title: Label
 var _text: Label
 var _hint: Label
+var _panel: PanelContainer      # [INTERFACE 1.44] pour vérifier qu'il tient à l'écran
 
 
 func _init() -> void:
@@ -67,6 +68,7 @@ func _init() -> void:
 	center.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(center)
 	var panel := PanelContainer.new()
+	_panel = panel
 	var style := StyleBoxFlat.new()
 	style.bg_color = Color(0.06, 0.1, 0.22, 0.94)
 	style.border_color = Color(1, 0.94, 0.4)
@@ -98,9 +100,24 @@ func _label(size: int, color: Color) -> Label:
 
 func _ready() -> void:
 	UiScaler.apply(self)   # [RESPONSIVE 1.14] texte plus gros sur téléphone
+	_fit_to_screen()
 	_was_paused = get_tree().paused
 	get_tree().paused = true
 	_opened_at = Time.get_ticks_msec() / 1000.0
+
+
+## [INTERFACE 1.44] L'interface est plus grande sur téléphone (×1,15) : une
+## carte d'aide longue (Sans fin, mode Score…) pourrait dépasser de l'écran.
+## On garde l'agrandissement voulu, mais jamais plus que ce qui tient (94 %).
+func _fit_to_screen() -> void:
+	if _panel == null or not is_inside_tree():
+		return
+	var need: Vector2 = _panel.get_combined_minimum_size()
+	var avail: Vector2 = get_viewport().get_visible_rect().size * 0.94
+	if need.x <= 0.0 or need.y <= 0.0:
+		return
+	var s: float = minf(Settings.hud_scale(), minf(avail.x / need.x, avail.y / need.y))
+	UiScaler.apply(self, maxf(s, 0.5))
 
 
 func _set_text(title: String, text: String) -> void:
@@ -110,6 +127,7 @@ func _set_text(title: String, text: String) -> void:
 	var how := "Touche l'écran" if Settings.controls == Settings.TOUCH else ("Appuie sur un bouton" if Settings.controls == Settings.GAMEPAD else "Appuie sur une touche")
 	_hint.text = how + " pour continuer   ·   aide désactivable dans Options"
 	_opened_at = Time.get_ticks_msec() / 1000.0
+	_fit_to_screen()
 
 
 func _input(event: InputEvent) -> void:
