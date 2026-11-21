@@ -274,6 +274,9 @@ func chunk_at(x: float):
 
 ## [SANS FIN 1.32] Point de réapparition après une chute : début de l'île
 ## d'avant le trou raté, avec un peu d'élan (Player._pick_respawn_sample).
+## [CHUTE COURTE 1.51] vitesse de départ après une réapparition (px/s)
+const RESPAWN_SPEED := 1000.0
+
 func respawn_sample(x: float):
 	# l'île de départ du trou raté = la dernière île où il a glissé (en tombant,
 	# le pingouin peut dériver sous l'île SUIVANTE : chunk_at(x) la donnerait,
@@ -284,4 +287,7 @@ func respawn_sample(x: float):
 	if c == null:
 		return null
 	var rx: float = c.island_start.x + 350.0
-	return {"pos": Vector2(rx, surface_y(c, rx) - 30.0), "vel": Vector2(450.0, 0.0)}
+	# [CHUTE COURTE 1.51] on repart à 1000 px/s (avant : 450) : après une chute,
+	# on ne « rame » plus plusieurs secondes pour retrouver de la vitesse
+	# (retour de l'équipe : l'attente après une chute était frustrante)
+	return {"pos": Vector2(rx, surface_y(c, rx) - 30.0), "vel": Vector2(RESPAWN_SPEED, 0.0)}

@@ -265,6 +265,41 @@ const GHOST_FILTER_MAX_BLOCKED_FRAMES = 6
 @export var max_fall_time: float = 4.0
 ## Vitesse verticale (px/s) à partir de laquelle on considère qu'on "tombe vite".
 @export var fast_fall_speed: float = 900.0
+
+# =============================================================================
+#  [CHUTE COURTE 1.51] « Chute sans retour » : on réapparaît plus vite
+# -----------------------------------------------------------------------------
+#  Demande de l'équipe (21/11) : « on chute pendant longtemps, raccourcir ce
+#  temps pour que ce soit moins frustrant d'attendre ». Mesuré aux bots : 3 à
+#  6 s entre le moment où Pinpouin quitte le sol et la réapparition (règles 1
+#  et 2 ci-dessous : passer 1500 px sous le point le plus bas du niveau, ou
+#  4 s de chute rapide).
+#  Règle 3 (nouvelle) : dès qu'il est CERTAIN que Pinpouin ne peut plus se
+#  rattraper, on le fait réapparaître. « Certain » = tout à la fois :
+#   - il est en l'air, il descend, sans grappin accroché NI en vol (un
+#     grappin lancé peut encore le sauver) ;
+#   - il est déjà tombé de doomed_fall_depth px sous son dernier appui (sol
+#     ou grappin). À 600 px sous le bord d'un trou, les prises de grappin
+#     (600 px AU-DESSUS du bord dans le Sans fin, le tuto et les niveaux
+#     dessinés) sont à plus de 1200 px, la portée du grappin ;
+#   - rien sous lui : un rayon vertical jusqu'au fond du niveau ne touche
+#     aucun sol (s'il y a une piste plus bas, comme dans Spaghetti, il va
+#     atterrir dessus : on ne fait rien) ;
+#   - sa trajectoire (gravité, ~1,2 s devant lui) ne touche rien non plus
+#     (il pourrait encore retomber sur une île plus basse, devant lui) ;
+#   - et tout cela pendant doomed_confirm_time s d'affilée (pas sur 1 image).
+#  Résultat mesuré aux bots : voir section 61 de MIGRATION_GODOT4.md.
+#  doomed_fall_depth = 0 désactive la règle (retour au comportement 1.50).
+# =============================================================================
+## Profondeur (px) sous le dernier appui à partir de laquelle une chute dans
+## le vide est « sans retour » (0 = règle désactivée).
+@export var doomed_fall_depth: float = 600.0
+## Temps (s) pendant lequel la chute doit rester « sans retour » avant la réapparition.
+@export var doomed_confirm_time: float = 0.15
+## Durée (s) de trajectoire vérifiée devant le pingouin.
+const DOOMED_LOOKAHEAD := 1.2
+var _last_support_y: float = 0.0   # hauteur du dernier appui (sol ou grappin accroché)
+var _doomed_timer: float = 0.0     # depuis combien de temps la chute est « sans retour »
 var last_safe_position: Vector2 = Vector2.ZERO  # dernier endroit sûr (au sol, sans grappin)
 ## Au respawn, on "rembobine" de ce nombre de secondes avant la dernière glisse
 ## au sol, et on rend la vitesse qu'on avait à ce moment-là : on peut donc
@@ -307,6 +342,7 @@ func _ready():
 	# [MORT / RESPAWN] point de départ = premier point sûr ; le "fond" du niveau
 	# est calculé une fois que tout le décor (généré en _ready) existe.
 	last_safe_position = global_position
+	_last_support_y = global_position.y   # [CHUTE COURTE 1.51] point d'appui de départ
 	call_deferred("_compute_fall_death_y")
 
 func _on_EnemyDetector_area_entered(_area):
@@ -675,8 +711,53 @@ func _update_fall_and_safe_position(delta: float) -> void:
 		_fall_timer += delta
 		if _fall_timer > max_fall_time:
 			die()
+			return
 	else:
 		_fall_timer = 0.0
+
+	# Règle 3 [CHUTE COURTE 1.51] : chute « sans retour » (voir les réglages)
+	if is_on_ground or is_almost_on_ground or chain.hooked:
+		_last_support_y = global_position.y
+		_doomed_timer = 0.0
+	elif _is_doomed_fall():
+		_doomed_timer += delta
+		if _doomed_timer >= doomed_confirm_time:
+			print("[MORT] chute sans retour (%d px sous le dernier appui)" % int(global_position.y - _last_support_y))
+			die()
+	else:
+		_doomed_timer = 0.0
+
+
+## [CHUTE COURTE 1.51] Vrai si Pinpouin tombe dans le vide sans pouvoir se
+## rattraper (toutes les conditions de l'en-tête « CHUTE COURTE »).
+func _is_doomed_fall() -> bool:
+	if doomed_fall_depth <= 0.0 or _velocity.y <= 0.0:
+		return false
+	if chain.flying or chain.hooked:
+		return false   # un grappin lancé peut encore le sauver
+	if global_position.y < _last_support_y + doomed_fall_depth:
+		return false   # pas encore assez bas
+	var space := get_world_2d().direct_space_state
+	# 1. rien sous lui, jusqu'au fond du niveau (ou 6000 px si pas de fond connu)
+	var bottom: float = fall_death_y if fall_death_y < INF else global_position.y + 6000.0
+	var q := PhysicsRayQueryParameters2D.create(global_position, Vector2(global_position.x, maxf(bottom, global_position.y + 50.0)), collision_mask, [get_rid()])
+	if not space.intersect_ray(q).is_empty():
+		return false
+	# 2. sa trajectoire ne touche rien (pas de 0,05 s, même gravité que lui)
+	var pos := global_position
+	var vel := _velocity
+	var step := 0.05
+	var t := 0.0
+	while t < DOOMED_LOOKAHEAD:
+		var next_vel := vel + Vector2(0.0, gravity * step)
+		var next_pos := pos + next_vel * step
+		var seg := PhysicsRayQueryParameters2D.create(pos, next_pos, collision_mask, [get_rid()])
+		if not space.intersect_ray(seg).is_empty():
+			return false
+		pos = next_pos
+		vel = next_vel
+		t += step
+	return true
 
 
 func die() -> void:
@@ -749,6 +830,8 @@ func _do_respawn() -> void:
 		_velocity = Vector2(200 * facing, 0)
 	rotation = 0.0
 	chain_velocity = Vector2.ZERO
+	_last_support_y = global_position.y   # [CHUTE COURTE 1.51] on repart d'ici
+	_doomed_timer = 0.0
 	_states.go_to_state(self, "in_air")
 	camera.reset_smoothing()  # la caméra saute directement au pingouin
 	Sfx.play("reapparition", -4.0)   # [BRUITAGES 1.34] petit « pop »
@@ -780,6 +863,8 @@ func teleport_to(pos: Vector2, vel: Vector2) -> void:
 		last_safe_position = pos
 		if landing != null:
 			landing.fresh_spawn = true   # [TAIL 1.50] pas de « TAIL ! » gratuit en reprenant l'atelier
+		_last_support_y = pos.y   # [CHUTE COURTE 1.51]
+		_doomed_timer = 0.0
 		_states.go_to_state(self, "in_air")
 		camera.reset_smoothing()   # la caméra saute directement au pingouin
 		Sfx.play("reapparition", -4.0)

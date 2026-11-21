@@ -1094,3 +1094,20 @@ Demande de l'équipe : le « tail » (atterrissage bec relevé, glisse debout) d
   - Flat 61,55 s et Nice Slope 36,88 s inchangés ; Sans fin sans chute ;
   - défis figures : 917 = 7100 et Half-pipe = 5300 inchangés. 704 = 2600 au lieu de 3600 : ce n'est pas une régression, ce score du bot est très sensible (2800 à 3700 en changeant le frottement de 0,019 à 0,021) ; or 3500 gardé ;
   - check_all 140 fichiers, 0 échec.
+
+## 61. Chute plus courte avant la réapparition (21/11, version 1.51)
+
+Retour de l'équipe : « on chute pendant longtemps, raccourcir ce temps pour que ce soit moins frustrant d'attendre ».
+
+- **Avant** (mesuré aux bots, du moment où Pinpouin quitte le sol jusqu'à la réapparition) : 3,0 s dans le Sans fin, 4,3 à 6,1 s dans les courses. Seules deux règles existaient : passer 1500 px sous le point le plus bas du niveau, ou 4 s de chute rapide.
+- **Règle 3, « chute sans retour »** (`Player._is_doomed_fall`, réglages `doomed_fall_depth` = 600 px, `doomed_confirm_time` = 0,15 s). On réapparaît dès que tout est vrai à la fois :
+  - en l'air, en train de descendre, sans grappin accroché ni lancé ;
+  - au moins 600 px sous le dernier appui (sol ou grappin) : les prises de grappin, 600 px au-dessus du bord des trous, sont alors hors de portée (1200 px) ;
+  - aucun sol sous lui jusqu'au fond du niveau (s'il y a une piste plus bas, comme dans Spaghetti, il atterrit dessus) ;
+  - sa trajectoire ne touche rien pendant 1,2 s.
+  `doomed_fall_depth = 0` désactive la règle.
+- **Vérifiée « à blanc »** (outil hors projet `doom_check.gd`) : la règle est coupée, et on note chaque fois qu'elle aurait tué, puis ce qui se passe vraiment. Sur 129 cas (Sans fin sans grappin, sans saut, LevelRandom, SlightOffset, Hook you fool sans grappin), Pinpouin est mort à chaque fois : **0 fausse alerte**. Sur les parties où le bot passe ses trous (6 types du Sans fin, Spaghetti et ses pistes empilées), elle ne s'est jamais déclenchée par erreur.
+- **Après** : 1,4 s dans les courses (avant 4,3 à 6,1 s), 2,25 s dans le Sans fin (avant 3,0 s ; Pinpouin y saute avant de tomber, il part donc de plus haut).
+- **Sans fin** : on réapparaît à **1000 px/s** au lieu de 450 (`EndlessGenerator.RESPAWN_SPEED`), pour ne plus « ramer » après une chute. Le bot grappin fait maintenant 5,1 à 7,2 km avant sa 3e chute (3,5 à 5,7 en 1.49-1.50) ; le pont magique du mode enfant marche toujours.
+- Non-régression : tuto complet, Flat 61,55 s, Nice Slope 36,88 s, Hook you fool 89,03 s, défis figures et niveau de la communauté inchangés ; check_all 140 fichiers, 0 échec.
+- **Au passage** : les figures sont tirées au hasard à chaque saut (`TrixState`, `randomize()`). Le temps du bot qui fait des figures varie donc d'une partie à l'autre : une figure longue qui n'a pas le temps de finir donne une roulade. Exemple : Corridor 62,00 s ou 76,82 s.
