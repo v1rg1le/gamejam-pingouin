@@ -125,6 +125,48 @@ func _make_label(size: int, color: Color) -> Label:
 	return l
 
 
+# =============================================================================
+#  [BANDEAUX DISCRETS 1.55] Les bandeaux d'arrivée s'effacent tout seuls
+# -----------------------------------------------------------------------------
+#  Retour de Manu (21/11) : le bandeau « BRAVO ! Reste faire des figures… »
+#  (Chill) prend beaucoup de place pendant qu'on fait des figures dans le
+#  half-pipe ; idem pour le panneau de résultat (temps, record, score) en
+#  mode Score. Choix de l'équipe : on les laisse bien lisibles FADE_DELAY
+#  secondes (3 s), puis ils deviennent presque transparents (FADE_ALPHA)
+#  en FADE_TIME secondes. Ils ne disparaissent pas complètement : on peut
+#  toujours relire en plissant les yeux, et rien n'est caché derrière.
+#  Si le contenu change (ex. en multi : « 2 / 3 arrivés »), le bandeau
+#  redevient bien visible 3 s pour qu'on voie la nouvelle info.
+#  Le compte à rebours du BONUS HALF-PIPE (Score) n'est PAS concerné : c'est
+#  une info qui change à chaque seconde, et il n'a pas de fond.
+# =============================================================================
+const FADE_DELAY := 3.0    # s pendant lesquelles le bandeau reste bien lisible
+const FADE_TIME := 0.8     # s pour devenir transparent (fondu doux)
+const FADE_ALPHA := 0.15   # opacité finale : « à peine visible »
+
+## [BANDEAUX DISCRETS 1.55] Rend `panel` bien visible tout de suite, puis
+## l'estompe jusqu'à FADE_ALPHA après FADE_DELAY s. Un nouvel appel (contenu
+## mis à jour) annule le fondu en cours et recommence le délai.
+func _show_then_fade(panel: Control, content: String) -> void:
+	if panel == null:
+		return
+	# même texte qu'avant (ex. signal multi renvoyé sans changement) : on ne
+	# fait pas « clignoter » le bandeau, le fondu continue / reste fini
+	if panel.visible and panel.get_meta("fade_text", null) == content:
+		return
+	panel.set_meta("fade_text", content)
+	# fondu précédent de ce même bandeau : on l'arrête (gardé en méta du nœud)
+	var old_tween = panel.get_meta("fade_tween", null)
+	if old_tween is Tween and (old_tween as Tween).is_valid():
+		(old_tween as Tween).kill()
+	panel.modulate.a = 1.0          # bien lisible pendant FADE_DELAY s
+	var tween := panel.create_tween()
+	tween.tween_interval(FADE_DELAY)
+	tween.tween_property(panel, "modulate:a", FADE_ALPHA, FADE_TIME) \
+			.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
+	panel.set_meta("fade_tween", tween)
+
+
 func _process(_delta: float) -> void:
 	_time_label.text = RaceManager.format_time(RaceManager.race_time)
 	# [VITESSE 1.48] le compteur de vitesse (SpeedMeter) occupe le coin en haut
@@ -309,6 +351,7 @@ func show_result(time: float, is_record: bool, previous_best: float, score := {}
 	_result_panel.visible = true
 	_result_panel.reset_size()
 	_center_result()
+	_show_then_fade(_result_panel, _result_label.text)   # [BANDEAUX DISCRETS 1.55] lisible 3 s puis presque transparent
 
 
 ## [SCORE 1.5] Détail du score sous le temps : vitesse + figures = SCORE.
@@ -363,6 +406,7 @@ func show_multi_result(time: float, rank: int, total: int, score := {}) -> void:
 	_result_panel.visible = true
 	_result_panel.reset_size()
 	_center_result()
+	_show_then_fade(_result_panel, _result_label.text)   # [BANDEAUX DISCRETS 1.55] idem en multi (revient 3 s à chaque mise à jour)
 
 
 func _center_result() -> void:
@@ -411,3 +455,4 @@ func show_chill_finish(free_ride: bool) -> void:
 	_chill_panel.reset_size()
 	var view: Vector2 = _ui_root.size if _ui_root != null else get_viewport().get_visible_rect().size
 	_chill_panel.position = Vector2((view.x - _chill_panel.size.x) * 0.5, 60.0)
+	_show_then_fade(_chill_panel, _chill_label.text)   # [BANDEAUX DISCRETS 1.55] « BRAVO ! » lisible 3 s puis presque transparent

@@ -1163,3 +1163,11 @@ Retour de l'équipe sur la 1.51 : « la chute dans le vide apparaît trop rapide
   | 1.54, grappin accroché au-dessus | 661 px | 692 px | 631 px |
 
 - **Non-régression** (même résultat qu'en 1.53) : Nice Slope 41,17 s, Flat 63,02 s (bot sans figures), défi Half-pipe 11 500 points (11 650 en 1.53, figures tirées au hasard), tuto complet (or), Sans fin grappin 11/11, double 5/5, montée 7/7, plafond 2/2 ; check_all 140 fichiers, 0 échec.
+
+## 65. Bandeaux d'arrivée qui s'effacent (21/11, pour la 1.55)
+
+- **Demande de l'équipe** : le bandeau « BRAVO ! Reste faire des figures autant que tu veux » (Chill) prend trop de place pendant les figures dans le half-pipe ; pareil pour le panneau de résultat du mode Score.
+- **Fait** (`RaceHud._show_then_fade`, réglages `FADE_DELAY` = 3 s, `FADE_TIME` = 0,8 s, `FADE_ALPHA` = 0,15) : le bandeau Chill et le panneau de résultat (solo et multi) restent bien lisibles 3 s, puis deviennent presque transparents par un fondu doux. Ils ne disparaissent pas complètement.
+- Si le texte change (en multi : « 2 / 3 arrivés », classement), le bandeau redevient lisible 3 s. Même texte renvoyé : rien ne bouge (pas de clignotement).
+- Pas touché : le compte à rebours « BONUS HALF-PIPE : N s » du mode Score (info qui change chaque seconde, sans fond).
+- **Testé** (`fade_test.gd`) : opacité 1,00 à 2,9 s, 0,57 à 3,4 s, 0,15 à 4 s et après ; rappel avec le même texte : reste à 0,15 ; nouveau texte : revient à 1. check_all 140 fichiers, 0 échec.
