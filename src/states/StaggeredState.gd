@@ -4,7 +4,9 @@ class_name StaggeredState
 var super_state_name: = "STAGGERED"
 var sub_state_name: = "STAGGERED"
 
-@export var staggered_time: = 2.0
+## [ROULADE 1.50] 2 s -> 1 s, demande de l'équipe : « 1 s pour tous, même
+## pour une figure juste ratée, 2 s c'est bien trop »
+@export var staggered_time: = 1.0
 var timer: Timer
 
 var animations = ["stuck", "staggered"]

@@ -778,6 +778,8 @@ func teleport_to(pos: Vector2, vel: Vector2) -> void:
 		# une chute juste après nous renverrait AVANT le point d'arrivée
 		_safe_history.clear()
 		last_safe_position = pos
+		if landing != null:
+			landing.fresh_spawn = true   # [TAIL 1.50] pas de « TAIL ! » gratuit en reprenant l'atelier
 		_states.go_to_state(self, "in_air")
 		camera.reset_smoothing()   # la caméra saute directement au pingouin
 		Sfx.play("reapparition", -4.0)

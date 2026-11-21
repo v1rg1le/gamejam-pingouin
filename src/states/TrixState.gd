@@ -16,8 +16,18 @@ func _handle_input(player: CharacterBody2D, delta: float) -> void:
 #		return
 
 	if player.is_on_ground:
-		print('to staggered')
-		player._states.go_to_state(player, "staggered")
+		# [ROULADE 1.50] Demande de l'équipe : toucher le sol en pleine figure
+		# fait la même chute que sur le dos (neige + roulade 0,5 s + étourdi
+		# 1 s, CrashState), au lieu de rester sonné 2 s arrêté net.
+		# Mode enfant : pas de roulade (comme la chute sur le dos), juste
+		# étourdi 1 s (StaggeredState.staggered_time, 2 -> 1 s en 1.50).
+		if Settings.kid_mode:
+			print('to staggered')
+			player._states.go_to_state(player, "staggered")
+		else:
+			print('figure ratée : roulade')
+			player.landing.snow_burst(player.global_position, player._velocity)
+			player._states.go_to_state(player, "crashing")
 #		player._states.current = player._states.staggered
 #		player._states.current._enter(player)
 

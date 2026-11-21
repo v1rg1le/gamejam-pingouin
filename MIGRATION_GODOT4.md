@@ -1073,3 +1073,24 @@ Demande de l'équipe (21/11) : partager un niveau, et pouvoir l'exporter pour aj
 - **Sans fin** : échelle des mètres inchangée (55 px = 1 m, pour ne pas fausser les records). Le bot grappin fait maintenant 3,5 à 5,7 km avant sa 3e chute (avant : 5,0 à 8,0) : l'or (5 km) est un peu plus dur.
 - **Records et fantômes** : ceux faits avant restent, mais la physique a changé ; sur Nice Slope en particulier, les anciens temps seront faciles à battre.
 - **Compteur de vitesse** (`SpeedMeter.gd`), avec la nouvelle physique : un seul repère blanc = la vitesse limite de la pente sous Pinpouin ; orange = il perd de la vitesse ; pente affichée (« au sol · descente 11° »). Jauge jusqu'à 3000 px/s.
+
+## 60. TAIL comme le NOSE, équilibre sur la tail, roulade pour les figures ratées (21/11, pour la 1.50)
+
+Demande de l'équipe : le « tail » (atterrissage bec relevé, glisse debout) doit marcher comme le nose ; pendant la glisse debout, pouvoir basculer vers le ventre ou vers le dos (chute) ; et la roulade de la chute aussi pour une figure ratée, avec « 1 s pour tous » au lieu de 2 s.
+
+- **TAIL !** (`LandingStyle.TAIL_POINTS` = 50, `TrickScore._on_landed`, style `"feet"` inchangé pour le tuto) : un atterrissage bec relevé ajoute « Tail » aux éléments du saut. Il compte dans le combo, s'affiche « +50 TAIL ! » et donne le boost de figure. L'atelier « Figures » du tuto ne le prend pas pour une figure (comme Nose et Vrille).
+- **Équilibre sur la tail** (`LandingStyle._update_tail_balance`, choix de l'équipe : touches de rotation) : pendant la glisse debout, la touche « vers l'avant » (horaire en allant à droite) penche Pinpouin vers le ventre ; « vers l'arrière » (trigo) vers le dos. Le sens suit le sens de la glisse, comme pour le nose.
+  - Penché de 35° vers l'avant (`TAIL_TO_BELLY_DEG`, ~0,25 s d'appui) : il se couche et glisse sur le ventre, avec un petit « flop » de neige. Rien à gagner (choix de l'équipe).
+  - Penché de 70° vers l'arrière (`TAIL_FALL_DEG`, ~0,5 s d'appui) : chute, avec la même roulade que sur le dos. En relâchant avant, il se redresse tout seul (`TAIL_RETURN_SPEED_DEG`).
+  - Seul le dessin penche (`tail_tilt`) : la physique de la glisse ne change pas. Mode enfant : jamais de chute.
+- **Figure ratée** (`TrixState`) : toucher le sol en pleine figure fait maintenant la roulade (neige + 0,5 s de roulade + 1 s étourdi, `CrashState`) au lieu de rester sonné 2 s arrêté net. Les points du saut sont perdus tout de suite (« Raté ! »). Mode enfant : pas de roulade, étourdi 1 s.
+- **1 s pour tous** : `StaggeredState.staggered_time` 2 → 1 s.
+- **Bug évité au passage** : à chaque début de niveau, Pinpouin apparaît en l'air et retombait bec relevé sur le tremplin de départ. Il aurait gagné un « TAIL ! » gratuit (points + boost). Le premier contact après une apparition ne compte plus (`LandingStyle.fresh_spawn`, remis à vrai par une réapparition et par le retour au début d'un atelier du tuto).
+- **Tuto** : consigne de l'atelier « Sur les pattes » complétée (TAIL, bascule vers le ventre, chute en arrière) + un indice.
+- **Testé** :
+  - bot qui atterrit bec relevé : « +50 TAIL ! », puis ventre en 0,25 s (scénario A), chute + roulade + étourdi 1 s + repart (scénario B) ; figure lancée juste avant le sol : roulade puis 1 s étourdi (scénario C) ;
+  - plus de TAIL au départ ;
+  - tuto complet 9/9 (normal et mode enfant) ;
+  - Flat 61,55 s et Nice Slope 36,88 s inchangés ; Sans fin sans chute ;
+  - défis figures : 917 = 7100 et Half-pipe = 5300 inchangés. 704 = 2600 au lieu de 3600 : ce n'est pas une régression, ce score du bot est très sensible (2800 à 3700 en changeant le frottement de 0,019 à 0,021) ; or 3500 gardé ;
+  - check_all 140 fichiers, 0 échec.

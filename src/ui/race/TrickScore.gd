@@ -99,6 +99,11 @@ func _physics_process(_delta: float) -> void:
 	if st == sm.staggered and _prev_state != sm.staggered:
 		_lose("Raté !")
 		_reset_spin()
+	# [ROULADE 1.50] une figure ratée part maintenant en roulade (CrashState)
+	# avant d'être étourdi : on perd les points TOUT DE SUITE, au contact
+	if st == sm.crashing and _prev_state == sm.trixing:
+		_lose("Raté !")
+		_reset_spin()
 
 	# 5. Vrilles : rotation cumulée en l'air (hors grappin, qui fait tourner
 	#    le pingouin tout seul)
@@ -128,6 +133,9 @@ func _on_landed(style: String) -> void:
 		return
 	if style == "nose":
 		_add("Nose", LandingStyle.NOSE_POINTS)
+	elif style == "feet":
+		# [TAIL 1.50] atterrissage bec relevé : « TAIL ! », comme le nose
+		_add("Tail", LandingStyle.TAIL_POINTS)
 	elif style == "crash":
 		_lose("Chute !")
 		_reset_spin()
@@ -155,6 +163,9 @@ func bank() -> void:
 	for item in _pending:
 		if item[0] == "Nose":
 			label += "  NOSE !"
+			break
+		if item[0] == "Tail":   # [TAIL 1.50]
+			label += "  TAIL !"
 			break
 	_pending.clear()
 	# [BRUITAGES 1.34] « ding » de figure réussie ; un combo monte d'un cran par figure

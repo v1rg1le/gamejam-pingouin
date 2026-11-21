@@ -10,7 +10,8 @@ class_name CrashState
 #  mais plus court).
 #
 #  Déroulé (déclenché par LandingStyle.gd quand le pingouin touche le sol à
-#  plus de 120° de la pente) :
+#  plus de 120° de la pente ; [1.50] aussi par TrixState, figure pas finie
+#  avant le sol, et par LandingStyle en tail trop penché vers l'arrière) :
 #    1. explosion de neige (LandingStyle.snow_burst) au point de contact ;
 #    2. roulade ROLL_TIME s : le dessin « boule » (figure Boule, déjà dans le
 #       jeu) tourne sur lui-même, le pingouin se remet dans le sens de la
@@ -25,7 +26,8 @@ var sub_state_name := "CRASHING"
 
 ## Durée de la roulade (s), cachée en partie par l'explosion de neige.
 const ROLL_TIME := 0.5
-## Durée « assis étourdi » après la roulade (s). Figure ratée : 2 s.
+## Durée « assis étourdi » après la roulade (s). [ROULADE 1.50] utilisée
+## aussi pour les figures ratées (qui avaient 2 s « sonné » avant).
 const DIZZY_TIME := 1.0
 ## Vitesse de rotation du dessin pendant la roulade (radians / s).
 const ROLL_SPIN := 18.0

@@ -264,7 +264,7 @@ func _on_banked(_points: int, _total: int, _label: String) -> void:
 	match workshops[_index].key:
 		"figure":
 			for it in items:
-				if it != "Nose" and it != "Vrille":
+				if it != "Nose" and it != "Vrille" and it != "Tail":   # [TAIL 1.50] atterrissage, pas une figure
 					_success()
 					return
 		"combo":

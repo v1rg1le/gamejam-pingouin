@@ -50,6 +50,41 @@ const FEET_ANGLE_DEG := 30.0
 ## Temps en l'air minimum pour que l'atterrissage compte (s).
 const MIN_AIR_TIME := 0.25
 
+# =============================================================================
+#  [TAIL 1.50] Atterrissage bec relevé = « TAIL ! » + glisse en équilibre
+# -----------------------------------------------------------------------------
+#  Demande de l'équipe (21/11) :
+#   1. « tail » doit marcher comme « nose » : un atterrissage bec relevé (la
+#      glisse debout, sur les pattes) rapporte TAIL_POINTS, compte dans le
+#      combo du saut et donne le petit boost de figure (TrickScore._on_landed,
+#      style "feet" : le nom du signal ne change pas, le tuto s'en sert) ;
+#   2. pendant la glisse en tail, on peut BASCULER avec les touches de
+#      rotation (choix de l'équipe) :
+#        - bec vers l'avant ({rotate_horaire} en allant à droite) : Pinpouin
+#          se couche et glisse sur le VENTRE (rien à gagner : les points du
+#          tail sont déjà gagnés à l'atterrissage) ;
+#        - bec vers l'arrière ({rotate_trigo} en allant à droite) : il penche
+#          vers le DOS ; trop penché (TAIL_FALL_DEG) = CHUTE avec la roulade
+#          (CrashState) ; en relâchant avant, il se redresse tout seul.
+#      Le sens « avant / arrière » suit le sens de la glisse (facing), comme
+#      pour le nose (même convention qu'_on_landing).
+#  `tail_tilt` (radians) : 0 = debout ; > 0 = penché vers l'avant (ventre) ;
+#  < 0 = penché vers l'arrière (dos). Il ne change QUE le dessin (le corps
+#  du pingouin reste collé à la pente, comme avant) : aucune influence sur la
+#  physique de la glisse.
+#  Mode enfant : pas de chute, l'inclinaison s'arrête juste avant.
+# =============================================================================
+## Points d'un atterrissage en tail (comme le nose).
+const TAIL_POINTS := 50
+## Vitesse à laquelle on penche en tenant une touche de rotation (degrés / s).
+const TAIL_TILT_SPEED_DEG := 140.0
+## Vitesse à laquelle il se redresse tout seul quand on relâche (degrés / s).
+const TAIL_RETURN_SPEED_DEG := 220.0
+## Penché vers l'avant d'au moins cet angle : il se couche sur le ventre.
+const TAIL_TO_BELLY_DEG := 35.0
+## Penché vers l'arrière d'au moins cet angle : chute (roulade).
+const TAIL_FALL_DEG := 70.0
+
 ## Posture au sol : "feet" (debout) ou "belly" (à plat ventre, la glisse
 ## d'origine). Au départ du niveau : à plat ventre, comme avant.
 var ride_pose := "belly"
@@ -63,11 +98,22 @@ var _approach_rel := 0.0          # écart pingouin / pente juste avant le conta
 var _was_grounded := true
 var _feet_visual := false         # vrai tant qu'on modifie le dessin (penché, rebond)
 var _bob_t := 0.0
+## [TAIL 1.50] inclinaison du dessin en tail (rad) : > 0 vers le ventre, < 0 vers le dos
+var tail_tilt := 0.0
+## [TAIL 1.50] vrai juste après une apparition (début de niveau, réapparition
+## après une chute, retour au début d'un atelier du tuto) : le pingouin
+## « tombe » à sa place, ce n'est pas un vrai saut. Sans ça, il retombait
+## bec relevé sur le tremplin de départ et gagnait un « TAIL ! » gratuit
+## (50 points + boost) au début de chaque niveau (vu en test).
+var fresh_spawn := true
 var _grain: ImageTexture = null
 
 
 func setup(p) -> void:
 	player = p
+	# [TAIL 1.50] une réapparition est aussi une « apparition »
+	if player.has_signal("respawned"):
+		player.respawned.connect(func(): fresh_spawn = true)
 
 
 ## Appelé par Player._physics_process, après move_and_slide.
@@ -87,12 +133,17 @@ func update(delta: float) -> void:
 		# encore le pingouin tout seul (aucun capteur ne touche le sol)
 		if not hooked:
 			_approach_rel = angle_difference(_slope_rotation_below(), player.rotation)
+	elif fresh_spawn:
+		# [TAIL 1.50] premier contact après une apparition : ni tail, ni nose,
+		# ni chute ; la posture reste celle du départ (sur le ventre)
+		fresh_spawn = false
 	elif not _was_grounded and _air_time >= MIN_AIR_TIME and not hooked \
 			and st.super_state_name != "CRASH" and st.super_state_name != "STAGGERED":
 		_on_landing(st)
 	if grounded:
 		_air_time = 0.0
 	_was_grounded = grounded
+	_update_tail_balance(delta, grounded, hooked)   # [TAIL 1.50]
 	_update_feet_visual(delta)
 
 
@@ -117,6 +168,8 @@ func _on_landing(st) -> void:
 		player.emit_signal("landed", "nose")
 	elif forward < -deg_to_rad(FEET_ANGLE_DEG):
 		# [ATTERRISSAGES 1.41] bec RELEVÉ (pattes vers le sol) : debout
+		# [TAIL 1.50] = « TAIL ! » : TrickScore ajoute TAIL_POINTS au saut
+		tail_tilt = 0.0
 		_set_pose("feet")
 		player.emit_signal("landed", "feet")
 	else:
@@ -134,6 +187,45 @@ func _set_pose(pose: String) -> void:
 	var anims := {"SLIDING": "sliding", "RUNNING": "running", "PUMPING": "pumping"}
 	if anims.has(sub):
 		player.play_ground_anim(anims[sub])
+
+
+# [TAIL 1.50] Équilibre pendant la glisse debout (voir l'en-tête « TAIL »).
+# Appelé à chaque image physique par update(). Ne fait rien hors de la glisse
+# debout au sol (en l'air, au grappin, pendant une chute…).
+func _update_tail_balance(delta: float, grounded: bool, hooked: bool) -> void:
+	var st = player._states.current
+	var riding: bool = ride_pose == "feet" and grounded and not hooked \
+		and st.super_state_name == "ON_GROUND" and st.sub_state_name != "HOOKING"
+	if not riding:
+		tail_tilt = 0.0
+		return
+	# touche « vers l'avant » / « vers l'arrière » selon le sens de la glisse :
+	# en allant à droite, horaire = bec vers l'avant (comme pour le nose)
+	var input: float = (Input.get_action_strength("rotate_horaire") - Input.get_action_strength("rotate_trigo")) * player.facing
+	if absf(input) > 0.1:
+		tail_tilt += input * deg_to_rad(TAIL_TILT_SPEED_DEG) * delta
+	else:
+		# relâché : il se redresse tout seul
+		tail_tilt = move_toward(tail_tilt, 0.0, deg_to_rad(TAIL_RETURN_SPEED_DEG) * delta)
+
+	# trop vers l'avant : il se couche sur le ventre (aucun point en plus)
+	if tail_tilt >= deg_to_rad(TAIL_TO_BELLY_DEG):
+		tail_tilt = 0.0
+		_set_pose("belly")
+		snow_burst(player.global_position, player._velocity, 0.45)   # petit « flop » dans la neige
+		Sfx.play("atterrissage", -6.0)
+		return
+
+	# trop vers l'arrière : chute (roulade), sauf en mode enfant
+	if tail_tilt <= -deg_to_rad(TAIL_FALL_DEG):
+		if Settings.kid_mode:
+			tail_tilt = -deg_to_rad(TAIL_FALL_DEG - 5.0)   # [MODE ENFANT] il ne tombe jamais
+			return
+		print("[TAIL] perte d'équilibre vers l'arrière : chute")
+		tail_tilt = 0.0
+		player.emit_signal("landed", "crash")   # même effet qu'une chute sur le dos (points, tuto)
+		snow_burst(player.global_position, player._velocity)
+		player._states.go_to_state(player, "crashing")
 
 
 ## Ce capteur touche-t-il un sol tourné vers le haut (pas un plafond) ?
@@ -176,7 +268,8 @@ func _update_feet_visual(delta: float) -> void:
 		_feet_visual = true
 		var speed: float = player._velocity.length()
 		var lean := clampf(speed / 1500.0, 0.0, 1.0) * 0.22   # plus vite = plus penché
-		spr.rotation = -lean * player.facing
+		# [TAIL 1.50] + l'inclinaison choisie au clavier (vers le ventre / le dos)
+		spr.rotation = (tail_tilt - lean) * player.facing
 		var crouch: bool = Input.is_action_pressed("pump")    # PUMP : il se tasse
 		spr.scale = Vector2(1.06, 0.88) if crouch else Vector2.ONE
 		spr.offset = Vector2(0, -15 + (3.0 if crouch else 0.0) + sin(_bob_t * 14.0) * 0.6)
