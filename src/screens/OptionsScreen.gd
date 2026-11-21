@@ -75,6 +75,17 @@ func _ready() -> void:
 	help_on_start.get_parent().move_child(kid, help_on_start.get_index())
 	kid.button_pressed = Settings.kid_mode
 	kid.toggled.connect(func(v): Settings.set_option("kid_mode", v))
+	# [VITESSE 1.48] « Afficher la vitesse de Pinpouin » : même style (copie du
+	# bouton « Aide en début de niveau »), juste sous « Panneau de réglage
+	# physique » (les deux options « pour regarder sous le capot »)
+	var speed: CheckButton = help_on_start.duplicate(Node.DUPLICATE_GROUPS | Node.DUPLICATE_SCRIPTS)
+	speed.name = "ShowSpeed"
+	speed.text = "Afficher la vitesse de Pinpouin"
+	speed.tooltip_text = "Compteur en haut à droite : km/h, px/s et une jauge.\nLa jauge devient orange quand Pinpouin dépasse la vitesse max\n(au sol ou en l'air) et que le jeu le freine doucement.\nTouche F3 en jeu pour l'allumer / l'éteindre."
+	physics_panel.get_parent().add_child(speed)
+	physics_panel.get_parent().move_child(speed, physics_panel.get_index() + 1)
+	speed.button_pressed = Settings.show_speed
+	speed.toggled.connect(func(v): Settings.set_option("show_speed", v))
 	music_slider.value = Settings.music_volume
 	music_slider.value_changed.connect(func(v): Settings.set_option("music_volume", v))
 	_add_sfx_slider()       # [BRUITAGES 1.34] juste sous la musique

@@ -127,6 +127,9 @@ func _make_label(size: int, color: Color) -> Label:
 
 func _process(_delta: float) -> void:
 	_time_label.text = RaceManager.format_time(RaceManager.race_time)
+	# [VITESSE 1.48] le compteur de vitesse (SpeedMeter) occupe le coin en haut
+	# à droite quand il est affiché : le classement multi passe alors dessous
+	_ranking_label.offset_top = 160 if Settings.show_speed else 84
 	_update_waiting(_delta)   # [ATTENTE 1.14]
 	# [MULTI] le "GO !" reste affiché 0,8 s puis disparaît
 	if _go_timer > 0.0:

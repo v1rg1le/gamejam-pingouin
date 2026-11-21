@@ -58,6 +58,10 @@ var music_volume: float = 0.8
 var sfx_volume: float = 0.8   # [BRUITAGES 1.34] volume des effets (bus audio « Sound »)
 var physics_panel: bool = false   # [PHYSIQUE 1.10] bouton ⚙ du panneau de réglage en tactile
 var master_wink: bool = true      # [MAÎTRE 1.19] clin d'œil du maître ninja à chaque figure réussie
+# [VITESSE 1.48] Options → « Afficher la vitesse de Pinpouin » : petit compteur
+# en haut à droite (km/h + px/s + jauge avec les plafonds sol / air), voir
+# src/ui/race/SpeedMeter.gd. Coupé par défaut ; F3 l'allume / l'éteint en jeu.
+var show_speed: bool = false
 # [MODE ENFANT 1.23] Options → « Mode enfant » : poussée automatique au sol,
 # coup de pouce dans les creux, aide visuelle quand on n'avance plus, boutons
 # tactiles plus faciles à toucher, carte d'aide simplifiée (voir KidAssist.gd).
@@ -115,6 +119,7 @@ func _load_options() -> void:
 		sfx_volume = clampf(float(cfg.get_value("options", "sfx_volume", 0.8)), 0.0, 1.0)   # [BRUITAGES 1.34]
 		physics_panel = cfg.get_value("options", "physics_panel", false)
 		master_wink = cfg.get_value("options", "master_wink", true)
+		show_speed = cfg.get_value("options", "show_speed", false)   # [VITESSE 1.48]
 		kid_mode = cfg.get_value("options", "kid_mode", false)   # [MODE ENFANT 1.23]
 		game_mode = clampi(int(cfg.get_value("options", "game_mode", MODE_CHILL)), MODE_CHILL, MODE_SCORE)   # [MODES 1.25]
 		ui_size = clampf(float(cfg.get_value("options", "ui_size", 1.0)), 0.8, 1.5)

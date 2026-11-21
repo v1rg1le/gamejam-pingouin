@@ -1022,3 +1022,16 @@ Demande de l'équipe (21/11) : partager un niveau, et pouvoir l'exporter pour aj
 - **Fausse alerte au passage** : le bot semblait « coincé dans la glace ». En fait, les îles de ce niveau sont des bandes d'environ 300 px d'épaisseur avec du vide dessous, et il pendait SOUS une île en s'accrochant à son dessous. Ce n'est pas un bug du jeu, rien n'a été changé dans le pingouin.
 - **Résultat** : course sans chute en **85,57 s** avec figures (89,3 à 95,6 s selon les réglages, 90,1 s sans figures). Le terrain est le même à chaque partie (les trous ne dépendent pas du seed).
 - **Nouvelles médailles** (`RaceManager.MEDAL_GOLD["LevelRandomGap"]`) : or **86 s** (avant 97), argent 1:47,5, bronze 2:17,6. Une médaille déjà gagnée reste gagnée.
+
+## 58. Enquête « ralentissements » et compteur de vitesse (21/11, pour la 1.48)
+
+**Enquête** (aucun changement de physique, seulement des mesures). Outils hors projet : `speed_probe.gd` (relève la vitesse à chaque image et cherche la cause de chaque perte), branché sur les bots (`probe_endless.gd`, `probe_medal.gd`). Environ 40 min de jeu au bot (Sans fin normal / Chill / sans grappin, 9 niveaux de course).
+- **Aucun ralentissement sans cause.** Les pertes viennent : du tremplin de départ (montée), des chocs contre le flanc d'une île (saut raté), des morts (réapparition à 450 px/s en Sans fin, `EndlessGenerator.respawn_sample`), du grappin, et du plafond de vitesse au sol.
+- **Grappin** : à l'accroche, le pingouin perd en moyenne un tiers de sa vitesse en UNE image (75 accroches, 3 sur 4 au-dessus de 25 %). `HookingInAirState.swing()` retire toute la vitesse dans l'axe de la corde, même quand on fonce VERS le crochet (une vraie corde ne retient que si on s'éloigne). `pull_original()` borne aussi la vitesse horizontale à 1000 (`MAX_SPEED_HOOKED`).
+- **Au sol** : pas de frottement caché (somme vitesse + hauteur constante, à quelques px/s près). 75 % de la vitesse perdue au sol vient du plafond doux `ground_max_speed = 1450` (`Player._apply_soft_speed_caps`, `over_speed_drag = 1.5`), plus bas que celui en l'air (1750) : après un gros saut, on perd jusqu'à 20 % en 1,5 s (1989 → 1566), même en descente. Petit à-coup de 3-4 % quand un plat rejoint une montée de ~15° (deux surfaces touchées à la fois, `_apply_godot3_slide`).
+- Rien n'a été modifié : ce sont des choix de réglage à faire avec l'équipe (et les médailles seraient à remesurer).
+
+**Compteur de vitesse** (demande de l'équipe) : Options → « Afficher la vitesse de Pinpouin » (`Settings.show_speed`, coupé par défaut), ou **F3** en jeu.
+- `src/ui/race/SpeedMeter.gd` : en haut à droite, sous le bouton pause tactile : km/h (55 px = 1 m, même échelle que les distances du Sans fin), px/s et « au sol / en l'air / grappin », jauge 0 → 2200 px/s avec un trait blanc (plafond au sol) et un trait bleu (plafond en l'air). La jauge devient **orange** quand le frein doux agit.
+- Créé par `RaceManager._start_race()` dans tous les niveaux, solo et multi (pingouin local). En multi, le classement de `RaceHud` passe sous le compteur quand il est affiché.
+- **Tests** : check_all 140 fichiers, 0 échec ; captures PC (course + Sans fin) et téléphone (Options).

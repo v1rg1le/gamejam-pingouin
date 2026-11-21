@@ -342,6 +342,12 @@ func _start_race() -> void:
 		var kid = preload("res://src/ui/race/KidAssist.gd").new()
 		kid.setup(_player)
 		get_tree().current_scene.add_child(kid)
+	# [VITESSE 1.48] compteur de vitesse du pingouin local (option « Afficher la
+	# vitesse de Pinpouin »). Créé dans TOUS les niveaux, solo comme multi ; il
+	# reste caché tant que l'option est coupée (F3 l'allume en pleine partie).
+	var meter = preload("res://src/ui/race/SpeedMeter.gd").new()
+	meter.setup(_player)
+	get_tree().current_scene.add_child(meter)
 	if not has_finish and not NetSession.in_race:
 		# niveau "Chill" (704, 917, half-pipe) : pas de chrono.
 		# [CHILL 1.28] mais les figures s'affichent (et le maître fait son clin
