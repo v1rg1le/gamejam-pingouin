@@ -86,7 +86,9 @@ const SCORES_SECTION = "scores_v3"   # [MODES 1.25] barème à médailles (avant
 # machine de test : trop rapides). Or = meilleur temps du bot « bon joueur »,
 # avec ou sans figures, arrondi à la demi-seconde au-dessus.
 const MEDAL_GOLD := {
-	"LevelBateau": 19.0,          # bot : 18,95 s avec figures (19,12 sans)
+	# [TUTO 1.41] le chrono du tuto ne couvre plus que la COURSE FINALE (après
+	# les ateliers) : temps remesuré au bot sur ce seul tronçon.
+	"LevelBateau": 13.5,          # [TUTO 1.41] course finale seule : bot 13,28 à 13,55 s (sans figures)
 	"LevelRandomFlat": 64.0,      # bot : 63,60 s avec figures (65,15 sans)
 	"LevelRandomCorridor": 66.5,  # bot : 66,40 s sans figures (74,33 avec : figures risquées ici)
 	"LevelRandomNiceSlope": 49.5, # bot : 49,07 s avec figures (52,17 sans)
@@ -140,6 +142,19 @@ var trick_score = null              # nœud TrickScore de la course en cours
 var last_score := {}                # détail du dernier score : speed, tricks, score
 var _best_scores := {}              # niveau -> meilleur score (chargé depuis la config)
 var ref_time: float = 0.0           # [SCORE 1.13] temps de référence du niveau en cours (s)
+
+# --- [TUTO 1.41] Tuto par ateliers -------------------------------------------
+# Le tuto (LevelBateau) commence par des ATELIERS (TutorialCoach.gd) puis finit
+# par une petite COURSE chronométrée avec médaille. Pendant les ateliers :
+#   - racing reste vrai (le juge des figures, TrickScore, ne compte que si l'on
+#     « court » : il faut ses points pour valider les ateliers de figures) ;
+#   - mais le chrono est caché, rien n'est enregistré pour le fantôme, et le
+#     fantôme n'est créé qu'au départ de la course finale.
+# start_tutorial_final() remet chrono, points et enregistrement à zéro quand
+# Pinpouin franchit la ligne de départ de la course finale.
+const TUTO_LEVEL := "LevelBateau"
+const TUTO_GHOST_VERSION := 2       # fantômes du tuto 1.41 (les anciens couvraient tout le niveau)
+var tutorial_intro := false         # vrai pendant les ateliers du tuto
 
 
 func _ready() -> void:
@@ -238,6 +253,7 @@ func _reset_race() -> void:
 	_waiting_go = false
 	bonus_active = false      # [BONUS 1.20] pas de bonus en cours dans une nouvelle scène
 	free_ride = false         # [MODES 1.25]
+	tutorial_intro = false    # [TUTO 1.41]
 	trick_score = null        # [SCORE 1.5] libéré avec l'ancienne scène
 
 
@@ -272,6 +288,8 @@ func _physics_process(delta: float) -> void:
 	race_time += delta
 	if Settings.is_chill():
 		return   # [MODES 1.25] pas d'enregistrement de fantôme en Chill
+	if tutorial_intro:
+		return   # [TUTO 1.41] ateliers : rien à enregistrer avant la course finale
 	_sample_timer -= delta
 	if _sample_timer <= 0.0:
 		_sample_timer += SAMPLE_INTERVAL
@@ -317,7 +335,12 @@ func _start_race() -> void:
 	scene.add_child(_hud)
 	_hud.set_best(get_best_time(level_path))
 	_setup_tricks(scene)
-	if _ghost_data != null:
+	# [TUTO 1.41] ateliers du tuto : chrono caché, pas de fantôme pour l'instant
+	# (pas en multijoueur : là, le tuto est une simple course du départ à l'arrivée)
+	tutorial_intro = level_path.get_file().get_basename() == TUTO_LEVEL and not NetSession.in_race
+	if tutorial_intro:
+		_hud.set_tutorial_intro(true)
+	if _ghost_data != null and not tutorial_intro:
 		_ghost_node = preload("res://src/ui/race/GhostPenguin.gd").new()
 		_ghost_node.setup(_ghost_data, _player)
 		scene.add_child(_ghost_node)
@@ -533,6 +556,39 @@ func _complete_race() -> void:
 	emit_signal("race_completed")
 
 
+# --- [TUTO 1.41] Départ de la course finale du tuto ---------------------------------
+## Appelé par TutorialCoach quand Pinpouin franchit la ligne de départ de la
+## course finale : départ « lancé » (il glisse déjà), le chrono part de 0.
+func start_tutorial_final() -> void:
+	if not tutorial_intro:
+		return
+	tutorial_intro = false
+	race_time = 0.0
+	_sample_timer = 0.0
+	# enregistrement du fantôme à partir d'ici seulement (marqué « tuto 2 »)
+	_rec = {"version": GHOST_FORMAT_VERSION, "level": level_path, "seed": race_seed,
+		"anims": [], "samples": PackedFloat32Array(), "time": 0.0, "tuto": TUTO_GHOST_VERSION}
+	# temps de référence : distance ligne de départ -> arrivée
+	var gate = get_tree().get_first_node_in_group("finish_gate")
+	if gate != null and _player != null:
+		ref_time = maxf(10.0, absf(gate.global_position.x - _player.global_position.x) / REF_SPEED)
+	gold_time = float(MEDAL_GOLD[TUTO_LEVEL])
+	# les points de figures des ateliers ne comptent pas dans le score
+	if trick_score != null and is_instance_valid(trick_score):
+		trick_score.total = 0
+		trick_score._pending.clear()
+	if _hud != null and is_instance_valid(_hud):
+		_hud.set_tutorial_intro(false)
+		_hud.set_trick_points(0)
+		_hud.set_best(get_best_time(level_path))
+	# le fantôme part en même temps que le chrono
+	if _ghost_data != null and not Settings.is_chill() and _player != null:
+		_ghost_node = preload("res://src/ui/race/GhostPenguin.gd").new()
+		_ghost_node.setup(_ghost_data, _player)
+		get_tree().current_scene.add_child(_ghost_node)
+	print("[TUTO] départ de la course finale")
+
+
 # --- [AIDE 1.7] Carte d'aide en début de niveau ------------------------------------
 const START_HELP_TEXT = "Avancer : {move_right}    Reculer : {move_left}\nSauter : {jump}    PUMP : {pump}  (dans les descentes)\nGrappin : {hook}    Tirer : {pull}\nFigure : {trix}    Rotation : {rotate_trigo} / {rotate_horaire}"
 # [SCORE 1.13] aide de départ : rappel de la règle « 1 s = 100 pts = 1 figure »
@@ -695,6 +751,9 @@ func load_best_ghost(path: String):
 		if not file.ends_with(".ghost"):
 			continue
 		var data = _read_ghost(GHOST_DIR.path_join(file))
+		# [TUTO 1.41] tuto : seuls les fantômes de la course finale (nouvelle version)
+		if data != null and path.get_file().get_basename() == TUTO_LEVEL and int(data.get("tuto", 0)) != TUTO_GHOST_VERSION:
+			continue
 		if data != null and data.level == path and (best == null or data.time < best.time):
 			best = data
 	return best
@@ -872,6 +931,14 @@ func _load_config() -> void:
 			for key in cfg.get_section_keys(SCORES_SECTION):
 				_best_scores[key] = int(cfg.get_value(SCORES_SECTION, key, -1))
 		# [MODES 1.25] meilleures médailles
+		# [TUTO 1.41] le tuto a changé (le chrono ne couvre plus que la course
+		# finale) : médaille et score de l'ancien tuto effacés UNE fois
+		if not cfg.get_value("migrations", "tuto_141", false):
+			for section in [MEDALS_SECTION, SCORES_SECTION]:
+				if cfg.has_section_key(section, TUTO_LEVEL):
+					cfg.erase_section_key(section, TUTO_LEVEL)
+			cfg.set_value("migrations", "tuto_141", true)
+			cfg.save(CONFIG_PATH)
 		if cfg.has_section(MEDALS_SECTION):
 			for key in cfg.get_section_keys(MEDALS_SECTION):
 				_best_medals[key] = int(cfg.get_value(MEDALS_SECTION, key, 0))

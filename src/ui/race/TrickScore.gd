@@ -59,6 +59,9 @@ var _spin_accum: float = 0.0       # rotation cumulée (rad) depuis le décollag
 var _spins_counted: int = 0        # tours complets déjà comptés dans ce saut
 var _prev_rotation: float = 0.0
 var _last_deaths: int = 0
+## [TUTO 1.41] noms des éléments du dernier saut validé (ex. ["Toupie", "Nose"]) :
+## les ateliers du tuto s'en servent pour savoir QUOI a été réussi.
+var last_bank_items: Array = []
 
 
 func setup(p) -> void:
@@ -144,6 +147,10 @@ func bank() -> void:
 	var label := "+%d" % points
 	if combo > 1:
 		label += "  COMBO ×%d" % combo
+	# [TUTO 1.41] on garde les noms (lus par TutorialCoach via points_banked)
+	last_bank_items.clear()
+	for item in _pending:
+		last_bank_items.append(item[0])
 	# [ATTERRISSAGES 1.40] « NOSE ! » quand le saut finit sur le bec
 	for item in _pending:
 		if item[0] == "Nose":

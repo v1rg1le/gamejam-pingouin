@@ -849,3 +849,70 @@ Demande de l'équipe : plus de coupure nette du fond, une boucle infinie qui sui
   - bot grappin du Sans fin : grappin 20/20, double 15/15, montée 25/25, plafond 11/11, aucune chute après un lâcher de grappin ;
   - 127 fichiers OK.
 - **À régler en jouant** (en tête de `LandingStyle.gd`) : `CRASH_ANGLE_DEG` (120), `NOSE_ANGLE_DEG` (35), `NOSE_POINTS` (50) ; durées dans `CrashState.gd` (`ROLL_TIME` 0,5 s, `DIZZY_TIME` 1 s).
+
+## 50. Tuto par ateliers, mené par le maître ninja (21/11, version 1.41)
+
+- **Demande de l'équipe** : ajouter les nouveautés au tuto, le rendre plus long, et faire refaire chaque action en boucle jusqu'à ce qu'elle soit réussie.
+- **Choix de l'équipe** (questions posées avant de lancer) :
+  - **3 réussites** pour les gestes de base, **1 ou 2** pour les gestes durs ;
+  - un bouton **« Passer » après 5 échecs** dans le même atelier ;
+  - les consignes données par **le maître ninja, dans des bulles** ;
+  - pour finir, une **petite course chronométrée avec médaille**.
+- **Les 9 ateliers**, dans l'ordre (`workshop_specs`, en tête de `BateauGenerator.gd`) :
+
+  | # | Atelier | À réussir | Comment c'est reconnu |
+  |---|---|---|---|
+  | 1 | PUMP | 3 | PUMP tenu au sol dans une descente ≥ 0,25 s (ou chaque 0,7 s sans relâcher) |
+  | 2 | Saut | 3 | un saut suivi d'un atterrissage sans chute |
+  | 3 | Sur les pattes (3 tremplins) | 3 | atterrissage « pattes » après ≥ 0,6 s en l'air |
+  | 4 | Nose (2 tremplins) | 2 | atterrissage « nose » |
+  | 5 | La chute (1 tremplin) | 1 | atterrissage sur le dos, fait exprès pour voir ce qui se passe |
+  | 6 | Figures (2 tremplins) | 2 | un saut validé avec une figure |
+  | 7 | Combo (1 tremplin) | 1 | un saut validé avec au moins 2 éléments (figure, vrille, nose) |
+  | 8 | Grappin au plafond | 1 | accroché ≥ 1 s au plafond en tirant ≥ 0,3 s |
+  | 9 | Balancier (grand trou + bloc de glace) | 1 | de l'autre côté du trou, au-dessus du sol |
+
+- **Déroulé d'un atelier** (`src/levels/tutorial/TutorialCoach.gd`) :
+  - en entrant, le maître donne **une** consigne avec les vraies touches du joueur. Le jeu se met en pause le temps de lire si l'option « Pause pour lire les panneaux du tuto » est active (comme avant) ;
+  - un compteur à ronds s'affiche **sous Pinpouin** (`SuccessCounter.gd`) : là où le joueur regarde. Il était d'abord au-dessus, mais passait derrière la bulle quand la caméra met le pingouin en haut de l'écran ;
+  - chaque réussite remplit un rond (« +1 ! ») ; atelier réussi → clin d'œil du maître, « RÉUSSI ! » ;
+  - **échec** = arriver au bout de l'atelier sans assez de réussites, tomber dans le trou, chuter sur le dos (hors atelier « chute ») ou ne pas finir une figure. Le maître donne alors un **indice plus précis** (une phrase différente à chaque échec) ;
+  - au bout de l'atelier : **retour au début** (la boucle), avec l'élan qu'on avait en entrant. Les réussites déjà faites sont **gardées** : la boucle redonne de la place pour finir, elle ne punit pas ;
+  - après 5 échecs : bouton **« Passer cet atelier ▶▶ »** sous la bulle (Tab au clavier, Back à la manette, ou toucher). Il est testé avant les boutons tactiles, pour que toucher le bouton ne lance pas aussi le grappin.
+- **Le maître ninja** (`src/levels/tutorial/MasterBubble.gd`) : le dessin déjà dans le jeu (`bad_penguin_1/2/3` + `bad_penguin_wink`, ceux du clin d'œil) en haut à gauche. Son bandeau flotte quand il parle, et il fait un clin d'œil à chaque atelier réussi. Bulle dessinée en code, aux couleurs du HUD : **aucune image ajoutée**. Pendant les ateliers, le chrono est caché, la place est libre.
+- **Course finale** : sur la ligne de départ (panneau « COURSE FINALE, le chrono part ici »), départ lancé. `RaceManager.start_tutorial_final()` :
+  - remet le chrono et les points de figures à zéro ;
+  - lance l'enregistrement du fantôme et le fantôme lui-même ;
+  - le maître descend sous le chrono, puis s'efface au bout de 4 s.
+  
+  Le parcours compte 3 tremplins et un petit trou à sauter. Or : **13,5 s** (bot : 13,28 à 13,55 s), argent 16,9 s, bronze 21,6 s. Une chute dans le petit trou fait réapparaître juste avant ce trou, jamais derrière la ligne de départ.
+- **La piste** (`BateauGenerator.gd`) :
+  - construite à partir de la liste des ateliers : changer la longueur d'un atelier recale tout le reste ;
+  - elle n'est plus d'un seul morceau : elle est coupée par des trous (`gaps`), et `surface_y(x)` lit le bon morceau ;
+  - le grand trou du balancier reprend les mesures du trou « GRAPPIN » du Sans fin (2400 px, autre bord 200 px plus haut, bloc de glace au milieu, 600 px au-dessus), réglé aux bots : un saut seul ne passe pas ;
+  - les tremplins passent de 35° à **28°**. Lancé à pleine vitesse, un tremplin à 35° faisait voler ~3700 px et passer par-dessus le tremplin suivant. À 28°, on vole ~2 s, assez pour une figure suivie d'un nose ;
+  - les anciens panneaux d'explication deviennent de simples panneaux d'entrée « ATELIER 3 · SUR LES PATTES » (`TutorialSign.announce = false` : ni pause ni bandeau).
+- **Déjà fait une fois ?** Le tuto s'en souvient (`user://pinpouin.cfg`, section `tutorial`). Au retour, le bouton est là dès l'accueil (« Aller à la course ») et dans chaque atelier.
+- **Mode enfant** : 1 réussite suffit partout, « Passer » après 2 échecs, pas d'atelier « chute » (on ne chute jamais en mode enfant).
+- **Multijoueur** : pas d'ateliers ; le tuto reste une course du départ à l'arrivée.
+- **Anciens records du tuto** : le chrono ne couvre plus le même parcours. La médaille et le meilleur score de l'ancien tuto sont effacés une seule fois (`migrations/tuto_141`). Les anciens fantômes sont ignorés : seuls ceux marqués `tuto = 2` sont lus.
+- **Petits ajouts ailleurs** :
+  - `Player.teleport_to()` : retour au début de l'atelier, avec un fondu ;
+  - `Player._pick_respawn_sample()` : demande d'abord au tuto ;
+  - `TrickScore.last_bank_items` : les noms des éléments du dernier saut validé ;
+  - `RaceHud.set_tutorial_intro()`.
+- **Testé** :
+  - bot qui joue tout le tuto : 9/9 ateliers, ~83 s jusqu'à l'arrivée, médaille d'or ;
+  - bot qui rate exprès un atelier (nose, grappin, balancier) : boucle ou réapparition, indices, « Passer » au 5e échec, puis la suite normalement ;
+  - modes enfant, Chill et « déjà fait » : OK ;
+  - captures de l'accueil, d'un atelier, des échecs avec « Passer », de la course finale ;
+  - temps des autres niveaux au bot inchangés (Flat 1:05,15, Nice Slope 52,17 s) ;
+  - 130 fichiers OK.
+  
+  Deux bugs trouvés par les bots et corrigés :
+  - en tombant dans le trou, le pingouin pouvait dériver sous l'autre bord et l'atelier « balancier » se validait ;
+  - le petit trou de la course finale était trop dur à passer sans sauter : il est maintenant plus court et plus bas.
+- **À régler en jouant** :
+  - longueurs, tremplins et textes dans `workshop_specs` ;
+  - seuils en tête de `TutorialCoach.gd` (`FAILS_BEFORE_SKIP`, `PUMP_STROKE_TIME`, `FEET_MIN_AIR`, `HOOK_MIN_TIME`…) ;
+  - course finale : `final_length`, `final_ramps`, `final_gap_*`.

@@ -236,6 +236,16 @@ func show_bonus_end() -> void:
 		_bonus_label = null
 
 
+## [TUTO 1.41] Ateliers du tuto : pas de chrono, de record ni de total des
+## figures à l'écran (ils n'ont de sens que pendant la course finale). Le
+## mode Chill les garde cachés de toute façon.
+func set_tutorial_intro(on: bool) -> void:
+	var show := not on and not chill_mode
+	_time_label.visible = show
+	_best_label.visible = show
+	_tricks_label.visible = show
+
+
 func set_best(best: float) -> void:
 	if best == -2.0:   # [MULTI] code spécial envoyé par RaceManager avant le départ
 		_best_label.text = "En attente des autres joueurs…"

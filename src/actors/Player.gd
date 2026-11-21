@@ -591,6 +591,12 @@ func die() -> void:
 # Choisit l'échantillon "sûr" pris environ respawn_rewind_time secondes avant
 # la dernière glisse au sol (ou le plus ancien disponible).
 func _pick_respawn_sample():
+	# [TUTO 1.41] tuto par ateliers : retour au début de l'atelier en cours
+	var tuto = get_tree().get_first_node_in_group("tutorial")
+	if tuto != null:
+		var ts = tuto.respawn_sample(global_position.x)
+		if ts != null:
+			return {"pos": ts.pos, "vel": ts.vel, "time": _last_ground_time}
 	# [SANS FIN 1.32] niveau Sans fin : début de l'île d'avant le trou raté
 	var endless = get_tree().get_first_node_in_group("endless")
 	if endless != null:
@@ -635,6 +641,35 @@ func _do_respawn() -> void:
 	Sfx.play("reapparition", -4.0)   # [BRUITAGES 1.34] petit « pop »
 	_respawning = false
 	emit_signal("respawned")
+
+
+## [TUTO 1.41] Ramène le pingouin en `pos` avec la vitesse `vel`, avec le
+## même petit fondu qu'une réapparition (mais sans compter de mort ni jouer
+## le « waaah » de chute). Sert à la BOUCLE des ateliers du tuto : arrivé au
+## bout de l'atelier sans avoir assez réussi, on recommence au début, ou on
+## passe à l'atelier suivant (bouton « Passer »).
+func teleport_to(pos: Vector2, vel: Vector2) -> void:
+	if _respawning:
+		return
+	_respawning = true
+	chain.release()
+	_fall_timer = 0.0
+	var tween := create_tween()
+	tween.tween_property(animated_sprite, "modulate:a", 0.0, 0.2)
+	tween.tween_callback(func():
+		global_position = pos
+		_velocity = vel
+		rotation = 0.0
+		chain_velocity = Vector2.ZERO
+		# l'historique des points sûrs est derrière nous : on l'oublie, sinon
+		# une chute juste après nous renverrait AVANT le point d'arrivée
+		_safe_history.clear()
+		last_safe_position = pos
+		_states.go_to_state(self, "in_air")
+		camera.reset_smoothing()   # la caméra saute directement au pingouin
+		Sfx.play("reapparition", -4.0)
+		_respawning = false)
+	tween.tween_property(animated_sprite, "modulate:a", 1.0, 0.3)
 
 
 func _input(event):

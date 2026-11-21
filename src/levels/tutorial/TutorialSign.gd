@@ -30,6 +30,11 @@ class_name TutorialSign
 ## Durée (s) d'affichage du rappel en haut de l'écran.
 @export var hud_duration: float = 6.0
 
+## [TUTO 1.41] false = simple panneau de décor (ex. « ATELIER 3 · PATTES ») :
+## pas de pause lecture ni de rappel en haut de l'écran. Les explications
+## passent maintenant par les bulles du maître ninja (TutorialCoach).
+@export var announce: bool = true
+
 var _label: Label
 var _shown_on_hud := false
 static var _hud_label: Label = null   # bandeau partagé par tous les panneaux
@@ -69,7 +74,7 @@ func _ready() -> void:
 
 
 func _process(_delta: float) -> void:
-	if _shown_on_hud:
+	if _shown_on_hud or not announce:
 		return
 	var player = get_tree().get_first_node_in_group("player")
 	if player != null and player.global_position.x >= global_position.x - 250.0:
