@@ -45,7 +45,7 @@ class_name TutorialCoach
 #   nose   : atterrissage « nose » ;   crash : atterrissage « crash » ;
 #   figure : un saut validé par TrickScore qui contient une figure ;
 #   combo  : un saut validé avec au moins 2 éléments (figure, vrille, nose) ;
-#   hook   : accroché ≥ 1 s au plafond, en tirant ({pull}) ≥ 0,3 s ;
+#   hook   : accroché ≥ 1 s au plafond, en tout (balancier ou en tirant) ;
 #   swing  : de retour au sol de l'AUTRE côté du trou.
 # =============================================================================
 
@@ -55,7 +55,7 @@ const PUMP_STROKE_TIME := 0.25        # s de PUMP dans une descente = 1 coup ré
 const PUMP_LONG_STROKE := 0.7         # s de PUMP tenu sans relâcher = 1 coup aussi
 const FEET_MIN_AIR := 0.6             # s en l'air pour qu'un atterrissage compte (tremplin)
 const HOOK_MIN_TIME := 1.0            # s accroché au plafond
-const PULL_MIN_TIME := 0.3            # s à tirer ({pull}) pendant ce temps
+const PULL_MIN_TIME := 0.3            # (plus utilisé depuis la 1.41b : tirer n'est plus obligatoire)
 const LOOP_SPEED_MIN := 700.0         # px/s : élan minimum après un retour au début
 const LOOP_SPEED_MAX := 1300.0        # px/s : élan maximum
 const WELCOME_DELAY := 0.4           # s avant l'accueil du maître (Pinpouin se pose)
@@ -208,18 +208,18 @@ func _watch(delta: float) -> void:
 			if st == sm.jumping and _prev_state != sm.jumping:
 				_jumped = true
 		"hook":
-			# accroché au PLAFOND (pointe du grappin au-dessus du pingouin)
-			if _player.chain.hooked and _player.chain.tip.y < _player.global_position.y - 100.0:
+			# accroché au PLAFOND (pointe du grappin au-dessus du pingouin).
+			# [TUTO 1.41b] Retour de l'équipe (vidéo) : « je me balance pourtant
+			# ça ne marche pas ». Deux erreurs : 1) il fallait la pointe à plus
+			# de 100 px au-dessus — or en se hissant ({pull}), Pinpouin arrive
+			# juste sous le plafond et le chrono de l'atelier repartait à zéro ;
+			# 2) tirer était obligatoire. Maintenant : 1 s accroché au plafond
+			# (en se balançant OU en tirant), même en plusieurs fois.
+			if _player.chain.hooked and _player.chain.tip.y < _player.global_position.y + 10.0:
 				_hook_t += delta
-				if Input.is_action_pressed("pull"):
-					_pull_t += delta
-				if _hook_t >= HOOK_MIN_TIME and _pull_t >= PULL_MIN_TIME:
+				if _hook_t >= HOOK_MIN_TIME:
 					_success()
 					_hook_t = 0.0
-					_pull_t = 0.0
-			else:
-				_hook_t = 0.0
-				_pull_t = 0.0
 		"swing":
 			# passé de l'autre côté du trou (au sol, ou encore en l'air AU-DESSUS
 			# de l'autre bord). Attention : en tombant dans le trou, le pingouin

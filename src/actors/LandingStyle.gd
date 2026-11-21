@@ -37,6 +37,16 @@ const CRASH_ANGLE_DEG := 120.0
 const NOSE_ANGLE_DEG := 35.0
 ## Points du nose (une figure = 100) ; comptent dans le combo du saut.
 const NOSE_POINTS := 50
+## [ATTERRISSAGES 1.41] Bec relevé d'au moins cet angle (degrés), pattes
+## vers le sol : il retombe DEBOUT. Demande de l'équipe (21/11) : « si on
+## atterrit sur le ventre, on glisse sur le ventre comme avant ; on n'est
+## debout que si l'on tombe sur les pattes ». Avant (1.40), tout atterrissage
+## ni nose ni chute mettait Pinpouin debout.
+##   bec en avant > 35°        -> nose (ventre, points)
+##   entre -30° et +35°        -> ventre (glisse d'origine)
+##   bec relevé de 30° à 120°  -> pattes (debout)
+##   au-delà de 120°           -> chute
+const FEET_ANGLE_DEG := 30.0
 ## Temps en l'air minimum pour que l'atterrissage compte (s).
 const MIN_AIR_TIME := 0.25
 
@@ -105,9 +115,15 @@ func _on_landing(st) -> void:
 	if forward > deg_to_rad(NOSE_ANGLE_DEG):
 		_set_pose("belly")
 		player.emit_signal("landed", "nose")
-	else:
+	elif forward < -deg_to_rad(FEET_ANGLE_DEG):
+		# [ATTERRISSAGES 1.41] bec RELEVÉ (pattes vers le sol) : debout
 		_set_pose("feet")
 		player.emit_signal("landed", "feet")
+	else:
+		# [ATTERRISSAGES 1.41] à plat, parallèle à la pente : sur le ventre,
+		# la glisse d'origine (avant la 1.41, c'était debout)
+		_set_pose("belly")
+		player.emit_signal("landed", "belly")
 
 
 func _set_pose(pose: String) -> void:

@@ -916,3 +916,22 @@ Demande de l'équipe : plus de coupure nette du fond, une boucle infinie qui sui
   - longueurs, tremplins et textes dans `workshop_specs` ;
   - seuils en tête de `TutorialCoach.gd` (`FAILS_BEFORE_SKIP`, `PUMP_STROKE_TIME`, `FEET_MIN_AIR`, `HOOK_MIN_TIME`…) ;
   - course finale : `final_length`, `final_ramps`, `final_gap_*`.
+
+## 51. Grappin du tuto qui ne validait pas + atterrissage sur le ventre (21/11, version 1.42)
+
+- **Retour de l'équipe** (vidéo) : dans l'atelier GRAPPIN du tuto, « je me balance pourtant ça ne marche pas ».
+  - **Cause** : la réussite demandait la pointe du grappin à plus de 100 px au-dessus du pingouin. Or en se hissant ({pull}), Pinpouin arrive juste sous le plafond : le compteur de temps repartait à zéro à chaque image. Il fallait aussi obligatoirement tirer : se balancer sans tirer ne comptait jamais.
+  - **Correction** (`TutorialCoach.gd`) : réussite après **1 s accroché au plafond en tout**, en se balançant ou en tirant, même en plusieurs fois. Consigne et indices du maître réécrits (« tu peux te balancer ou tirer : les deux comptent »).
+  - Le bot passait, lui, parce qu'il s'accrochait de loin et tirait toujours. Il est maintenant testé aussi sans tirer.
+- **Atterrissages** (`LandingStyle.gd`), demande de l'équipe : « si on atterrit sur le ventre, on glisse sur le ventre comme avant ; on n'est debout que si l'on tombe sur les pattes ».
+
+  | Angle avec la pente juste avant le sol | 1.40 / 1.41 | 1.42 |
+  |---|---|---|
+  | bec en avant > 35° | nose (ventre + points) | nose (inchangé) |
+  | entre −30° et +35° (à plat) | debout | **sur le ventre** (glisse d'origine) |
+  | bec relevé de 30° à 120° (pattes vers le sol) | debout | **debout** |
+  | au-delà de 120° | chute | chute (inchangé) |
+
+  - Nouveau style d'atterrissage `"belly"` (signal `Player.landed`) ; réglage `FEET_ANGLE_DEG` = 30.
+  - Atelier « SUR LES PATTES » du tuto : il faut maintenant relever le bec avec {rotate_trigo} avant de toucher le sol (consigne et indices réécrits).
+- **Testé** : bot du tuto complet, avec et sans tirer au grappin : 9/9 ateliers, or à la course finale ; captures d'un atterrissage à plat (ventre) et bec relevé (debout) ; temps de Nice Slope au bot inchangé (52,17 s) ; 130 fichiers OK.

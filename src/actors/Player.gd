@@ -49,6 +49,7 @@ signal died
 signal respawned
 ## [ATTERRISSAGES 1.40] émis à chaque atterrissage : "feet" (debout),
 ## "nose" (bec en avant) ou "crash" (sur le dos). Écouté par TrickScore.
+## [ATTERRISSAGES 1.41] + "belly" : à plat, sur le ventre (glisse d'origine).
 signal landed(style: String)
 ## [ATTERRISSAGES 1.40] style d'atterrissage, posture debout / à plat ventre,
 ## chute en roulade et explosion de neige : voir src/actors/LandingStyle.gd
