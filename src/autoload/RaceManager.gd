@@ -76,9 +76,15 @@ const SCORES_SECTION = "scores_v3"   # [MODES 1.25] barème à médailles (avant
 # BRONZE = or + 60 %.
 #  - Spaghetti (terrain différent à chaque partie) : mesuré sur 10 terrains,
 #    on garde le PLUS LENT (30,9 à 34,1 s) pour que l'or soit faisable partout.
-#  - « Hook, you fool ! » : le bot ne passe pas encore tous les trous au
-#    grappin ; temps extrapolé de ses meilleurs passages (≈ 79 s pour 84 000
-#    px, puis le reste à vitesse de croisière). À ajuster après vos essais.
+#  - « Hook, you fool ! » : jusqu'à la 1.47, temps ESTIMÉ (97 s), le bot ne
+#    passant pas tous les trous au grappin. [MÉDAILLES 1.48] mesuré pour de
+#    vrai avec un bot qui sait s'y prendre (gap_bot.gd, hors projet) :
+#    accroche le poisson presque à la verticale (pas trop tôt, sinon il fait
+#    un tour complet et perd sa vitesse), lâche quand la corde fait ~25° de
+#    l'autre côté en remontant, et s'accroche au PLAFOND du couloir quand il
+#    n'y a pas de poisson. Meilleure course sans chute : 85,57 s avec
+#    figures (89,3 à 95,6 s selon les réglages, 90,1 s sans figures).
+#    Le terrain est le même à chaque partie (les trous ne dépendent pas du seed).
 # Un niveau absent de la liste utilise l'ancien temps de référence
 # (distance ÷ REF_SPEED) comme temps d'or.
 # [MÉDAILLES 1.34] temps remesurés avec les réglages physiques PAR DÉFAUT (les
@@ -93,7 +99,7 @@ const MEDAL_GOLD := {
 	"LevelRandomCorridor": 66.5,  # bot : 66,40 s sans figures (74,33 avec : figures risquées ici)
 	"LevelRandomNiceSlope": 49.5, # bot : 49,07 s avec figures (52,17 sans)
 	"LevelRandomSpaghetti": 33.5, # bot : 31,3 à 33,6 s selon le terrain (32,55 sans figures)
-	"LevelRandomGap": 97.0,       # estimé (voir plus haut), pas remesuré
+	"LevelRandomGap": 86.0,       # [MÉDAILLES 1.48] bot : 85,57 s avec figures, sans chute (avant : 97 estimé)
 }
 const SILVER_FACTOR := 1.25       # argent = or × 1,25
 const BRONZE_FACTOR := 1.6        # bronze = or × 1,6
