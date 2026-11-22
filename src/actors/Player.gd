@@ -160,7 +160,11 @@ var direction: Vector2
 #      la vitesse limite sur une pente de 10° (DRAG_REF_SLOPE_DEG) :
 #          k = g·sin(10°) / drag_terminal_speed²
 #      Avec 2000 px/s (défaut, réglé aux bots) : ~1790 px/s sur 8° (pente
-#      typique mesurée aux bots), ~2440 sur 15°, ~2830 sur 20° ; sur le plat
+#      typique mesurée aux bots), ~2440 sur 15°, ~2830 sur 20° POUR L'AIR
+#      SEUL. [1.62] Avec le frottement de glisse (point 2 ci-dessous), la
+#      vraie vitesse d'équilibre au sol est un peu plus basse : ~1660 sur 8°,
+#      ~1880 sur 10°, ~2350 sur 15°, ~2730 sur 20° (vérifié en intégrant
+#      l'équation ; c'est ce que montre le repère du compteur F3) ; sur le plat
 #      on ralentit doucement (~73 px/s² à 1450 px/s, ~140 px/s² à 2000 px/s,
 #      contre ~800 px/s² avec l'ancien frein après un gros saut).
 #      k est recalculé à partir de `gravity` : si l'équipe change la gravité
@@ -183,7 +187,8 @@ var direction: Vector2
 @export var realistic_physics: float = 1.0
 ## Vitesse limite (px/s) atteinte tout seul sur une pente de 10° (règle l'air).
 ## Réglée aux bots (section 59 de MIGRATION_GODOT4.md) : 1600 freinait trop les
-## sauts et le plat ; 2000 = ~1790 sur 8°, ~2440 sur 15°, ~2830 sur 20°.
+## sauts et le plat ; 2000 = ~1790 sur 8°, ~2440 sur 15°, ~2830 sur 20° (air
+## seul ; avec le frottement de glisse : ~1660 / ~2350 / ~2730, voir [1.62]).
 @export var drag_terminal_speed: float = 2000.0
 ## Coefficient de frottement de glisse au sol (μ, glace : très faible).
 @export var ground_friction: float = 0.02
@@ -474,14 +479,33 @@ func drag_coefficient() -> float:
 
 
 ## [PHYSIQUE RÉELLE 1.49] Vitesse limite sur une pente donnée (degrés, > 0 =
-## descente) : √(g·sin θ / k). 0 si plat ou montée (pas de vitesse limite :
-## l'air et le frottement finissent par arrêter le pingouin). Sert au
-## compteur de vitesse (SpeedMeter) pour placer son repère.
+## descente). 0 si plat ou montée (pas de vitesse limite : l'air et le
+## frottement finissent par arrêter le pingouin). Sert au compteur de vitesse
+## (SpeedMeter) pour placer son repère.
+##
+## [1.62] Le frottement de glisse est maintenant compté. Avant, le repère
+## utilisait √(g·sin θ / k), c'est-à-dire l'air seul, alors que la simulation
+## (_apply_air_drag_and_friction) retire AUSSI μ·g·cos θ au sol : le repère
+## était donc un peu trop haut (1790 au lieu d'environ 1660 px/s sur 8°).
+## Équilibre réel, quand dv/dt = 0 :
+##     g·sin θ − μ·g·cos θ − k·v² = 0   =>   v = √( g·(sin θ − μ·cos θ) / k )
+## Si la pente est trop douce pour vaincre le frottement (sin θ ≤ μ·cos θ,
+## soit environ 1,15° avec μ = 0,02), il n'y a pas de vitesse limite : 0.
+## Note : DRAG_REF_SLOPE_DEG / drag_terminal_speed (le réglage de k) restent
+## inchangés, donc la physique du jeu ne bouge pas d'un pixel : seul le
+## repère affiché par le compteur devient exact.
 func terminal_speed_on_slope(slope_deg: float) -> float:
 	var k := drag_coefficient()
 	if k <= 0.0 or slope_deg <= 0.0:
 		return 0.0
-	return sqrt(gravity * sin(deg_to_rad(slope_deg)) / k)
+	var theta := deg_to_rad(slope_deg)
+	# Poussée nette le long de la pente (par unité de masse) : gravité moins
+	# frottement de glisse. On ignore un ground_friction négatif (réglage F2
+	# absurde) en le ramenant à 0.
+	var net := gravity * (sin(theta) - maxf(ground_friction, 0.0) * cos(theta))
+	if net <= 0.0:
+		return 0.0
+	return sqrt(net / k)
 
 
 ## [PHYSIQUE RÉELLE 1.49] Applique la résistance de l'air (partout) et le

@@ -1281,3 +1281,10 @@ Demande de l'équipe (capture du salon et croquis du menu), choix validés : un 
 - **Niveaux custom** : ouvre « Mes niveaux », qui a maintenant deux **onglets** en haut, MES NIVEAUX / COMMUNAUTÉ (`MyLevelsScreen._build`).
 - **L'Œuf** ajouté aux courses du multijoueur et à l'échange de fantômes des Options.
 - Testé : captures PC (1600×900, 1024×768) et téléphone (2340×1080) en Chill et en Score ; salon avec un faux classement (nom long, joueur pas arrivé) ; parcours des boutons (Niveaux custom → onglet Communauté → onglet Mes niveaux ; L'Œuf lance bien le niveau) ; check_all 144 fichiers, 0 échec.
+
+## 72. Compteur de vitesse : repère de vitesse limite avec le frottement de glisse (22/11, pour la 1.62)
+
+- **Équation du jeu** (`Player._apply_air_drag_and_friction`, par unité de masse, g = `gravity` = 800 px/s²) : dv/dt = g·sin θ − μ·g·cos θ − k·v². Air partout (k·v²), frottement de glisse au sol seulement (μ = `ground_friction` = 0,02). k = g·sin(10°) / `drag_terminal_speed`² : 2000 px/s est la vitesse limite **sur 10° avec l'air seul**, pas en chute libre (en chute libre : √(g/k) ≈ 4800 px/s).
+- **Correction** : `Player.terminal_speed_on_slope` (repère du compteur F3) utilisait √(g·sin θ / k), sans le frottement, et affichait donc une limite un peu trop haute. Elle calcule maintenant v = √( g·(sin θ − μ·cos θ) / k ), et 0 quand la pente ne vainc pas le frottement (≤ ~1,15°).
+- **La physique ne change pas** : seule cette fonction d'affichage est modifiée (aucune médaille à remesurer).
+- Vérifié : 8° → 1658, 10° → 1883, 15° → 2349, 20° → 2729 px/s, identique à l'intégration numérique de l'équation (8° : 1658, 15° : 2349) ; check_all 144 fichiers, 0 échec.
