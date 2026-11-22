@@ -1288,3 +1288,14 @@ Demande de l'équipe (capture du salon et croquis du menu), choix validés : un 
 - **Correction** : `Player.terminal_speed_on_slope` (repère du compteur F3) utilisait √(g·sin θ / k), sans le frottement, et affichait donc une limite un peu trop haute. Elle calcule maintenant v = √( g·(sin θ − μ·cos θ) / k ), et 0 quand la pente ne vainc pas le frottement (≤ ~1,15°).
 - **La physique ne change pas** : seule cette fonction d'affichage est modifiée (aucune médaille à remesurer).
 - Vérifié : 8° → 1658, 10° → 1883, 15° → 2349, 20° → 2729 px/s, identique à l'intégration numérique de l'équation (8° : 1658, 15° : 2349) ; check_all 144 fichiers, 0 échec.
+
+## 73. « Le Gruyère de glace » : maquette de la partie 1 + balançoire au PUMP (22/11, pour la 1.62)
+
+- **Niveau** `src/levels/LevelGruyere.tscn` + `src/levels/gruyere/GruyereGenerator.gd` (géométrie calculée, comme L'Œuf). Pas encore dans le menu (maquette).
+- **Motif répété 3 fois**, de plus en plus dur : 3 piliers « vague » sur le vide (creux puis lèvre à 24°), **plafond-guide** en voûte au-dessus de chaque trou (filet de sécurité : rabat sur le pilier suivant si on saute trop haut), **grand bol** puis **tremplin à 45°**, **grand saut** avec **zone de dézoom** (caméra `focus_point`, zoom 0,4 au plus large). Motif 1 : on se pose sur une pente. Motifs 2 et 3 : la plateforme est plus haute que la fin du saut, il faut **grappiner l'œuf** (au-dessus de la plateforme, en retrait du bord, comme les ateliers FALAISE : on tire, on monte, on lâche au-dessus).
+- La trajectoire du saut est **calculée** (gravité + air, mêmes lois que le joueur) depuis la vitesse de décollage mesurée au bot (`JUMP_SPEED`) ; l'arrivée ou l'œuf sont posés dessus.
+- **Points de passage** : départ, début de chaque série de piliers, bol (réapparition sur le 3e pilier : Player limite la vitesse de réapparition à 1200 px/s, trop peu pour le grand saut si l'on repart dans le bol).
+- **Arrivée provisoire** : un pilier, l'arche, le half-pipe (mur au bout). Les cavernes viendront s'intercaler ici.
+- **Balançoire (nouvelle mécanique, `HookingInAirState.swing`)** : PUMP tenu près du bas du balancier (±45°) pousse le long de l'arc dans le sens du mouvement (700 px/s², jusqu'à 1250 px/s) ; presque arrêté, sens de la flèche tenue. Sans PUMP, rien ne change. Constantes `SWING_PUMP_*`.
+- **Bot** (`tools` hors projet : `gruyere_bot.gd`, env FIRE_D, NOPUMP, NOSWINGPUMP, PULL, LOG, SHOTS ; `gruyere_view.gd` avec NOBG=1) : partie 1 en 42,9 s sans chute (grappin lancé à 800, 950 ou 1100 px de l'œuf : 0 chute) ; sans PUMP : 48 à 59 s, 0 ou 1 chute.
+- Itérations notées dans le code : remontée du bol raccourcie (trop d'élan perdu), plafonds sur les 3 trous (survol des piliers à grande vitesse, atterrissage à plat au fond du bol), pilier long après l'œuf qui descend d'abord (sinon on n'en ressortait pas), départ en haut d'une pente (sans PUMP, 450 px/s au 1er trou).

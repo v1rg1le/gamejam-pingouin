@@ -31,6 +31,12 @@ const CHAIN_PULL = 25
 ## n'est plus retenu contre la prise : il retombe à cette distance du crochet
 ## (voir swing()). En tirant ({pull}), aucune limite.
 const ROPE_MIN_LENGTH := 160.0
+## [BALANÇOIRE 1.62] PUMP au bas du balancier (voir swing()) : poussée le long
+## de l'arc (px/s²), zone du bas où elle agit (cos de l'angle à la verticale :
+## 0,7 = ±45°), vitesse au-delà de laquelle on ne pousse plus (px/s).
+const SWING_PUMP_ACCEL := 700.0
+const SWING_PUMP_ZONE := 0.7
+const SWING_PUMP_MAX := 1250.0
 var pull_factor = 1
 var friction_chain_default = 1.65
 var friction = friction_chain_default
@@ -137,6 +143,33 @@ func swing(player: CharacterBody2D, delta):
 	if radius.length() < 1.0:
 		return
 	var radius_dir = radius.normalized()
+	# [BALANÇOIRE 1.62] demande de l'équipe (niveau « Le Gruyère de glace »,
+	# réponse 5a) : PUMP pendant le balancier = on prend de l'élan, comme sur
+	# une balançoire. Avant, le balancier gardait son élan mais ne pouvait pas
+	# en GAGNER : pendu sous une prise sans vitesse, on restait bloqué.
+	# Règles :
+	#  - seulement près du BAS de l'arc (Pinpouin à moins de ~45° de la
+	#    verticale sous le crochet : radius_dir.y > SWING_PUMP_ZONE), comme
+	#    quand on pousse avec les jambes au point bas d'une balançoire ;
+	#  - la poussée va dans le SENS du mouvement (elle accélère, ne freine
+	#    jamais). Presque arrêté : sens de la flèche gauche/droite tenue, sinon
+	#    le sens où regarde Pinpouin ;
+	#  - plafond SWING_PUMP_MAX sur la vitesse le long de l'arc : on monte de
+	#    plus en plus haut, sans pouvoir faire le tour complet du crochet.
+	# Rien ne change sans PUMP (balancier d'origine).
+	if Input.is_action_pressed("pump") and radius_dir.y > SWING_PUMP_ZONE:
+		# tangente à l'arc (perpendiculaire à la corde)
+		var tdir := Vector2(-radius_dir.y, radius_dir.x)
+		var tv: float = player._velocity.dot(tdir)
+		var sgn := signf(tv)
+		if absf(tv) < 40.0:
+			# presque arrêté : on choisit le sens (au point bas, tdir pointe vers la gauche)
+			var want := Input.get_axis("move_left", "move_right")
+			if want == 0.0:
+				want = signf(player.facing) if player.facing != 0 else 1.0
+			sgn = -signf(want) if tdir.x < 0.0 else signf(want)
+		if absf(tv) < SWING_PUMP_MAX:
+			player._velocity += tdir * sgn * SWING_PUMP_ACCEL * delta
 
 	# [GRAPPIN] composante radiale de la vitesse : v·r̂.
 	# Identique à l'ancien `cos(acos(r·v / (|r||v|))) * |v|` mais sans division
