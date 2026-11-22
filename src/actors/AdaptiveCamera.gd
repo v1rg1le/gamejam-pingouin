@@ -121,6 +121,10 @@ var _view_offset: Vector2 = Vector2.ZERO # décalage lissé appliqué à la cam�
 var focus_point = null
 const FOCUS_MARGIN := Vector2(260, 200)   # marge autour des deux points (px du monde)
 const FOCUS_MIN_ZOOM := 0.5
+## [ŒUF 1.60] dézoom maximum pour focus_point, réglable par le niveau (le bas
+## de l'œuf demande de voir plus loin : les stalactites sont espacées). Le
+## niveau le remet à FOCUS_MIN_ZOOM quand il n'en a plus besoin.
+var focus_min_zoom := FOCUS_MIN_ZOOM
 
 
 func _ready() -> void:
@@ -176,7 +180,7 @@ func _choose_target_zoom() -> void:
 	if focus_point != null:
 		var d: Vector2 = (focus_point - _player.global_position).abs() * 0.5 + FOCUS_MARGIN
 		var vs: Vector2 = get_viewport_rect().size * 0.5
-		_target_zoom = clampf(minf(minf(vs.x / d.x, vs.y / d.y), 1.0), FOCUS_MIN_ZOOM, 1.0)
+		_target_zoom = clampf(minf(minf(vs.x / d.x, vs.y / d.y), 1.0), focus_min_zoom, 1.0)
 		_pending_zoom_in = _target_zoom
 		_pending_since = Time.get_ticks_msec() / 1000.0
 		return
