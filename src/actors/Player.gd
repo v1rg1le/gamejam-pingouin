@@ -396,6 +396,12 @@ func _physics_process(delta: float) -> void:
 		(ground_detector_right.is_colliding() and !ground_detector_left.is_colliding()) or \
 		(!ground_detector_right.is_colliding() and ground_detector_left.is_colliding())
 
+	# [SAUT MUR 1.58] on retient la pente du dernier sol touché (saut coyote)
+	if is_on_ground:
+		var gn := _get_ground_normal()
+		if gn != Vector2.ZERO:
+			_last_ground_normal = gn
+
 	handle_input(delta)
 
 	if abs(_velocity.x) > 10:
@@ -1106,6 +1112,41 @@ func pump_blocked_on_wall() -> bool:
 	if chain.hooked and chain.tip.y < global_position.y:
 		return false          # bien accroché au-dessus : il peut se hisser
 	return true
+
+
+# =============================================================================
+#  [SAUT MUR 1.58] Plus d'escalade en sautant contre un mur
+# -----------------------------------------------------------------------------
+#  Retour de l'équipe (22/11) : collé à une paroi verticale, on pouvait
+#  grimper juste en sautant (le saut d'origine, JumpingState.enter, donne
+#  toujours une vitesse VERS LE HAUT de l'écran, même sur un mur ; on
+#  retombe sur le mur, on ressaute… Mesuré dans le half-pipe : 489 px de
+#  hauteur sans sauter, 662 à 668 px en tapotant SAUT).
+#  Choix de l'équipe, comme pour le PUMP (1.54) :
+#   - « mur » = surface plus raide que PUMP_WALL_DEG (75°) ;
+#   - sauf si le grappin tient avec le crochet AU-DESSUS de Pinpouin ;
+#   - sur un mur, SAUT « repousse du mur » : Pinpouin se décolle à
+#     l'horizontale (WALL_JUMP_PUSH), en gardant sa vitesse verticale :
+#     aucune hauteur gagnée. Ici, en montée comme en descente : sinon on
+#     ressauterait à chaque retombée.
+#  Le saut « coyote » (juste après avoir quitté le sol) suit la même règle,
+#  grâce à la dernière normale de sol retenue (_last_ground_normal).
+# =============================================================================
+const WALL_JUMP_PUSH := 450.0          # px/s : vitesse pour se décoller du mur
+var _last_ground_normal := Vector2.UP  # normale du dernier sol touché (saut coyote)
+
+## [SAUT MUR 1.58] Normale du mur si un saut maintenant doit seulement
+## « repousser du mur » ; Vector2.ZERO si le saut normal est permis.
+func wall_jump_normal() -> Vector2:
+	var n: Vector2 = _get_ground_normal() if (is_on_ground or is_almost_on_ground) else Vector2.ZERO
+	if n == Vector2.ZERO:
+		n = _last_ground_normal      # saut coyote : on regarde le sol qu'on vient de quitter
+	var slope_deg := rad_to_deg(acos(clampf(-n.y, -1.0, 1.0)))
+	if slope_deg <= PUMP_WALL_DEG:
+		return Vector2.ZERO          # pas un mur : saut normal
+	if chain.hooked and chain.tip.y < global_position.y:
+		return Vector2.ZERO          # bien accroché au-dessus : saut normal
+	return n
 
 
 ## [PUMP MUR 1.54] Accélération du pump (formule de PumpState 1.10, inchangée),

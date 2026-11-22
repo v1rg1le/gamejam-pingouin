@@ -138,21 +138,27 @@ func _ready() -> void:
 	box.add_child(_text)
 	box.add_child(_hint)
 
-	# --- bouton « Passer » (sous la bulle), caché au départ
+	# --- « Passer » (sous la bulle), caché au départ
+	# [TUTO 1.58] Retour de l'équipe (vidéo 1.57) : le gros bouton jaune
+	# « Passer cet atelier » prenait de la place et on cliquait dessus SANS LE
+	# VOULOIR en visant le grappin à la souris (ou en touchant l'écran sur
+	# téléphone). Choix de l'équipe : « Passer » devient une ligne du MENU
+	# PAUSE (voir MenuPause.gd). Ici il ne reste qu'un petit rappel discret,
+	# NON cliquable (mouse_filter IGNORE) : « Passer : Tab ou menu pause ».
+	# La variable garde son nom et son type (Button) pour ne rien casser ;
+	# Tab (clavier) et Back (manette) passent toujours l'atelier.
 	_skip = Button.new()
-	_skip.add_theme_font_size_override("font_size", 20)
+	_skip.add_theme_font_size_override("font_size", 15)
 	_skip.focus_mode = Control.FOCUS_NONE   # pas de focus : Espace / Entrée restent au jeu
-	# même style que la bulle, bordure jaune : il doit se voir sans gêner
-	for st_name in ["normal", "hover", "pressed"]:
+	_skip.mouse_filter = Control.MOUSE_FILTER_IGNORE   # [TUTO 1.58] plus de clic par erreur
+	for st_name in ["normal", "hover", "pressed", "disabled"]:
 		var bs := StyleBoxFlat.new()
-		bs.bg_color = Color(0.06, 0.1, 0.22, 0.94) if st_name != "pressed" else Color(0.25, 0.3, 0.5, 0.95)
-		bs.border_color = Color(1, 0.94, 0.4)
-		bs.set_border_width_all(3 if st_name == "normal" else 4)
-		bs.set_corner_radius_all(12)
-		bs.set_content_margin_all(10)
+		bs.bg_color = Color(0.06, 0.1, 0.22, 0.55)   # fond léger, sans bordure
+		bs.set_corner_radius_all(8)
+		bs.set_content_margin_all(5)
 		_skip.add_theme_stylebox_override(st_name, bs)
-	_skip.add_theme_color_override("font_color", Color(1, 0.94, 0.4))
-	_skip.add_theme_color_override("font_hover_color", Color(1, 1, 1))
+	_skip.add_theme_color_override("font_color", Color(1, 0.94, 0.4, 0.8))
+	_skip.add_theme_color_override("font_hover_color", Color(1, 0.94, 0.4, 0.8))
 	_skip.visible = false
 	_skip.pressed.connect(func(): emit_signal("skip_pressed"))
 	add_child(_skip)
@@ -299,6 +305,25 @@ func set_skip_visible(on: bool, to_race := false) -> void:
 	_refresh_text()
 
 
+## [TUTO 1.58] Pour le menu pause : « Passer » est-il permis en ce moment ?
+func skip_available() -> bool:
+	return _skip.visible
+
+
+## [TUTO 1.58] Texte de la ligne du menu pause.
+func skip_label() -> String:
+	return ("Aller à la course" if _skip_to_race else "Passer cet atelier") + "  ▶▶"
+
+
+## [TUTO 1.58] Appelé par le menu pause : même effet que Tab.
+func request_skip() -> void:
+	if not _skip.visible:
+		return
+	if _pausing:
+		_end_pause()
+	emit_signal("skip_pressed")
+
+
 func is_pausing() -> bool:
 	return _pausing
 
@@ -329,9 +354,10 @@ func _refresh_text() -> void:
 	_text.custom_minimum_size.x = minf(minf(widest + 4.0, BUBBLE_MAX_W), avail - 28.0)
 	var how := "Touche l'écran" if Settings.controls == Settings.TOUCH else ("Appuie sur un bouton" if Settings.controls == Settings.GAMEPAD else "Appuie sur une touche")
 	_hint.text = how + " pour continuer"
+	# [TUTO 1.58] petit rappel : la touche (s'il y en a une) ou le menu pause
 	var skip_key := "Back" if Settings.controls == Settings.GAMEPAD else ("" if Settings.controls == Settings.TOUCH else "Tab")
-	var what := "Aller à la course" if _skip_to_race else "Passer cet atelier"
-	_skip.text = what + "  ▶▶" + ("   (%s)" % skip_key if skip_key != "" else "")
+	var what := "Aller à la course" if _skip_to_race else "Passer"
+	_skip.text = what + " : " + (skip_key + " ou " if skip_key != "" else "") + "menu pause"
 	_bubble.reset_size()
 	_skip.reset_size()
 	# le texte à la ligne automatique ne connaît sa vraie hauteur qu'après une
@@ -378,18 +404,17 @@ func _end_pause() -> void:
 func _input(event: InputEvent) -> void:
 	if not visible:
 		return
-	# --- « Passer » : Tab, Back, ou toucher / clic sur le bouton. On le teste
-	# ICI (avant les boutons tactiles) : sinon toucher le bouton lancerait
-	# aussi le grappin vers cet endroit de l'écran.
-	# (aussi pendant la pause de lecture : on ferme la pause ET on passe)
+	# --- « Passer » : Tab ou Back (aussi pendant la pause de lecture : on
+	# ferme la pause ET on passe).
+	# [TUTO 1.58] plus de toucher / clic sur le rappel : on passait l'atelier
+	# sans le vouloir en visant le grappin. À la souris et au doigt, on passe
+	# par le menu pause (MenuPause.gd).
 	if _skip.visible and event.is_pressed() and not event.is_echo():
 		var hit := false
 		if event is InputEventKey and event.keycode == SKIP_KEY:
 			hit = true
 		elif event is InputEventJoypadButton and event.button_index == SKIP_JOY:
 			hit = true
-		elif event is InputEventScreenTouch or event is InputEventMouseButton:
-			hit = _skip.get_global_rect().has_point(_to_root(event.position))
 		if hit:
 			get_viewport().set_input_as_handled()
 			if _pausing:

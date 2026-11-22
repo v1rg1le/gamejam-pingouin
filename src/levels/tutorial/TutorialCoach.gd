@@ -105,6 +105,8 @@ var _welcome_wait := 0.0
 const PROMPT_LAND_SOON := 0.22        # s avant de toucher le sol : invite NOSE / pattes
 const PROMPT_AIM_TOL := 45.0          # px : tolérance de « la prise est dans l'axe (45°) »
 const CLIFF_STUCK_TIME := 1.2         # s arrêté au pied de la falaise = échec
+const SWING_STILL_SPEED := 250.0      # [TUTO 1.58] px/s : « pendu sans élan » au balancier
+const SWING_STILL_TIME := 2.5         # [TUTO 1.58] s pendu sans élan = échec, on recommence
 var prompt: ActionPrompt
 var _prompts_on := false              # invites encore actives dans cet atelier (1re tentative)
 var _prompt_i := 0                    # prochaine invite de l'atelier
@@ -296,6 +298,20 @@ func _watch(delta: float) -> void:
 			var sx: float = _player.global_position.x
 			if sx > generator.hole_end() + 60.0 and _player.global_position.y < generator.surface_y(sx) + 30.0:
 				_success()
+				return
+			# [TUTO 1.58] filet de sécurité (vidéo 1.57) : accroché au bloc mais
+			# pendu presque immobile (pas assez d'élan pour repartir), on ne
+			# laisse pas le joueur se balancer dans le vide : retour au début
+			# de l'atelier, avec un indice. Pas pendant une invite figée.
+			if _player.chain.hooked and _player._velocity.length() < SWING_STILL_SPEED \
+					and not prompt.is_active():
+				_stuck_t += delta
+				if _stuck_t >= SWING_STILL_TIME:
+					_stuck_t = 0.0
+					_fail("still")
+					_loop_back()
+			else:
+				_stuck_t = 0.0
 
 
 # -----------------------------------------------------------------------------
@@ -445,7 +461,7 @@ func _fail(reason: String) -> void:
 	var hints: Array = w.hints
 	var hint: String = hints[_hint_i % hints.size()]
 	_hint_i += 1
-	var head: String = {"loop": "On recommence !", "crash": "Aïe, sur le dos !", "trick": "Figure pas finie !", "fall": "Plouf !", "wall": "Bloqué au pied du mur !"}.get(reason, "Encore !")
+	var head: String = {"loop": "On recommence !", "crash": "Aïe, sur le dos !", "trick": "Figure pas finie !", "fall": "Plouf !", "wall": "Bloqué au pied du mur !", "still": "Plus assez d'élan !"}.get(reason, "Encore !")
 	bubble.say("ATELIER %d / %d · %s" % [_index + 1, workshops.size(), w.title], head + "  " + hint)
 	counter.flash("Encore !", Color(1, 0.6, 0.3))
 	_update_skip()

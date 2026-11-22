@@ -23,6 +23,16 @@ func enter(player: CharacterBody2D, _previous_state: PlayerState) -> void:
 #	player.animated_sprite.animation = "fly"
 	player.direction.y = -1.0
 #	player.snap = Vector2.ZERO
+	# [SAUT MUR 1.58] contre un mur (> 75°) sans grappin accroché au-dessus :
+	# le saut ne fait plus grimper. Pinpouin se décolle du mur à l'horizontale
+	# (du côté où regarde la paroi) et GARDE sa vitesse verticale : il ne gagne
+	# pas de hauteur. Détail et choix de l'équipe : Player.wall_jump_normal().
+	var wall_n: Vector2 = player.wall_jump_normal()
+	if wall_n != Vector2.ZERO:
+		var side: float = signf(wall_n.x) if absf(wall_n.x) > 0.01 else -float(player.facing)
+		player._velocity.x = side * player.WALL_JUMP_PUSH
+		print("saut contre un mur : repousse (normale %s, au sol %s)" % [wall_n.snapped(Vector2(0.01, 0.01)), player.is_on_ground])
+		return
 	player._velocity.y = player.max_speed.y * player.direction.y
 
 func _ready():

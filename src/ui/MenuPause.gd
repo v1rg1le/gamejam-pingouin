@@ -45,6 +45,7 @@ func _ready() -> void:
 	# déplace pas un nœud pendant son propre _ready().
 	if get_parent() is CanvasLayer:
 		UiScaler.apply.call_deferred(get_parent())
+	_add_tuto_skip_button()   # [TUTO 1.58]
 	if not NetSession.in_race:
 		return
 	var box := pause_overlay.get_node("VBoxContainer")
@@ -64,8 +65,57 @@ func _unhandled_input(event: InputEvent) -> void:
 		# c'est maintenant le Viewport qui marque l'événement comme traité.
 		get_viewport().set_input_as_handled()  # pour ne pas propager l'event dans les autres programmes
 
+# --- [TUTO 1.58] « Passer cet atelier » dans le menu pause -----------------
+# Retour de l'équipe (vidéo 1.57) : le bouton « Passer » sous la bulle de
+# Pinpouin prenait de la place et on cliquait dessus par erreur en visant le
+# grappin. Choix de l'équipe : il passe dans le menu pause. La ligne n'est
+# visible que dans le tuto, quand « Passer » est permis (tuto déjà fini une
+# fois, ou assez d'échecs dans l'atelier : règle de TutorialCoach inchangée).
+var _tuto_skip_button: Button = null
+
+
+func _add_tuto_skip_button() -> void:
+	var box := pause_overlay.get_node("VBoxContainer")
+	var resume: Button = box.get_node_or_null("ResumeButton")
+	_tuto_skip_button = Button.new()
+	_tuto_skip_button.name = "TutoSkipButton"
+	_tuto_skip_button.custom_minimum_size = Vector2(300, 50)
+	_tuto_skip_button.visible = false
+	_tuto_skip_button.pressed.connect(_on_tuto_skip_pressed)
+	box.add_child(_tuto_skip_button)
+	if resume != null:
+		box.move_child(_tuto_skip_button, resume.get_index() + 1)   # juste sous « Reprendre »
+
+
+# Le coach du tuto (groupe « tutorial »), s'il y en a un dans ce niveau.
+func _tuto_bubble():
+	var coach = get_tree().get_first_node_in_group("tutorial")
+	if coach == null or not ("bubble" in coach) or coach.bubble == null:
+		return null
+	return coach.bubble
+
+
+func _refresh_tuto_skip_button() -> void:
+	if _tuto_skip_button == null:
+		return
+	var bubble = _tuto_bubble()
+	var on: bool = bubble != null and bubble.skip_available()
+	_tuto_skip_button.visible = on
+	if on:
+		_tuto_skip_button.text = bubble.skip_label()
+
+
+func _on_tuto_skip_pressed() -> void:
+	var bubble = _tuto_bubble()
+	self.paused = false          # on ferme le menu pause d'abord…
+	if bubble != null:
+		bubble.request_skip.call_deferred()   # …puis on passe l'atelier, jeu relancé
+
+
 func set_paused(value: bool) -> void:
 	paused = value
+	if value:
+		_refresh_tuto_skip_button()   # [TUTO 1.58]
 	_reset_confirm_buttons()   # [TEST ENFANT 1.22] on repart toujours de zéro
 	scene_tree.paused = value and not NetSession.in_race   # [MULTI] pas de vraie pause en réseau
 	pause_overlay.visible = value

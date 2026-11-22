@@ -27,6 +27,10 @@ class_name HookingInAirState
 # =============================================================================
 
 const CHAIN_PULL = 25
+## [GRAPPIN 1.58] longueur de corde en dessous de laquelle, sans tirer, Pinpouin
+## n'est plus retenu contre la prise : il retombe à cette distance du crochet
+## (voir swing()). En tirant ({pull}), aucune limite.
+const ROPE_MIN_LENGTH := 160.0
 var pull_factor = 1
 var friction_chain_default = 1.65
 var friction = friction_chain_default
@@ -168,7 +172,22 @@ func swing(player: CharacterBody2D, delta):
 	#     à la même hauteur droit devant -> Pinpouin envoyé à la verticale à
 	#     1450 px/s ;
 	#   - entre les deux : mélange progressif.
-	if _just_hooked and rad_vel < 0.0 and player.hook_keep_speed >= 0.5:
+	# [GRAPPIN 1.58] CORDE TROP COURTE = on ne reste plus « collé » à la prise.
+	# Retour de l'équipe (vidéo 1.57, atelier BALANCIER) : accroché au bloc de
+	# glace, la petite traction élastique (stretch, plus bas) raccourcit la
+	# corde à chaque balancement ; Pinpouin finissait à ~70 px du crochet,
+	# plaqué contre le flanc du bloc. Là, ce calcul « corde rigide » effaçait
+	# aussi la GRAVITÉ (qui tire dans l'axe de la corde) : il flottait immobile
+	# sous le bloc, sans pouvoir se balancer (mesuré : 13 px/s pendant 5 s).
+	# Maintenant, sous ROPE_MIN_LENGTH et sans tirer ({pull}), on n'efface plus
+	# la vitesse qui l'ÉLOIGNE du crochet : il retombe au bout d'une corde de
+	# ROPE_MIN_LENGTH, d'où il peut de nouveau se balancer. En tirant, rien ne
+	# change (falaises, cheminée : on doit pouvoir se hisser tout près de la
+	# prise).
+	var rope_too_short: bool = radius.length() < ROPE_MIN_LENGTH and not Input.is_action_pressed("pull")
+	if rope_too_short and rad_vel > 0.0:
+		pass   # il s'éloigne du crochet : on le laisse retomber (pas de stretch non plus)
+	elif _just_hooked and rad_vel < 0.0 and player.hook_keep_speed >= 0.5:
 		var speed_before: float = player._velocity.length()
 		var tangential: Vector2 = player._velocity - radius_dir * rad_vel
 		var t_len: float = tangential.length()
@@ -179,6 +198,10 @@ func swing(player: CharacterBody2D, delta):
 			player._velocity = tangential
 	else:
 		player._velocity += radius_dir * -rad_vel
+	# [GRAPPIN 1.58] corde trop courte (et on ne tire pas) : pas de traction
+	# élastique vers le crochet, sinon elle le replaquerait contre la prise.
+	if rope_too_short:
+		return
 	# mode corde fixe (avec encore un peu de gravite)
 	if player.global_position.distance_to(player.chain.tip) > player.chain.max_length and player.chain_fixed:
 		return
