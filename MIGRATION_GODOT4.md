@@ -1212,3 +1212,15 @@ Demande de l'équipe : ne plus redemander plusieurs fois le même geste ; mettre
   - La caméra suit la prochaine prise au-dessus de Pinpouin.
 - **Correction du gel (1.55d)** : pendant un gel, le pingouin n'est plus seulement « au ralenti zéro » mais arrêté (`process_mode` DISABLED). Avant, des forces du jeu qui ne dépendent pas du temps (traction du grappin au sol) s'accumulaient pendant le gel : jusqu'à 3000 px/s à la reprise, et grappin relancé du mauvais côté. À la reprise, l'appui sur le bon bouton est « rejoué » pour que le pingouin le voie comme un appui neuf, et l'action est relâchée quand le joueur relâche le vrai bouton.
 - Re-testé : 12 ateliers sur 12 du premier coup au clavier, à la manette et au tactile, 11 sur 11 en mode enfant ; course finale 13,47 s (or 13,5 s) ; captures de la cheminée.
+
+## 67. Tuto : plus de place pour les sauts, gestes anticipés, cheminée revue (22/11, version 1.57)
+
+Retour de l'équipe sur une vidéo de la 1.56.
+
+- **Plus de place après les tremplins** : un vol lancé fait 2000 à 3500 px ; l'atelier pouvait se terminer pendant le vol (« On recommence ! » en pleine figure). Ateliers allongés (pattes 17 500 px, nose et figures 12 000, chute et combo 6500 ; 5600 px entre deux tremplins), et l'atelier ne recommence plus tant que Pinpouin est en l'air.
+- **Gestes faits en avance** (`TutorialCoach._already_done`) : si le joueur a déjà fait le geste attendu (sauté avant le bord, figure lancée, bec déjà relevé ou penché, déjà presque sur le dos, déjà accroché à la prise visée, PUMP déjà tenu), l'invite n'est pas affichée et on passe à la suivante. Avant, elle attendait le tremplin suivant et redemandait un geste déjà fait.
+- **Cheminée** :
+  - prises **encastrées** dans les parois (`CHIMNEY_EMBED` : centre 15 px dans le mur ; elles dépassent de ~40 px au lieu de 110) : on ne se coince plus entre une prise et la paroi d'en face ;
+  - **galerie de sortie** : le rocher de gauche se prolonge en plafond au-dessus du haut du massif (1000 px, hauteur 380 px), ouverte seulement à droite ; une prise de sortie à droite (juste après le bord, dans l'axe depuis la dernière prise de gauche) et une à gauche (au-dessus du couloir) pour s'ajuster ; on se pose sur le sol de la galerie et on ressort à droite vers le replat et la descente.
+- Corrigé au passage : juste après un « lâche ! », l'invite de grappin suivante était parfois sautée (le grappin tenait encore une image).
+- Testé (`tuto_prompt_bot.gd`) : tous les ateliers réussis du premier coup, testés par morceaux au clavier, à la manette, au tactile et en mode enfant ; captures de la cheminée et de la galerie ; course finale 13,68 s (or 13,5 s, figures tirées au hasard) ; check_all 141 fichiers, 0 échec.

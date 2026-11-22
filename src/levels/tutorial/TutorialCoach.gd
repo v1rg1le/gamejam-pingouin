@@ -202,7 +202,10 @@ func _physics_process(delta: float) -> void:
 		return
 
 	# 2. Bout de l'atelier sans assez de réussites : on recommence (la boucle)
-	if _index >= 0 and not _completed and px >= workshops[_index].x1:
+	# [TUTO 1.56b] seulement une fois posé : avant, l'atelier recommençait EN
+	# PLEIN VOL (« On recommence ! » pendant qu'on faisait la figure, vu dans
+	# la vidéo de l'équipe), alors que le saut pouvait encore réussir
+	if _index >= 0 and not _completed and px >= workshops[_index].x1 and _player.is_on_ground:
 		_fail("loop")
 		_loop_back()
 		return
@@ -543,6 +546,11 @@ func _update_prompts() -> void:
 	if _prompt_i >= list.size():
 		return
 	var p: Dictionary = list[_prompt_i]
+	# [TUTO 1.56b] geste déjà fait en avance : on ne le redemande pas
+	if _already_done(p):
+		print("[TUTO] invite sautée (déjà fait) : ", p.action, " (", p.when, ")")
+		_prompt_i += 1
+		return
 	if not _prompt_ready(String(p.when), workshops[_index]):
 		return
 	var mode: String = p.get("mode", "press")
@@ -608,6 +616,54 @@ func _update_camera_focus() -> void:
 				focus = w.targets.get("hold%d" % (i + 1), null)
 				break
 	cam.focus_point = focus
+
+
+# =============================================================================
+#  [TUTO 1.56b] Le joueur a déjà fait le geste, en avance
+# -----------------------------------------------------------------------------
+#  Retour de l'équipe : « des fois le jeu redemande de faire l'action parce
+#  que le joueur l'a faite de manière anticipée ». Exemple : il saute AVANT le
+#  bord du tremplin ; l'invite « saute au bord ! » attendait le bord… du
+#  tremplin suivant, et redemandait un saut déjà fait. Maintenant, si le
+#  geste de l'invite en attente est déjà fait (ou en train d'être fait), on la
+#  saute sans rien afficher, et on passe à la suivante (celle du même saut).
+# =============================================================================
+func _already_done(p: Dictionary) -> bool:
+	var when := String(p.when)
+	var st = _player._states.current
+	var ground: bool = _player.is_on_ground
+	# rotation « vers l'avant » positive, quel que soit le sens de la glisse
+	var tilt: float = _player.rotation * float(_player.facing)
+	match String(p.action):
+		"jump":
+			# déjà en l'air après un saut (ou lancé par le tremplin)
+			if when == "lip":
+				return not ground and _air_t > 0.1                   # parti du tremplin
+			return _jumped or st == _player._states.jumping         # atelier saut : déjà sauté
+		"trix":
+			return st == _player._states.trixing
+		"rotate_trigo":
+			if when == "land_crash":
+				return absf(_player.rotation) > deg_to_rad(90.0)   # déjà presque sur le dos
+			return not ground and tilt < -deg_to_rad(25.0)          # bec déjà relevé
+		"rotate_horaire":
+			return not ground and tilt > deg_to_rad(25.0)           # bec déjà en avant
+		"hook":
+			if String(p.get("mode", "press")) != "press":
+				return false
+			# déjà accroché À LA PRISE visée (ou au plafond de l'atelier
+			# grappin) : pas la peine de le redemander. (Pas « accroché tout
+			# court » : juste après un « lâche ! », le grappin tient encore une
+			# image, et l'invite suivante était sautée à tort.)
+			if not _player.chain.hooked:
+				return false
+			if when.begins_with("aim:"):
+				var t = _target(workshops[_index], when.substr(4))
+				return t != null and _player.chain.tip.distance_to(t) < 200.0
+			return when == "under_roof"
+		"pump":
+			return st.sub_state_name == "PUMPING"
+	return false
 
 
 func _on_prompt_done() -> void:

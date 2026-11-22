@@ -117,6 +117,11 @@ var fish_res = preload("res://src/levels/parts/StaticBody2DFish.tscn")   # [TUTO
 #     passent dans l'ordre ;
 #   - deux ateliers FALAISE avant la course finale (`cliff` : hauteur du
 #     mur, et nombre de prises 1 ou 2), voir _add_cliff().
+#  [TUTO 1.56b] Retour de l'équipe (vidéo) : « pas assez de place pour faire
+#  ce qui est demandé, surtout pour les figures : le saut fait partir très
+#  loin ». Un vol de tremplin lancé fait 2000 à 3500 px : les ateliers à
+#  tremplins sont allongés (5600 px entre deux tremplins, ~5000 px après le
+#  dernier), et l'atelier ne recommence plus pendant un vol (TutorialCoach).
 #  Moments (`when`) disponibles : ground, ground_descent, lip (bord d'un
 #  tremplin de l'atelier), takeoff (juste après le décollage), land_soon
 #  (juste avant de toucher le sol), land_crash (un peu plus tôt : le temps
@@ -135,7 +140,7 @@ var workshop_specs = [
 		"prompts": [{"action": "jump", "when": "ground", "text": "Saute !", "after": "Et retombe sans chuter !"}],
 		"hints": ["Appuie sur {jump} quand Pinpouin touche le sol.",
 			"Un saut, on atterrit… et on recommence !"]},
-	{"key": "feet", "len": 11500, "need": 1, "ramps": [800, 4400, 8000], "title": "SUR LES PATTES", "short": "PATTES",
+	{"key": "feet", "len": 17500, "need": 1, "ramps": [800, 6400, 12000], "title": "SUR LES PATTES", "short": "PATTES",
 		"text": "Saute au bout des tremplins ({jump}). En l'air, relève le bec avec {rotate_trigo} : Pinpouin retombe sur ses PATTES, c'est un TAIL (+ points) ! Debout, {rotate_horaire} le couche sur le ventre ; trop de {rotate_trigo}, il tombe en arrière.",
 		"prompts": [{"action": "jump", "when": "lip", "text": "Saute au bord du tremplin !", "after": "En l'air ! Attends le bon moment…"},
 			{"action": "rotate_trigo", "when": "land_soon", "text": "Un PETIT appui pour relever le bec… puis relâche !", "after": "Sur les pattes ! Relâche {rotate_trigo}, sinon tu bascules en arrière."}],
@@ -143,28 +148,28 @@ var workshop_specs = [
 			"Pas trop quand même : tête en bas, c'est la chute !",
 			"Une fois debout, lâche {rotate_trigo} : si tu le tiens, Pinpouin bascule en arrière.",
 			"Prends de l'élan avec {pump} avant le tremplin, puis saute au bord."]},
-	{"key": "nose", "len": 8000, "need": 1, "ramps": [800, 4400], "title": "NOSE", "short": "NOSE",
+	{"key": "nose", "len": 12000, "need": 1, "ramps": [800, 6400], "title": "NOSE", "short": "NOSE",
 		"text": "Comme en skate : retombe le BEC EN AVANT ! Penche Pinpouin avec {rotate_horaire} juste avant le sol. NOSE = points + petit boost.",
 		"prompts": [{"action": "jump", "when": "lip", "text": "Saute au bord du tremplin !", "after": "En l'air ! Attends le bon moment…"},
 			{"action": "rotate_horaire", "when": "land_soon", "text": "Un petit appui : le bec en avant !", "after": "Juste un peu : trop penché, c'est la chute !"}],
 		"hints": ["Penche vers l'avant avec {rotate_horaire}, un peu plus que pour les pattes.",
 			"Pas trop quand même : sur le dos, c'est la chute !",
 			"Commence à pencher dès que Pinpouin redescend."]},
-	{"key": "crash", "len": 4400, "need": 1, "ramps": [800], "title": "LA CHUTE", "short": "CHUTE",
+	{"key": "crash", "len": 6500, "need": 1, "ramps": [800], "title": "LA CHUTE", "short": "CHUTE",
 		"text": "Sur le dos, ça fait mal ! Essaie UNE fois pour voir : sur le tremplin, tourne longtemps avec {rotate_trigo} et atterris sur le dos.",
 		"prompts": [{"action": "jump", "when": "lip", "text": "Saute au bord du tremplin !", "after": "En l'air ! Attends le bon moment…"},
 			{"action": "rotate_trigo", "when": "land_crash", "text": "Maintiens-le jusqu'au sol : sur le dos !", "after": "Garde {rotate_trigo} jusqu'au sol…"}],
 		"hints": ["Tourne plus longtemps avec {rotate_trigo} : il faut toucher le sol la tête en bas.",
 			"Saute au bord du tremplin ({jump}) pour avoir le temps de tourner."],
 		"done_text": "Tu as vu ? Roulade, sonné 1 seconde, et les points du saut\nsont perdus. En course, évite ça !"},
-	{"key": "figure", "len": 8000, "need": 1, "ramps": [800, 4400], "title": "FIGURES", "short": "FIGURE",
+	{"key": "figure", "len": 12000, "need": 1, "ramps": [800, 6400], "title": "FIGURES", "short": "FIGURE",
 		"text": "En l'air, appuie sur {trix} pour une FIGURE (+100 pts). Elle doit être finie AVANT de toucher le sol.",
 		"prompts": [{"action": "jump", "when": "lip", "text": "Saute au bord du tremplin !", "after": "En l'air ! Attends le bon moment…"},
 			{"action": "trix", "when": "takeoff", "text": "Une figure, tout de suite après le décollage !", "after": "Elle doit finir avant le sol."}],
 		"hints": ["Lance la figure tout de suite après le décollage.",
 			"Une seule figure par saut, sinon elle ne finit pas à temps.",
 			"Prends de l'élan avec {pump} : plus haut = plus de temps."]},
-	{"key": "combo", "len": 4400, "need": 1, "ramps": [800], "title": "COMBO", "short": "COMBO",
+	{"key": "combo", "len": 6500, "need": 1, "ramps": [800], "title": "COMBO", "short": "COMBO",
 		"text": "Plusieurs éléments dans le même saut = COMBO, points multipliés ! Une figure ({trix}) puis atterris en NOSE ({rotate_horaire}).",
 		"prompts": [{"action": "jump", "when": "lip", "text": "Saute au bord du tremplin !", "after": "En l'air ! Attends le bon moment…"},
 			{"action": "trix", "when": "takeoff", "text": "D'abord une figure…", "after": "… et bec en avant juste avant le sol !"},
@@ -553,7 +558,7 @@ func _add_cliff(w: Dictionary) -> void:
 			var px := x + run * t
 			var py := y + coeff_pente * run * t
 			if last:
-				py -= SUMMIT_DOME * sin(PI * t)
+				py -= SUMMIT_DOME * sin(PI * t) * float(w.cliff.get("dome", 1.0))
 			seg.append(Vector2(px, py))
 			outline.append(Vector2(px, py))
 		y += coeff_pente * run
@@ -625,6 +630,8 @@ func _add_cliff(w: Dictionary) -> void:
 	# une prise par paroi : CLIFF_HOLD_IN px après le haut de la paroi,
 	# CLIFF_HOLD_UP px au-dessus (« hold1 », « hold2 »…)
 	for i in faces.size():
+		if w.cliff.get("no_hold", false):
+			break   # [1.56b] cheminée : ses prises sont posées par _add_chimney
 		var hold := Vector2(face_tops[i] + CLIFF_HOLD_IN, tops[i] - CLIFF_HOLD_UP)
 		_add_hold(hold)
 		w.targets["hold%d" % (i + 1)] = hold
@@ -668,60 +675,84 @@ func _add_edge(body: Node, pts: PackedVector2Array) -> void:
 const CHIMNEY_R1_UP := 420.0          # hauteur de la 1re prise au-dessus du sol du couloir
 const CHIMNEY_HANG := Vector2(60, 140) # où Pinpouin arrive sous une prise en tirant (x : vers le couloir)
 const CHIMNEY_ROCK_W := 700.0         # largeur du rocher de gauche
+const CHIMNEY_EMBED := 15.0           # [1.56b] centre des prises dans la paroi (px)
+const CHIMNEY_EXIT_IN := 90.0         # [1.56b] prise de sortie : px après le bord du massif
+const CHIMNEY_GALLERY_H := 380.0      # [1.56b] hauteur de la galerie de sortie
+const CHIMNEY_GALLERY_L := 1000.0     # [1.56b] longueur du plafond après le bord du massif
+const CHIMNEY_ROOF_T := 140.0         # [1.56b] épaisseur du plafond
 
 func _add_chimney(w: Dictionary) -> void:
 	var wid := float(w.chimney.width)
 	var xl: float = w.chimney_x                 # paroi de gauche (face droite du rocher)
 	var xr: float = xl + wid                     # paroi de droite (pied du massif)
 	var floor_y := surface_y(xr)
-	var r := HOLD_RADIUS
-	# prises de bas en haut (zigzag), puis prise du sommet
+	# [1.56b] retour de l'équipe : « les prises un peu plus DANS les murs, on
+	# peut rester bloqué dedans ». Les boules dépassaient de 110 px dans le
+	# couloir (Pinpouin pouvait se coincer entre une boule et la paroi d'en
+	# face) : leur centre est maintenant CHIMNEY_EMBED px DANS la paroi, elles
+	# ne dépassent plus que d'une quarantaine de px.
+	var rx: float = xr + CHIMNEY_EMBED          # centre d'une prise de droite
+	var lx: float = xl - CHIMNEY_EMBED          # centre d'une prise de gauche
+	# prises de bas en haut (zigzag)
 	var holds := []
-	var h := Vector2(xr - r, floor_y - CHIMNEY_R1_UP)       # c1 : paroi de droite
-	holds.append(h)
+	holds.append(Vector2(rx, floor_y - CHIMNEY_R1_UP))   # c1 : paroi de droite
 	for k in 3:
 		var right_side: bool = k % 2 == 1                   # c2 gauche, c3 droite, c4 gauche
 		var prev: Vector2 = holds[holds.size() - 1]
 		var hang: Vector2 = prev + Vector2(CHIMNEY_HANG.x if right_side else -CHIMNEY_HANG.x, CHIMNEY_HANG.y)
-		var nx: float = (xr - r) if right_side else (xl + r)
+		var nx: float = rx if right_side else lx
 		var d: float = absf(nx - hang.x)
 		holds.append(Vector2(nx, hang.y - d))
-	# c5 : prise au bord du sommet de droite, dans l'axe depuis sous c4
+	# [1.56b] SORTIE : une petite galerie couverte au sommet (demande de
+	# l'équipe : « un point de hook à gauche et à droite à la sortie pour
+	# s'ajuster, avec une petite galerie qui incite à aller à droite »).
+	#  - le plafond de la galerie prolonge le rocher de gauche vers la droite,
+	#    au-dessus du haut du massif (le sol de la galerie) ;
+	#  - c5 (prise de DROITE de la sortie) est sous ce plafond, juste après le
+	#    bord du massif, dans l'axe depuis sous c4 : en tirant, Pinpouin
+	#    arrive au-dessus du sol de la galerie, il lâche et se pose ;
+	#  - e0 (prise de GAUCHE de la sortie), sous le plafond au-dessus du
+	#    couloir : pour s'ajuster si besoin ;
+	#  - la galerie est ouverte à droite seulement : on ressort vers le
+	#    replat et la descente, vers la course.
 	var hang4: Vector2 = holds[3] + Vector2(CHIMNEY_HANG.x, CHIMNEY_HANG.y)
-	var c5x: float = xr + CLIFF_HOLD_IN
+	var c5x: float = xr + CHIMNEY_EXIT_IN
 	var c5 := Vector2(c5x, hang4.y - (c5x - hang4.x))
-	var top_r := c5.y + CLIFF_HOLD_UP                       # haut du massif de droite
-	# massif de droite : une falaise à paroi droite, dont la prise est c5
-	w.cliff = {"at": 0, "steps": [floor_y - top_r], "profile": "wall"}
+	var roof_under: float = c5.y - CHIMNEY_EMBED           # dessous du plafond (la prise y est encastrée)
+	var top_r: float = roof_under + CHIMNEY_GALLERY_H        # sol de la galerie = haut du massif
+	# massif de droite : paroi droite, sommet sans bosse, sans prise à lui
+	w.cliff = {"at": 0, "steps": [floor_y - top_r], "profile": "wall", "dome": 0.0, "no_hold": true}
 	w.cliff_x = xr
 	_add_cliff(w)
-	# rocher de gauche (suspendu, on passe dessous), sommet au-dessus de c4
-	var top_l: float = holds[3].y - 220.0
+	# rocher de gauche (suspendu, on passe dessous) + plafond de la galerie
+	var roof_top: float = roof_under - CHIMNEY_ROOF_T
+	var roof_end: float = xr + CHIMNEY_GALLERY_L
 	var rock := PackedVector2Array()
 	var x0 := xl - CHIMNEY_ROCK_W
-	# dessous : suit la piste, CHIMNEY_TUNNEL px au-dessus
 	var tunnel := float(w.chimney.tunnel)
 	var bx := xl
-	while bx > x0:
+	while bx > x0:                                   # dessous : suit la piste
 		rock.append(Vector2(bx, surface_y(bx) - tunnel))
 		bx -= 70.0
 	rock.append(Vector2(x0, surface_y(x0) - tunnel - 60.0))
-	# face gauche rocheuse (penchée, quelques ressauts), puis dessus
-	var lh: float = (surface_y(x0) - tunnel) - top_l
-	var left_face := [[0.0, 0.0], [90.0, 0.25], [150.0, 0.45], [120.0, 0.6], [230.0, 0.85], [300.0, 1.0]]
-	var top_edge := PackedVector2Array()
+	# face gauche rocheuse (penchée, quelques ressauts)
+	var lh: float = (surface_y(x0) - tunnel - 60.0) - roof_top
+	var left_face := [[90.0, 0.25], [150.0, 0.45], [120.0, 0.6], [230.0, 0.85], [300.0, 1.0]]
 	for lf in left_face:
-		var pt := Vector2(x0 + float(lf[0]), surface_y(x0) - tunnel - 60.0 - (lh - 60.0) * float(lf[1]))
-		rock.append(pt)
+		rock.append(Vector2(x0 + float(lf[0]), surface_y(x0) - tunnel - 60.0 - lh * float(lf[1])))
+	var top_edge := PackedVector2Array()
 	var tx := x0 + 300.0
-	while tx < xl - 40.0:
-		var pt2 := Vector2(tx, top_l)
-		rock.append(pt2)
-		top_edge.append(pt2)
-		tx += 80.0
-	rock.append(Vector2(xl - 20.0, top_l + 10.0))
-	top_edge.append(Vector2(xl - 20.0, top_l + 10.0))
-	rock.append(Vector2(xl, top_l + 40.0))     # coin arrondi
+	while tx < roof_end - 60.0:                      # dessus du rocher et du plafond
+		var pt := Vector2(tx, roof_top + coeff_pente * (tx - (x0 + 300.0)) * 0.3)
+		rock.append(pt)
+		top_edge.append(pt)
+		tx += 100.0
+	var end_top := Vector2(roof_end, rock[rock.size() - 1].y + 20.0)
+	rock.append(end_top)                             # bout du plafond (arrondi)
+	top_edge.append(end_top)
+	rock.append(Vector2(roof_end + 20.0, (end_top.y + roof_under) * 0.5))
+	rock.append(Vector2(roof_end - 20.0, roof_under + 10.0))
+	rock.append(Vector2(xl, roof_under))             # dessous du plafond, vers la gauche
 	var body := StaticBody2D.new()
 	body.collision_layer = 2
 	body.z_index = 5
@@ -735,13 +766,18 @@ func _add_chimney(w: Dictionary) -> void:
 	body.add_child(fill)
 	_add_edge(body, top_edge)
 	add_child(body)
-	# prises (c5 est déjà posée par _add_cliff comme « hold1 »)
+	# prises
 	for k in 4:
 		_add_hold(holds[k])
 		w.targets["c%d" % (k + 1)] = holds[k]
-	w.targets["c5"] = w.targets["hold1"]
+	_add_hold(c5)
+	w.targets["c5"] = c5
+	var e0 := Vector2(xl + wid * 0.35, roof_under + CHIMNEY_EMBED)
+	_add_hold(e0)
+	w.targets["e0"] = e0
 	w.chimney_left = xl
 	w.chimney_right = xr
+	w.chimney_roof = roof_under
 
 
 # Une prise de falaise : boule de glace de HOLD_RADIUS px, centrée en `center`
