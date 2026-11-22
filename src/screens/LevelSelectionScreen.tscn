@@ -257,6 +257,14 @@ size_flags_vertical = 0
 text = "L'Œuf"
 next_scene_path = "res://src/levels/LevelEgg.tscn"
 
+[node name="ButtonGruyere" parent="Margin/VBox/Columns/RacesPanel/VBox/Cols/MidCol/Grid" instance=ExtResource("5")]
+custom_minimum_size = Vector2(240, 52)
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 0
+text = "Le Gruyère de glace"
+next_scene_path = "res://src/levels/LevelGruyere.tscn"
+
 [node name="RightCol" type="VBoxContainer" parent="Margin/VBox/Columns/RacesPanel/VBox/Cols"]
 layout_mode = 2
 size_flags_horizontal = 3

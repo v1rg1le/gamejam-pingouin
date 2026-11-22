@@ -30,6 +30,7 @@ const RACES = [
 	["Hook, you fool !", "res://src/levels/LevelRandomGap.tscn"],
 	["Spaghetti", "res://src/levels/LevelRandomSpaghetti.tscn"],
 	["L'Œuf", "res://src/levels/LevelEgg.tscn"],   # [MENUS 1.61] nouveau niveau, ajouté ici aussi
+	["Le Gruyère de glace", "res://src/levels/LevelGruyere.tscn"],   # [GRUYÈRE 1.62] maquette de la partie 1, à tester
 	["Sans fin", "res://src/levels/LevelEndless.tscn"],   # [FANTÔME SANS FIN 1.36] défi à distance
 ]
 
