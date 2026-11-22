@@ -157,6 +157,14 @@ size_flags_vertical = 0
 text = "Spaghetti"
 next_scene_path = "res://src/levels/LevelRandomSpaghetti.tscn"
 
+[node name="ButtonEgg" parent="Margin/VBox/Columns/RacesPanel/VBox/Grid" instance=ExtResource("5")]
+custom_minimum_size = Vector2(380, 46)
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 0
+text = "Le Half-Pipe de l'œuf"
+next_scene_path = "res://src/levels/LevelEgg.tscn"
+
 [node name="Button704" parent="Margin/VBox/Columns/RacesPanel/VBox/Grid" instance=ExtResource("5")]
 custom_minimum_size = Vector2(380, 46)
 layout_mode = 2

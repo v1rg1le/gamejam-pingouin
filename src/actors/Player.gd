@@ -903,6 +903,14 @@ func _pick_respawn_sample():
 		var s = endless.respawn_sample(global_position.x)
 		if s != null:
 			return {"pos": s.pos, "vel": s.vel, "time": _last_ground_time}
+	# [ŒUF 1.59] niveau à points de passage (« Le Half-Pipe de l'œuf ») :
+	# réapparition au dernier point de passage atteint. Le générateur renvoie
+	# null après l'arrivée (on laisse alors la règle du half-pipe ci-dessous).
+	var course = get_tree().get_first_node_in_group("course_checkpoints")
+	if course != null:
+		var cs = course.respawn_sample(global_position)
+		if cs != null:
+			return {"pos": cs.pos, "vel": cs.vel, "time": _last_ground_time}
 	# [BONUS 1.20] pendant les figures bonus après l'arrivée, une chute (par
 	# exemple dans le trou entre la dernière île et le half-pipe) fait
 	# réapparaître directement sur le deck de gauche du half-pipe, sans élan :

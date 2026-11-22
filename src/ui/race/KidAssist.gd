@@ -41,6 +41,7 @@ const PROGRESS_STEP := 150.0      # px : avancer de ça « compte » comme un pr
 const KID_GAP_DEATHS := 2         # chutes de suite au même trou avant le « pont magique »
 const SAME_GAP_RANGE := 400.0     # px : deux chutes dont le trou commence au même endroit = même trou
 const LAND_SEARCH := 6000.0       # px : distance max où l'on cherche l'île suivante
+const KID_COURSE_RESCUE_TIME := 15.0   # [ŒUF 1.59] s sans avancer avant d'aller au point de passage suivant
 
 var player = null                 # le pingouin (Player.gd), donné par setup()
 var _best_x := -INF               # x le plus à droite atteint
@@ -66,6 +67,19 @@ func setup(p) -> void:
 
 func _on_player_died() -> void:
 	if not Settings.kid_mode:
+		return
+	# [ŒUF 1.59] niveau à points de passage : deux chutes de suite depuis le
+	# même point = on passe au point suivant (le « pont magique » de ce niveau)
+	var course = get_tree().get_first_node_in_group("course_checkpoints")
+	if course != null:
+		var cp: int = course.current_checkpoint()
+		_gap_deaths = _gap_deaths + 1 if is_equal_approx(_gap_x, float(cp)) else 1
+		_gap_x = float(cp)
+		if _gap_deaths >= KID_GAP_DEATHS:
+			course.kid_skip()
+			_gap_deaths = 0
+			_gap_x = -INF
+			_show_toast("Coup de pouce !")
 		return
 	# Le trou est repéré par SON BORD : depuis le dernier endroit sûr avant la
 	# chute, on cherche où le sol s'arrête devant. L'endroit exact de la mort
@@ -195,23 +209,43 @@ func _physics_process(delta: float) -> void:
 		return
 	if get_tree().paused or player.process_mode == Node.PROCESS_MODE_DISABLED:
 		return
-	# --- Progrès : a-t-on avancé vers la droite ? ---
-	if player.global_position.x > _best_x + PROGRESS_STEP:
-		_best_x = player.global_position.x
+	# [ŒUF 1.59] « vers l'avant » n'est pas toujours la droite : dans « Le
+	# Half-Pipe de l'œuf », le bas se parcourt vers la GAUCHE et la cheminée
+	# vers le haut. Le niveau le dit (groupe « course_direction ») : sens
+	# (+1, -1, ou 0 = pas de poussée) et avancement le long du tour.
+	var course = get_tree().get_first_node_in_group("course_direction")
+	var fwd: float = 1.0
+	var prog: float = player.global_position.x
+	if course != null:
+		fwd = course.forward_dir(player.global_position)
+		prog = course.progress(player.global_position)
+	# --- Progrès : a-t-on avancé ? (vers la droite, ou le long du tour) ---
+	if prog > _best_x + PROGRESS_STEP:
+		_best_x = prog
 		_still_time = 0.0
 	else:
 		_still_time += delta
 	_kick_cooldown = maxf(0.0, _kick_cooldown - delta)
 
 	var hooked: bool = player.chain.hooked or player.chain.flying
-	var wants_back: bool = Input.is_action_pressed("move_left")
-	# --- 1. Poussée automatique (au sol, pas de grappin, pas de ◀) ---
-	if player.is_on_ground and not hooked and not wants_back and player._velocity.x < KID_PUSH_SPEED:
-		player._velocity.x = minf(player._velocity.x + KID_PUSH_ACCEL * delta, KID_PUSH_SPEED)
+	# « en arrière » = la touche du sens opposé à l'avant
+	var wants_back: bool = Input.is_action_pressed("move_right" if fwd < 0.0 else "move_left")
+	# --- 1. Poussée automatique (au sol, pas de grappin, pas de « en arrière ») ---
+	if fwd != 0.0 and player.is_on_ground and not hooked and not wants_back and player._velocity.x * fwd < KID_PUSH_SPEED:
+		player._velocity.x = fwd * minf(player._velocity.x * fwd + KID_PUSH_ACCEL * delta, KID_PUSH_SPEED)
 	# --- 2. Coup de pouce si coincé dans un creux ---
-	if _still_time > KID_STUCK_TIME and _kick_cooldown <= 0.0 and player.is_on_ground and not hooked and not wants_back:
-		player._velocity += KID_STUCK_KICK
+	if fwd != 0.0 and _still_time > KID_STUCK_TIME and _kick_cooldown <= 0.0 and player.is_on_ground and not hooked and not wants_back:
+		player._velocity += Vector2(KID_STUCK_KICK.x * fwd, KID_STUCK_KICK.y)
 		_kick_cooldown = 2.0
+	# --- [ŒUF 1.59] coincé longtemps (ex. au pied de la cheminée, où il faut
+	# le grappin) : on emmène l'enfant au point de passage suivant ---
+	if course != null and _still_time > KID_COURSE_RESCUE_TIME and not hooked:
+		_still_time = 0.0
+		course.kid_skip()
+		var cs = course.respawn_sample(player.global_position)
+		if cs != null:
+			player.teleport_to(cs.pos, cs.vel)
+			_show_toast("Coup de pouce !")
 	# --- 3. Aide visuelle ---
 	_set_hint(_still_time > KID_HINT_DELAY)
 
