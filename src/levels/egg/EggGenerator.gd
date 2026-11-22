@@ -1,6 +1,6 @@
 extends Node2D
 # =============================================================================
-#  EggGenerator.gd — [ŒUF 1.59, refait en 1.60] « Le Half-Pipe de l'œuf »
+#  EggGenerator.gd — [ŒUF 1.59, refait en 1.60] « L'Œuf » (1.61 ; d'abord « Le Half-Pipe de l'œuf »)
 # -----------------------------------------------------------------------------
 #  Niveau imaginé par l'équipe (croquis « Level_Egg_V2 », 22/11), plan v3
 #  validé : un seul tour d'environ 3 minutes autour d'un grand œuf de glace,

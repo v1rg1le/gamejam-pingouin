@@ -30,6 +30,7 @@ const RACES = [
 	["Nice Slope", "res://src/levels/LevelRandomNiceSlope.tscn"],
 	["Hook, you fool !", "res://src/levels/LevelRandomGap.tscn"],
 	["Spaghetti", "res://src/levels/LevelRandomSpaghetti.tscn"],
+	["L'Œuf", "res://src/levels/LevelEgg.tscn"],   # [MENUS 1.61] nouveau niveau, ajouté ici aussi
 ]
 
 @onready var name_edit: LineEdit = $Margin/VBox/NameRow/NameEdit
@@ -57,6 +58,14 @@ var mode_option: OptionButton    # [MODES 1.25] choix Chill / Score (hôte)
 
 
 func _ready() -> void:
+	# [MENUS 1.61] largeur commune des menus (marge de 5 %) : les panneaux
+	# « Créer » / « Rejoindre » (puis le SALON seul) prennent toute la largeur
+	MenuLayout.fit($Margin)
+	MenuLayout.widen_panels($Margin/VBox/Columns)
+	# le panneau prend la hauteur de son contenu (plus de grand vide en bas)
+	for panel in [$Margin/VBox/Columns/HostPanel, join_panel]:
+		panel.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
+	_build_results_table()
 	version_label.text = "v" + str(ProjectSettings.get_setting("application/config/version", "?"))
 	name_edit.text = NetSession.player_name
 	name_edit.text_changed.connect(NetSession.set_player_name)
@@ -194,19 +203,11 @@ func _refresh() -> void:
 		for id in NetSession.players:
 			var mark := "  ★ " if id == 1 else "  • "   # ★ = l'hôte
 			lines.append(mark + str(NetSession.players[id].name) + ("  (toi)" if id == NetSession.my_id() else ""))
-	if not NetSession.last_results.is_empty():
-		lines.append("")
-		lines.append("Dernière course :")
-		var rank := 1
-		for entry in NetSession.last_results:
-			if entry[1] >= 0.0:
-				# [SCORE 1.5] classement au score, temps entre parenthèses
-				lines.append("  %d. %s   %d pts  (%s)" % [rank, entry[0], entry[2], RaceManager.format_time(entry[1])])
-				rank += 1
-			else:
-				lines.append("  –  %s   (pas arrivé)" % entry[0])
+	# [MENUS 1.61] « Dernière course » : vrai tableau à colonnes (voir
+	# _fill_results), plus dans ce texte
 	players_label.text = "\n".join(lines)
 	players_label.visible = not lines.is_empty()
+	_fill_results(joined)
 
 	# [INTERNET 1.6] ouverture sur Internet (hôte seulement)
 	internet_button.visible = NetSession.is_host() and NetSession.internet_code == ""
@@ -238,3 +239,101 @@ func _refresh_hosts() -> void:
 		hosts_list.add_child(b)
 		n += 1
 	search_label.text = "Recherche des parties sur le Wi-Fi…" if n == 0 else "Parties trouvées :"
+
+
+# --- [MENUS 1.61] Tableau « Dernière course » -----------------------------------
+# Demande de l'équipe (capture du salon) : points et temps alignés à droite.
+# Avant, chaque ligne était un texte « 1. Nom   9990 pts  (1:16.07) » : les
+# chiffres suivaient la longueur des noms et ne tombaient jamais les uns sous
+# les autres. Maintenant : rang | nom | points | temps, en colonnes.
+#  - points et temps alignés à droite, chiffres à largeur fixe (ils tombent
+#    pile les uns sous les autres) ; points en gras (ils font le classement en
+#    Score), temps en plus clair ;
+#  - nom coupé avec « … » s'il est trop long (il ne pousse plus les colonnes) ;
+#  - ta ligne en jaune, comme le « (toi) » de la liste des joueurs ;
+#  - le tableau (décalé de 20 px, comme la liste des joueurs) ne s'étire pas au-delà de RESULTS_MAX_WIDTH : sur un écran
+#    large, le nom et son score resteraient sinon trop loin l'un de l'autre.
+const RESULTS_MAX_WIDTH := 760.0
+var _results_box: VBoxContainer     # titre + tableau (masqué sans résultats)
+var _results_grid: GridContainer
+
+
+func _build_results_table() -> void:
+	_results_box = VBoxContainer.new()
+	_results_box.name = "ResultsBox"
+	_results_box.add_theme_constant_override("separation", 6)
+	var title := Label.new()
+	title.text = "Dernière course :"
+	title.add_theme_font_size_override("font_size", 20)
+	title.add_theme_color_override("font_color", Color.WHITE)
+	_results_box.add_child(title)
+	# le tableau, aligné à gauche (comme la liste des joueurs au-dessus) et
+	# plafonné en largeur
+	var center := HBoxContainer.new()
+	_results_box.add_child(center)
+	_results_grid = GridContainer.new()
+	_results_grid.columns = 4
+	_results_grid.add_theme_constant_override("h_separation", 26)
+	_results_grid.add_theme_constant_override("v_separation", 6)
+	center.add_child(_results_grid)
+	_results_grid.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
+	center.add_theme_constant_override("separation", 0)
+	var indent := Control.new()
+	indent.custom_minimum_size.x = 12
+	center.add_child(indent)
+	center.move_child(indent, 0)
+	center.resized.connect(func():
+		_results_grid.custom_minimum_size.x = minf(center.size.x - 12.0, RESULTS_MAX_WIDTH))
+	var parent := players_label.get_parent()
+	parent.add_child(_results_box)
+	parent.move_child(_results_box, players_label.get_index() + 1)
+
+
+func _fill_results(joined: bool) -> void:
+	for c in _results_grid.get_children():
+		c.queue_free()
+	_results_box.visible = joined and not NetSession.last_results.is_empty()
+	if not _results_box.visible:
+		return
+	var me: String = ""
+	if NetSession.players.has(NetSession.my_id()):
+		me = str(NetSession.players[NetSession.my_id()].name)
+	var rank := 1
+	for entry in NetSession.last_results:
+		var mine: bool = str(entry[0]) == me
+		var color := Color(1, 0.94, 0.4) if mine else Color.WHITE
+		var arrived: bool = entry[1] >= 0.0
+		# rang
+		_cell("%d." % rank if arrived else "–", color, HORIZONTAL_ALIGNMENT_RIGHT, false)
+		# nom : prend toute la place qui reste, coupé avec « … » si trop long
+		var name_cell := _cell(str(entry[0]) + ("  (toi)" if mine else ""), color, HORIZONTAL_ALIGNMENT_LEFT, false)
+		name_cell.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		name_cell.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+		name_cell.clip_text = true
+		name_cell.custom_minimum_size.x = 120
+		if arrived:
+			# [SCORE 1.5] classement au score ; le temps ensuite, plus clair
+			_cell("%d pts" % entry[2], color, HORIZONTAL_ALIGNMENT_RIGHT, true)
+			_cell(RaceManager.format_time(entry[1]), Color(color, 0.7), HORIZONTAL_ALIGNMENT_RIGHT, false)
+			rank += 1
+		else:
+			_cell("", color, HORIZONTAL_ALIGNMENT_RIGHT, false)
+			_cell("pas arrivé", Color(color, 0.7), HORIZONTAL_ALIGNMENT_RIGHT, false)
+
+
+## Une case du tableau des résultats (chiffres à largeur fixe : ils s'alignent).
+func _cell(text: String, color: Color, align: HorizontalAlignment, bold: bool) -> Label:
+	var l := Label.new()
+	l.text = text
+	l.horizontal_alignment = align
+	l.add_theme_font_size_override("font_size", 20)
+	l.add_theme_color_override("font_color", color)
+	# chiffres de même largeur (tnum) : 9990 et 7620 tombent pile l'un sous l'autre
+	var f := FontVariation.new()
+	f.base_font = l.get_theme_font("font")
+	f.opentype_features = {"tnum": 1}
+	if bold:
+		f.variation_embolden = 0.6
+	l.add_theme_font_override("font", f)
+	_results_grid.add_child(l)
+	return l

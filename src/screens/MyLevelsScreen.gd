@@ -99,11 +99,31 @@ func _build() -> void:
 	col.add_theme_constant_override("separation", 10)
 	margin.add_child(col)
 
-	var title := Label.new()
+	# [MENUS 1.61] « Niveaux custom » : deux ONGLETS en haut, « Mes niveaux »
+	# et « Communauté » (choix de l'équipe : un seul bouton dans le menu des
+	# niveaux). L'onglet actif est enfoncé ; l'autre ouvre l'autre écran (les
+	# deux écrans existaient déjà : même script, community = vrai / faux).
+	var tabs := HBoxContainer.new()
+	tabs.alignment = BoxContainer.ALIGNMENT_CENTER
+	tabs.add_theme_constant_override("separation", 6)
+	col.add_child(tabs)
+	var group := ButtonGroup.new()
+	for tab in [["MES NIVEAUX", false, "res://src/screens/MyLevelsScreen.tscn"],
+			["COMMUNAUTÉ", true, "res://src/screens/CommunityLevelsScreen.tscn"]]:
+		var tb := Button.new()
+		tb.text = tab[0]
+		tb.toggle_mode = true
+		tb.button_group = group
+		tb.button_pressed = tab[1] == community
+		tb.custom_minimum_size = Vector2(240, 48)
+		tb.add_theme_font_size_override("font_size", 22)
+		if tab[1] != community:
+			var target: String = tab[2]
+			tb.pressed.connect(func(): get_tree().change_scene_to_file(target))
+		tabs.add_child(tb)
+	var title := Label.new()   # ancien titre, gardé pour l'accessibilité du code : masqué (les onglets le remplacent)
 	title.text = "NIVEAUX DE LA COMMUNAUTÉ" if community else "MES NIVEAUX"
-	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	title.add_theme_font_size_override("font_size", 30)
-	title.add_theme_color_override("font_color", Color.WHITE)
+	title.visible = false
 	col.add_child(title)
 	var sub := Label.new()
 	sub.text = "Les meilleurs niveaux dessinés par les joueurs. Record, médaille et fantôme en mode Score." if community \
@@ -171,6 +191,10 @@ func _build() -> void:
 	# Échelle : celle du jeu, réduite si l'écran est petit (téléphone 20:9)
 	var vp: Vector2 = get_viewport().get_visible_rect().size
 	UiScaler.apply(_layer, clampf(minf(Settings.hud_scale(), minf(vp.x / 760.0, vp.y / 380.0)), 0.6, 2.0))
+	# [MENUS 1.61] même marge que les autres menus (5 % de chaque côté, voir MenuLayout)
+	var m := int(round(MenuLayout.side_margin(vp.x / maxf(_layer.scale.x, 0.01))))
+	margin.add_theme_constant_override("margin_left", m)
+	margin.add_theme_constant_override("margin_right", m)
 
 
 func _fill_list() -> void:

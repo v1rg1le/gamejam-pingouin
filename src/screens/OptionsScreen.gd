@@ -29,6 +29,7 @@ const RACES = [
 	["Nice Slope", "res://src/levels/LevelRandomNiceSlope.tscn"],
 	["Hook, you fool !", "res://src/levels/LevelRandomGap.tscn"],
 	["Spaghetti", "res://src/levels/LevelRandomSpaghetti.tscn"],
+	["L'Œuf", "res://src/levels/LevelEgg.tscn"],   # [MENUS 1.61] nouveau niveau, ajouté ici aussi
 	["Sans fin", "res://src/levels/LevelEndless.tscn"],   # [FANTÔME SANS FIN 1.36] défi à distance
 ]
 
@@ -46,6 +47,10 @@ const RACES = [
 
 
 func _ready() -> void:
+	# [MENUS 1.61] largeur commune des menus (marge de 5 %) : les deux
+	# panneaux se partagent toute la largeur
+	MenuLayout.fit($Margin)
+	MenuLayout.widen_panels($Margin/VBox/Columns)
 	version_label.text = "v" + str(ProjectSettings.get_setting("application/config/version", "?"))
 	# --- Aide et son
 	help_on_start.button_pressed = Settings.help_on_start
