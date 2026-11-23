@@ -119,6 +119,10 @@ var _view_offset: Vector2 = Vector2.ZERO # décalage lissé appliqué à la cam�
 ## recentre entre Pinpouin et ce point, et dézoome juste ce qu'il faut pour
 ## voir les deux (palier lissé comme les autres : pas de « yoyo »).
 var focus_point = null
+## [CAVERNES 1.64] second point à garder dans le cadre (facultatif) : dans les
+## cavernes, la galerie du dessus ET celle du dessous. Le cadre englobe alors
+## Pinpouin, focus_point et focus_point2.
+var focus_point2 = null
 const FOCUS_MARGIN := Vector2(260, 200)   # marge autour des deux points (px du monde)
 const FOCUS_MIN_ZOOM := 0.5
 ## [ŒUF 1.60] dézoom maximum pour focus_point, réglable par le niveau (le bas
@@ -179,6 +183,11 @@ func _choose_target_zoom() -> void:
 	# ce point (même pendant le grappin : c'est justement là qu'on grimpe)
 	if focus_point != null:
 		var d: Vector2 = (focus_point - _player.global_position).abs() * 0.5 + FOCUS_MARGIN
+		if focus_point2 != null:
+			# boîte qui contient les trois points (demi-taille + marge)
+			var mn: Vector2 = _player.global_position.min(focus_point).min(focus_point2)
+			var mx: Vector2 = _player.global_position.max(focus_point).max(focus_point2)
+			d = (mx - mn) * 0.5 + FOCUS_MARGIN
 		var vs: Vector2 = get_viewport_rect().size * 0.5
 		_target_zoom = clampf(minf(minf(vs.x / d.x, vs.y / d.y), 1.0), focus_min_zoom, 1.0)
 		_pending_zoom_in = _target_zoom
@@ -219,6 +228,11 @@ func _update_view_offset(delta: float) -> void:
 	if focus_point != null:
 		# [TUTO 1.55] recentrage à mi-chemin entre Pinpouin et le point
 		target = (focus_point - _player.global_position) * 0.5
+		if focus_point2 != null:
+			# [CAVERNES 1.64] centre de la boîte des trois points
+			var mn: Vector2 = _player.global_position.min(focus_point).min(focus_point2)
+			var mx: Vector2 = _player.global_position.max(focus_point).max(focus_point2)
+			target = (mn + mx) * 0.5 - _player.global_position
 	elif _in_gap and gap_view_enabled:
 		# Au-dessus d'un trou : on recentre sur les prises du grappin
 		target = _gap_offset

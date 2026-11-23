@@ -76,20 +76,27 @@ signal player_reached_node(c: int, l: int)
 
 # --- Dimensions -----------------------------------------------------------------
 const COL_W := 2600.0          # largeur d'une colonne (un couloir ou une salle)
-const LANE_GAP := 1250.0       # écart vertical entre deux étages (sol à sol)
-const TUNNEL_H := 720.0        # hauteur d'un couloir (sol -> plafond)
+## [CAVERNES 1.64] 1250 -> 950 : cavernes moins hautes (demande de l'équipe) ;
+## avec le dézoom, on voit la galerie du dessus et celle du dessous.
+const LANE_GAP := 950.0        # écart vertical entre deux étages (sol à sol)
+const TUNNEL_H := 620.0        # hauteur d'un couloir (sol -> plafond) [1.64 : 720 -> 620]
 const DROP := 150.0            # descente générale par colonne (on va vers le bas)
 const STUB := 700.0            # couloir d'entrée / de sortie jusqu'au flanc
 const LEDGE_L := 500.0         # rebord haut-gauche d'une salle
 const LEDGE_R := 600.0         # rebord haut-droite d'une salle
-const PIT_DEPTH := 300.0       # profondeur des puits (dans la roche, sous le sol)
+const PIT_DEPTH := 220.0       # profondeur des puits (dans la roche, sous le sol) [1.64 : 300 -> 220, il reste 110 px de roche au-dessus du couloir du dessous]
 ## [CAVERNES 1.63] au-dessus d'un trou à balancier, le plafond monte en DÔME
 ## (DOME_H au-dessus du sol au lieu de TUNNEL_H) : la prise pend plus haut, la
 ## corde est plus longue et le balancier porte (au bot, avec une prise à 560 px
 ## du sol, la corde raccourcissait à ~170 px et Pinpouin restait pendu au
 ## milieu du trou). Le dôme s'arrête 50 px sous le fond du puits de l'étage du
 ## dessus (PIT_DEPTH 300 : 1250 - 300 - 900 = 50).
-const DOME_H := 900.0
+## [1.64] étages plus serrés (950) : le dôme (860) n'est creusé que si l'étage
+## du dessus n'a RIEN de creusé dans cet intervalle (sinon pas de prises dans
+## ce couloir : on y met un trou ou une glissade). L'étage du haut a toujours
+## de la roche au-dessus : les balanciers y restent nombreux (« plus dur en
+## haut », comme prévu).
+const DOME_H := 860.0
 const HOLD_RADIUS := 55.0
 const HOLD_UNDER_CEIL := 160.0 # une prise pend à 160 px sous le plafond
 const MOUNTAIN_TOP := 1100.0   # roche au-dessus du plafond de l'étage du haut (au moins)
@@ -116,6 +123,7 @@ var edges := {}                # "c:l" -> [l2, ...] : passages réels vers la co
 var edge_kind := {}            # "c:l>l2" -> "couloir:<épreuve>" | "salle:haut" | "salle:chute" | "salle:bas" | "salle:montee"
 var holds := {}                # nom -> position locale
 var pits: Array = []           # Rect2 locaux : tomber dedans = réapparition
+var signs: Array = []          # [1.64] panneaux {pos (sol), dir}
 var chains: Array = []         # PackedVector2Array : collisions (segments ouverts)
 var floor_chains: Array = []   # morceaux de sol (bordure de glace)
 var carved: Array = []         # polygones creusés (dessin)
@@ -373,12 +381,15 @@ func _edge(c: int, l: int, l2: int, kind: String) -> void:
 #  4. Géométrie : couloirs, salles, entrées / sorties, montagne
 # =============================================================================
 var _after_swing := {}         # "c:l" : on sort de cet intervalle lancé par un balancier
+var _carved_at := {}           # "c:l" : l'étage l est creusé dans l'intervalle c (couloir ou salle)
 
 func _build_geometry() -> void:
 	_after_swing = {}
+	_carved_at = {}
 	tubes = []
 	holds = {}
 	pits = []
+	signs = []
 	chains = []
 	floor_chains = []
 	carved = []
@@ -431,6 +442,9 @@ func _build_tube(c: int, l: int) -> void:
 	# à chaque réapparition). On met alors une glissade (ou un balancier).
 	if kind == "trou" and _after_swing.has(_k(c - 1, l)):
 		kind = "glissade" if _rng.randf() < 0.6 else "balancier"
+	# [1.64] pas de prises (donc pas de dôme) si l'étage du dessus est creusé ici
+	if (kind == "balancier" or kind == "double") and l > 0 and _carved_at.has(_k(c, l - 1)):
+		kind = "glissade" if _after_swing.has(_k(c - 1, l)) else "trou"
 	var p0 := node_pos(c, l)
 	var p1 := node_pos(c + 1, l)
 	var aj := _joint_deg()
@@ -460,9 +474,9 @@ func _build_tube(c: int, l: int) -> void:
 			floor_pts.append(Vector2(lip.x, bottom))
 			floor_pts.append(Vector2(land.x, bottom))
 			floor_pts = _join(floor_pts, b)
-			# zone « tombé dans le puits » : entre 180 px sous le bord et le fond (pas
-			# plus bas : le couloir de l'étage du dessous commence 530 px sous ce sol)
-			pits.append(Rect2(lip.x, maxf(lip.y, land.y) + 180.0, gap, PIT_DEPTH - 200.0))
+			# zone « tombé dans le puits » : de 100 px sous le bord jusqu'au fond (pas
+			# plus bas : le couloir de l'étage du dessous commence juste en dessous)
+			pits.append(Rect2(lip.x, maxf(lip.y, land.y) + 100.0, gap, PIT_DEPTH - 100.0))
 			t.gap = gap
 			t.lip = lip
 			t.land = land
@@ -495,6 +509,7 @@ func _build_tube(c: int, l: int) -> void:
 	poly.append_array(rev)
 	carved.append(poly)
 	tubes.append(t)
+	_carved_at[_k(c, l)] = true
 	if t.holds.size() > 0:
 		_after_swing[_k(c, l)] = true
 
@@ -505,6 +520,8 @@ func _build_tube(c: int, l: int) -> void:
 func _build_room(r: Dictionary) -> void:
 	var c: int = r.c
 	var a: int = r.a
+	_carved_at[_k(c, a)] = true
+	_carved_at[_k(c, a + 1)] = true
 	var x0 := c * COL_W
 	var x1 := x0 + COL_W
 	var yul := node_pos(c, a).y
@@ -610,7 +627,12 @@ func _build_room(r: Dictionary) -> void:
 	if r.ll and r.ur:
 		# monter : une prise au milieu de la salle, puis une au-dessus du rebord
 		var mx := x1 - LEDGE_R - 450.0
-		holds[tag + "_monte1"] = Vector2(mx, floor_y.call(mx) - 820.0)
+		holds[tag + "_monte1"] = Vector2(mx, floor_y.call(mx) - 700.0)   # [1.64] 820 -> 700 (étages plus serrés)
+		if not r.lr:
+			# [1.64] la seule suite de la galerie du bas est de MONTER : un
+			# panneau « haut » au pied du rebord (sans lui, en jeu, on croyait
+			# à un cul-de-sac : les prises étaient hors de l'écran)
+			signs.append({"pos": Vector2(x1 - LEDGE_R - 160.0, floor_y.call(x1 - LEDGE_R - 160.0)), "dir": "haut"})
 		# (60 px au-dessus du rebord, 420 plus haut : depuis la prise 1, la
 		# ligne de tir passe au-dessus du coin du rebord — vérifié au bot)
 		holds[tag + "_monte2"] = Vector2(x1 - LEDGE_R + 60.0, yur - 420.0)
@@ -769,6 +791,15 @@ func _build_nodes() -> void:
 	# --- prises (les seules accroches du grappin dans la caverne)
 	for n in holds:
 		_add_hold(n, holds[n])
+	# --- [1.64] panneaux (montées obligatoires)
+	for sg in signs:
+		var spr := Sprite2D.new()
+		spr.texture = load("res://sprites/levels/egg/panneau_%s.png" % sg.dir)
+		spr.scale = Vector2(5, 5)
+		spr.centered = false
+		spr.position = sg.pos - Vector2(spr.texture.get_width() * 2.5, spr.texture.get_height() * 5.0 - 6.0)
+		spr.z_index = 4
+		add_child(spr)
 
 
 func _add_hold(name: String, center: Vector2) -> void:

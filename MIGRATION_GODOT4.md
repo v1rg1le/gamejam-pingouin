@@ -1312,3 +1312,11 @@ Demande de l'équipe (capture du salon et croquis du menu), choix validés : un 
 - **Gruyère de glace** : après la partie 1, 3 cavernes (graines 1440, 2302, 3303 ; 2→3, 3→4, 4→2 étages ; 10 colonnes) reliées par des **passages à l'air libre** (rebord de sortie, balcon d'entrée du même étage ; tomber entre les deux ramène sur le sol de l'étage le plus bas : pas de chute mortelle). Fin : la sortie du haut se laisse tomber dans le **half-pipe**, celle du bas y monte au grappin (deux prises). Arche sur le deck gauche.
   - **Points de passage** : chaque carrefour touché au sol ; un puits fait réapparaître au dernier carrefour. Mode enfant : « pont magique » = carrefour suivant.
   - **Œufs (partie 1)** : même place, mais la descente qui suit est 650 px plus bas : on attrape l'œuf par en dessous, balancier, on retombe dans la pente (demande de l'équipe).
+
+## 75. Cavernes moins hautes, dézoom haut / bas, panneau des montées (23/11, version 1.64)
+
+- Retour de l'équipe (1.63) : « cul-de-sac » en passant par le bas, cavernes trop hautes, dézoom souhaité sur les galeries du dessus et du dessous.
+- Le « cul-de-sac » était une **montée obligatoire** (salle de croisement dont la galerie du bas n'a pas de suite : il faut monter au grappin) dont les prises étaient hors de l'écran. Désormais : **panneau flèche « haut »** au pied du rebord, et la caméra montre les prises.
+- **Étages plus serrés** : `LANE_GAP` 1250 → 950, `TUNNEL_H` 720 → 620, `PIT_DEPTH` 300 → 220, dôme 860 ; prise 1 des montées à 700 px du sol. Un couloir à prises (balancier, double) n'est placé que si l'étage du dessus n'est pas creusé au même endroit (place pour le dôme) ; l'étage du haut garde donc la plupart des balanciers.
+- **Caméra** (`AdaptiveCamera.focus_point2`, `GruyereGenerator._cave_focus`) : dans une caverne, le cadre englobe Pinpouin et les carrefours de la colonne suivante sur l'étage du dessus et celui du dessous (s'ils existent), zoom 0,4 au plus large ; il ne change qu'à chaque colonne.
+- Contrôle 1 000 graines × 3 réglages : 100 %. Bot : route du haut 2:04 (la plus rapide), du bas 2:34, au hasard 2:43 à 3:16, mode enfant 3:01 ; or 125 s.

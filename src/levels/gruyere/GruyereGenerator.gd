@@ -717,8 +717,45 @@ func _update_camera_focus(p) -> void:
 		if z.rect.has_point(pos) and pos.x < z.target.x + 200.0:
 			target = z.target
 			break
+	var target2 = null
+	if target == null:
+		var cf := _cave_focus(pos)
+		target = cf[0]
+		target2 = cf[1]
 	p.camera.focus_min_zoom = 0.4 if target != null else p.camera.FOCUS_MIN_ZOOM
 	p.camera.focus_point = target
+	if "focus_point2" in p.camera:
+		p.camera.focus_point2 = target2
+
+
+## [CAVERNES 1.64] Dans une caverne, la caméra dézoome pour montrer la
+## galerie du DESSUS et celle du DESSOUS (demande de l'équipe) : on garde dans
+## le cadre les carrefours de la colonne suivante sur les étages voisins
+## (ceux qui existent). Pas de dézoom s'il n'y a qu'une galerie à cet endroit.
+## Le cadre change seulement d'une colonne à l'autre (pas de zoom qui pompe).
+func _cave_focus(pos: Vector2) -> Array:
+	for g in caves:
+		var lp: Vector2 = pos - g.position
+		if lp.x < 0.0 or lp.x >= g.columns * CaveGenerator.COL_W:
+			continue
+		var c := int(lp.x / CaveGenerator.COL_W)
+		var base: float = lp.x * CaveGenerator.DROP / CaveGenerator.COL_W
+		var l := clampi(roundi((lp.y - base + 150.0) / CaveGenerator.LANE_GAP), 0, g.lanes_n - 1)
+		var up = null
+		var down = null
+		var mid := Vector2(0.0, -CaveGenerator.TUNNEL_H * 0.5)
+		if l > 0 and g.active.has("%d:%d" % [c + 1, l - 1]):
+			up = g.position + g.node_pos(c + 1, l - 1) + mid
+		if l < g.lanes_n - 1 and g.active.has("%d:%d" % [c + 1, l + 1]):
+			down = g.position + g.node_pos(c + 1, l + 1) + mid
+		if up == null and down == null:
+			return [null, null]
+		if up == null:
+			return [down, null]
+		if down == null:
+			return [up, null]
+		return [up, down]
+	return [null, null]
 
 
 ## Appelé par Player._pick_respawn_sample : point de passage atteint en dernier.

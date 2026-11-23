@@ -103,7 +103,7 @@ const MEDAL_GOLD := {
 	"LevelRandomSpaghetti": 38.5, # bot 32,3 à 38,4 s selon le terrain (40,5 sur un terrain difficile) (1.48 : 33,5)
 	"LevelRandomGap": 86.5,       # [1.53] gap_bot 86,27 s avec figures, sans chute ; 1.49 : 89 ; 1.48 : 86
 	"LevelEgg": 108.0,            # [ŒUF 1.60] zigzag + chemin de gauche + crevasse : egg_bot 106,33 s (0 chute, sans figures)
-	"LevelGruyere": 170.0,        # [GRUYÈRE 1.63] partie 1 + 3 cavernes + half-pipe : gruyere_bot 167 à 186 s selon la route (0 à 1 chute, sans figures)
+	"LevelGruyere": 125.0,        # [GRUYÈRE 1.64] cavernes moins hautes : gruyere_bot 124 s par la route du haut (la plus rapide), 154 s par le bas, 163 à 196 s au hasard
 }
 const SILVER_FACTOR := 1.25       # argent = or × 1,25
 const BRONZE_FACTOR := 1.6        # bronze = or × 1,6
