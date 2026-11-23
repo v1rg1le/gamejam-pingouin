@@ -105,6 +105,7 @@ func _ready() -> void:
 		multi_button.visible = false
 	ghost_folder_button.pressed.connect(func():
 		OS.shell_open(ProjectSettings.globalize_path(RaceManager.GHOST_DIR)))
+	_add_quit_button()   # [QUITTER 1.73]
 	# Focus initial seulement si on joue au clavier / à la manette (en tactile,
 	# le cadre jaune de focus serait inutile).
 	if Settings.controls != Settings.TOUCH:
@@ -288,3 +289,47 @@ func _level_buttons() -> Array:
 			if b is Button and b.visible and "next_scene_path" in b and b.next_scene_path != "":
 				out.append(b)
 	return out
+
+
+# =============================================================================
+#  [QUITTER 1.73] Bouton « Quitter le jeu » dans le menu principal
+# -----------------------------------------------------------------------------
+#  Demande de l'équipe : il n'y avait pas de moyen de quitter le jeu depuis le
+#  menu (seulement dans le menu pause, en pleine course).
+#  - Même style que « Options » (copie du bouton), juste après lui en bas.
+#  - PC seulement : masqué dans le navigateur (on ne peut pas fermer un
+#    onglet) et sur téléphone (on quitte une appli avec le geste « accueil »),
+#    comme « Quitter le jeu » du menu pause.
+#  - Confirmation comme dans le menu pause : 1er clic -> « Sûr ? Clique
+#    encore » (rouge foncé, lisible sur le bouton bleu clair) pendant 3 s ; 2e clic -> le jeu se ferme.
+# =============================================================================
+const QUIT_CONFIRM_DELAY := 3.0
+var _quit_armed := false
+
+func _add_quit_button() -> void:
+	if Settings.is_web or Settings.is_mobile_device:
+		return
+	var b: Button = options_button.duplicate(Node.DUPLICATE_GROUPS | Node.DUPLICATE_SCRIPTS)
+	b.name = "QuitButton"
+	b.text = "  Quitter le jeu  "
+	options_button.get_parent().add_child(b)
+	options_button.get_parent().move_child(b, options_button.get_index() + 1)
+	b.pressed.connect(_on_quit_pressed.bind(b))
+
+
+func _on_quit_pressed(b: Button) -> void:
+	if not _quit_armed:
+		_quit_armed = true
+		b.text = "  Sûr ? Clique encore  "
+		b.add_theme_color_override("font_color", Color(0.75, 0.15, 0.05))
+		b.add_theme_color_override("font_hover_color", Color(0.75, 0.15, 0.05))
+		b.add_theme_color_override("font_focus_color", Color(0.75, 0.15, 0.05))
+		get_tree().create_timer(QUIT_CONFIRM_DELAY).timeout.connect(func():
+			if is_instance_valid(b):
+				_quit_armed = false
+				b.text = "  Quitter le jeu  "
+				b.remove_theme_color_override("font_color")
+				b.remove_theme_color_override("font_hover_color")
+				b.remove_theme_color_override("font_focus_color"))
+		return
+	get_tree().quit()

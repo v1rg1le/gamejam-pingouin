@@ -1409,3 +1409,10 @@ Demandes de l'équipe (23/11). Choix validés : zoom libre au stick droit (R3 te
 - **Air et frottement sous la vitesse** (`Settings.show_coefs`, onglet Développeur ; `SpeedMeter._update_coefs`) : « Air k = 3,47·10⁻⁵ /px −N px/s² » et « Glace μ = 0,020 −N px/s² » (freinage de la dernière image, `Player.last_air_decel` / `last_friction_decel`), en **gras blanc** quand le jeu l'applique (frottement : au sol ; air : dès que Pinpouin bouge, grappin compris), gris pâle sinon (3 images de suite avant de changer : pas de clignotement). Le cadre s'affiche aussi sans le compteur de vitesse.
 - **Figure fixée** (`Settings.fixed_trick`, onglet Développeur ; `TrixState.enter`) : « Au hasard (normal) » ou Toupie / Boule / Étoile ninja / Carpe (`Settings.TRICKS`, noms de `TrickScore.gd`).
 - Physique inchangée : bots identiques à la 1.71 (Flat, Corridor, Nice Slope, Spaghetti, Hook you fool, L'Œuf ; Sans fin tiré au hasard) ; tuto (élève des invites) terminé.
+
+## 84. Bouton « Quitter le jeu » dans le menu principal (23/11, version 1.73)
+
+Demande de l'équipe : on ne pouvait quitter le jeu que par le menu pause, en pleine course.
+
+- `LevelSelectionScreen._add_quit_button()` : bouton « Quitter le jeu » en bas du menu principal, juste après « Options » (copie de son style). PC seulement : masqué dans le navigateur (impossible de fermer l'onglet) et sur téléphone (geste « accueil »), comme dans le menu pause.
+- Confirmation comme dans le menu pause : 1er clic -> « Sûr ? Clique encore » (rouge foncé) pendant 3 s, 2e clic -> `get_tree().quit()`. Vérifié : un seul clic ne ferme pas le jeu, deux clics le ferment.
