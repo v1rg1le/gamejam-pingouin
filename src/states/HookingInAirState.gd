@@ -133,8 +133,12 @@ func pull_original(player: CharacterBody2D):
 	# pendu dessous (grappin double du Sans fin : 7 réussites sur 18 au lieu
 	# de 18/19). Le vrai coup de frein mesuré (1525 -> 826 px/s) venait du
 	# balancier (swing, plus bas) : c'est là qu'il est corrigé.
-	player._velocity.x = clamp(player._velocity.x, -player.MAX_SPEED_HOOKED.x, player.MAX_SPEED_HOOKED.x)
-	player._velocity.y = clamp(player._velocity.y, -player.MAX_SPEED_HOOKED.y, player.MAX_SPEED_HOOKED.y)
+	# [SANS PLAFOND 1.68] plus de plafond par défaut (demande de l'équipe :
+	# « seulement l'air ») ; la résistance de l'air s'applique maintenant
+	# aussi au grappin (Player._apply_soft_speed_caps). hard_speed_caps
+	# remet un plafond sur la vitesse totale.
+	if player.hard_speed_caps:
+		player._velocity = player._velocity.limit_length(player.HARD_CAP_SPEED_HOOKED)
 
 
 func swing(player: CharacterBody2D, delta):

@@ -1353,3 +1353,15 @@ Demande de l'équipe (capture du salon et croquis du menu), choix validés : un 
 - **Pinpouin collé sous un plafond** (vu au bot, jusqu'à 28 s) : en longeant un plafond qui descend, la projection « à la Godot 3 » retirait aussi la gravité à chaque image. `Player._apply_godot3_slide` : contre un plafond, on n'enlève que la vitesse qui rentre dedans (sols et murs inchangés) ; `Player._ray_sees_floor` : un capteur tourné vers le haut ne compte plus comme sol. Hook you fool (gap_bot) : temps identique au centième avant / après ; L'Œuf 107 s (inchangé).
 - **Or : 2:00** (demande de l'équipe ; Manu 2:07 avec des ratés). Bot : haut 2:10, bas 2:09, hasard 2:00,5 à 3:04, sans PUMP 2:06, Chill 2:23, mode enfant 2:50.
 
+## 79. 100 % air + glace : plus de plafonds de vitesse, air au grappin, pump à puissance limitée (23/11, version 1.68)
+
+Demande de l'équipe : « enlever tous les plafonds, laisser 100 % air + glace ».
+
+- **`SUPER_MAX_SPEED`** (3000 px/s par axe) et **`MAX_SPEED_HOOKED`** (1000 px/s par axe, `HookingInAirState`) ne sont plus appliqués ; noms gardés. Nouvel interrupteur `Player.hard_speed_caps` (false) qui remet des plafonds sur la vitesse TOTALE : `HARD_CAP_SPEED` = 5000 (au-dessus de la chute libre √(g/k) ≈ 4800) et `HARD_CAP_SPEED_HOOKED` = 2600 (balancier à corde maximale ≈ 2530).
+- **Résistance de l'air au grappin** : avant, rien ne freinait pendant qu'on était accroché (`_apply_soft_speed_caps` sortait tout de suite) ; maintenant air (et glace si l'on glisse accroché), comme partout.
+- **PUMP** : comme un moteur, force limitée à basse vitesse, puissance limitée à haute vitesse. Sous `pump_max_speed` (1650) : le pump d'avant, inchangé. Au-dessus (avant : rien) : gain = P / v, avec P = (k·v² + μ·g)·v à 1650 sur le plat (≈ 182 500) : ≈ 110 px/s² à 1650, 60 à 3000 ; l'impulsion d'un appui suit la même loi (+22 px/s à 1650, +12 à 3000). `Player.pump_power()`. Essai abandonné : puissance pure partout (gain = P / v dès 400 px/s) -> pump trop faible entre 400 et 1650 (Flat 64,5 -> 86 s, Sans fin 0 saut sur 37, Hook you fool pas fini).
+- **L'Œuf** : avec l'air au grappin, la 2e prise du plafond était hors de portée après le balancier sur la 1re (le bot tombait en boucle) : plafond abaissé de 100 px (`CEIL_UNDER` 750 -> 650).
+- Compteur de vitesse : jauge jusqu'à 5000 (était 3000) ; F2 : « Pump : vitesse d'équilibre sur le plat ».
+- **Avant / après aux bots** (mêmes terrains) : Flat 64,5 -> 62,2 s ; Corridor 62,4 -> 62,6 ; Nice Slope 41,2 -> 40,4 ; Spaghetti 32,8 -> 32,2 ; Hook you fool 86,3 -> 82,7 (**or 86,5 -> 83**) ; L'Œuf 107,0 -> 108,2 ; tuto (course finale) 15,6 -> 15,5 ; Gruyère bas 2:14 -> 2:10, haut 2:34 -> 2:16 ; Sans fin (trous passés) grappin 36/39 -> 41/43, double 29/31 -> 25/29, montée 50/50 -> 55/58, plafond 21/21 -> 21/21. Enlever les deux plafonds seuls : aucun effet mesuré ; l'air au grappin : +2 s sur Hook you fool (compensé par le pump au-delà de 1650). Aucune traversée de sol vue.
+- Outils hors projet : `medal_bot.gd` / `gap_bot.gd` acceptent `SEED=<n>` (graine fixe, comparaisons avant / après).
+

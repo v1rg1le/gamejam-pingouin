@@ -101,7 +101,7 @@ const MEDAL_GOLD := {
 	"LevelRandomCorridor": 61.5,  # [1.53] bot 61,13 s avec figures (glisse lissée) ; 1.49 : 62 (bot 62,00) ; 1.48 : 66,5
 	"LevelRandomNiceSlope": 37.0, # bot 36,88 s avec figures, 41,32 sans : grandes descentes plus rapides (1.48 : 49,5)
 	"LevelRandomSpaghetti": 38.5, # bot 32,3 à 38,4 s selon le terrain (40,5 sur un terrain difficile) (1.48 : 33,5)
-	"LevelRandomGap": 86.5,       # [1.53] gap_bot 86,27 s avec figures, sans chute ; 1.49 : 89 ; 1.48 : 86
+	"LevelRandomGap": 83.0,       # [1.68] sans plafonds (air au grappin, pump puissance) : gap_bot 82,65 s (1.67 : 86,27 s, or 86,5)
 	"LevelEgg": 108.0,            # [ŒUF 1.60] zigzag + chemin de gauche + crevasse : egg_bot 106,33 s (0 chute, sans figures)
 	"LevelGruyere": 120.0,        # [GRUYÈRE 1.67] or à 2:00 (demande de l'équipe) : Manu fait 2:07 avec des ratés et une chute ; bot 2:00,5 au hasard sans optimiser, 2:09 par le haut ou par le bas (1.66 : 130 s)
 }

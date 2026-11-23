@@ -71,8 +71,20 @@ var chain_velocity := Vector2(0,0)
 @export var chain_fixed: bool = false
 
 # from Actor
+# [SANS PLAFOND 1.68] Demande de l'équipe : « enlever tous les plafonds,
+# 100 % air + glace ». Ces deux plafonds (par axe) ne sont PLUS appliqués
+# par défaut ; on garde les noms pour pouvoir les remettre (hard_speed_caps).
 const SUPER_MAX_SPEED = Vector2(3000, 3000)
 const MAX_SPEED_HOOKED = Vector2(1000,1000)
+## [1.68] Plafonds proposés si on les remet (hard_speed_caps = true), sur la
+## vitesse TOTALE (et plus axe par axe) : un peu au-dessus des limites
+## théoriques air + glace. Chute libre : √(g/k) ≈ 4800 px/s -> 5000.
+## Grappin : balancier à corde maximale (2000 px), √(2·g·2L) ≈ 2530 -> 2600.
+const HARD_CAP_SPEED := 5000.0
+const HARD_CAP_SPEED_HOOKED := 2600.0
+## [1.68] false = 100 % air + glace (aucun plafond) ; true = plafonds
+## HARD_CAP_SPEED / HARD_CAP_SPEED_HOOKED sur la vitesse totale.
+@export var hard_speed_caps: bool = false
 const MIN_SPEED_HOOKED = Vector2(200,200)
 @export var max_speed: = Vector2(700, 600)  # Vector2(1000, 600) // 500 ?
 @export var max_speed_chain: = Vector2(14, 20) # Vector2(50, 60)  # Vector2(1000, 600)
@@ -126,7 +138,12 @@ var direction: Vector2
 @export var pump_uphill_factor: float = 0.35
 ## Impulsion (px/s) à chaque nouvel appui sur pump.
 @export var pump_impulse: float = 90.0
-## Le pump n'accélère plus au-delà de cette vitesse (sans jamais freiner).
+## [PUMP PUISSANCE 1.68] Ce n'est plus un plafond : en dessous, le pump
+## est celui d'avant (force limitée) ; au-dessus, il devient une PUISSANCE
+## (gain = P ÷ v) réglée pour que, sur le plat, à cette vitesse, il compense
+## juste l'air et la glace : c'est la vitesse d'ÉQUILIBRE du pump sur le
+## plat. Plus vite, il donne de moins en moins mais ne s'arrête jamais.
+## Ancien rôle (jusqu'à 1.67) : « le pump n'accélère plus au-delà ».
 ## [PHYSIQUE RÉELLE 1.49] 1450 -> 1650 : avec la résistance de l'air, la
 ## pente ne pousse plus au-delà de l'ancien plafond ; le pump (le geste du
 ## joueur) doit pouvoir rendre la vitesse d'approche d'avant aux trous du
@@ -435,9 +452,12 @@ func _physics_process(delta: float) -> void:
 
 	_apply_pad_boost(delta)         # [BOOST 1.65] turbo des zones de boost
 	_apply_soft_speed_caps(delta)   # [PHYSIQUE 1.10]
-	_velocity.x = clamp(_velocity.x, -SUPER_MAX_SPEED.x, SUPER_MAX_SPEED.x)
-	_velocity.y = clamp(_velocity.y, -SUPER_MAX_SPEED.y, SUPER_MAX_SPEED.y)
-	# HookinInAirState clamp la _velocity avec player.MAX_SPEED_HOOKED
+	# [SANS PLAFOND 1.68] plus de coupure à 3000 px/s par axe : seuls l'air
+	# et la glace limitent la vitesse. Plafond sur la vitesse totale
+	# seulement si hard_speed_caps (pour les remettre plus tard).
+	if hard_speed_caps:
+		_velocity = _velocity.limit_length(HARD_CAP_SPEED)
+	# HookingInAirState : plus de plafond non plus (sauf hard_speed_caps)
 
 	# [FIX VITESSE -> 0] garde anti-NaN : un NaN dans la vitesse "contamine"
 	# tout (position, caméra...) ; on revient à la dernière valeur saine.
@@ -467,7 +487,14 @@ func _physics_process(delta: float) -> void:
 # on retire chaque seconde over_speed_drag de l'EXCÉDENT. Pas de coupure nette.
 # Le grappin garde son propre réglage (MAX_SPEED_HOOKED, dans HookingInAirState).
 func _apply_soft_speed_caps(delta: float) -> void:
-	if _states == null or _states.current == null or _states.current.sub_state_name == "HOOKING":
+	if _states == null or _states.current == null:
+		return
+	if _states.current.sub_state_name == "HOOKING":
+		# [SANS PLAFOND 1.68] au grappin aussi, la résistance de l'air (et la
+		# glace si l'on glisse accroché) freine : avant, rien ne freinait et
+		# seul le plafond de 1000 px/s par axe tenait la vitesse
+		if realistic_physics >= 0.5:
+			_apply_air_drag_and_friction(delta)
 		return
 	# [PHYSIQUE RÉELLE 1.49] nouveau calcul (air + frottement) ; l'ancien
 	# (plafonds doux) reste juste en dessous, utilisé si realistic_physics = 0
@@ -525,7 +552,7 @@ func terminal_speed_on_slope(slope_deg: float) -> float:
 
 ## [PHYSIQUE RÉELLE 1.49] Applique la résistance de l'air (partout) et le
 ## frottement de glisse (au sol) sur _velocity, avant move_and_slide().
-## Appelée par _apply_soft_speed_caps (donc jamais pendant le grappin).
+## Appelée par _apply_soft_speed_caps (aussi pendant le grappin depuis 1.68).
 func _apply_air_drag_and_friction(delta: float) -> void:
 	var speed := _velocity.length()
 	if speed < 0.5:
@@ -1225,12 +1252,21 @@ func wall_jump_normal() -> Vector2:
 
 ## [PUMP MUR 1.54] Accélération du pump (formule de PumpState 1.10, inchangée),
 ## sauf sur un mur en montée sans grappin.
+## [PUMP PUISSANCE 1.68] Puissance du pump (px²/s³, par unité de masse),
+## calculée pour que, sur le plat, à pump_max_speed, le pump compense juste
+## la résistance de l'air (k·v²) et la glace (μ·g) : P = (k·v² + μ·g)·v.
+## Avec les réglages actuels : (94,6 + 16)·1650 ≈ 182 500.
+func pump_power() -> float:
+	var v := maxf(pump_max_speed, 1.0)
+	return (drag_coefficient() * v * v + maxf(ground_friction, 0.0) * gravity) * v
+
+
 func apply_pump_accel(delta: float) -> void:
 	if pump_blocked_on_wall():
 		return
 	var v: Vector2 = _velocity
 	var speed := v.length()
-	if speed < 1.0 or speed >= pump_max_speed:
+	if speed < 1.0:
 		return
 	var dir := v / speed
 	# composante de la direction vers le bas : > 0 en descente, < 0 en montée
@@ -1238,10 +1274,21 @@ func apply_pump_accel(delta: float) -> void:
 	var accel: float = pump_accel
 	if slope > 0.0:
 		accel += gravity * slope * pump_slope_bonus
-	elif slope < 0.0:
+	# [PUMP PUISSANCE 1.68] Comme un moteur ou des jambes : FORCE limitée à
+	# basse vitesse, PUISSANCE limitée à haute vitesse.
+	#  - sous pump_max_speed : exactement le pump d'avant (450 px/s², bonus
+	#    en descente). Essai d'une puissance pure (gain = P / v partout) :
+	#    aux bots, le pump devenait trop faible entre 400 et 1650 px/s
+	#    (Flat 64,5 -> 86 s, Sans fin : 0 saut sur 37, Hook you fool pas fini) ;
+	#  - au-dessus : plus de coupure, le gain vaut P / v (≈ 110 px/s² à 1650,
+	#    60 à 3000), P réglée pour que sur le PLAT, à pump_max_speed, le pump
+	#    compense juste l'air et la glace (pump_power()). C'est l'air qui
+	#    fixe la vitesse d'équilibre ; en descente, le pump aide encore un peu.
+	if speed > pump_max_speed:
+		accel = minf(accel, pump_power() / speed)
+	if slope < 0.0:
 		accel *= pump_uphill_factor
-	var new_speed := minf(speed + accel * delta, pump_max_speed)
-	_velocity = dir * new_speed
+	_velocity = dir * (speed + accel * delta)
 
 
 ## [PUMP MUR 1.54] Impulsion d'un nouvel appui sur PUMP (PumpState 1.10,
@@ -1250,8 +1297,15 @@ func apply_pump_impulse() -> void:
 	if pump_blocked_on_wall():
 		return
 	var speed: float = _velocity.length()
-	if speed > 1.0 and speed < pump_max_speed:
-		_velocity *= minf(speed + pump_impulse, pump_max_speed) / speed
+	if speed > 1.0:
+		# [PUMP PUISSANCE 1.68] sous pump_max_speed : +pump_impulse comme
+		# avant ; au-dessus (avant : rien), une impulsion qui suit la même
+		# loi de puissance que l'accélération : +90 × (P / v) / 450, soit
+		# ~+22 px/s à 1650, ~+12 à 3000.
+		var gain: float = pump_impulse
+		if speed > pump_max_speed:
+			gain = pump_impulse * (pump_power() / speed) / maxf(pump_accel, 1.0)
+		_velocity *= (speed + gain) / speed
 
 
 # [ATTERRISSAGES 1.40] Joue l'animation d'un état au sol en respectant la

@@ -52,7 +52,7 @@ extends CanvasLayer
 const PX_PER_METER := 55.0
 ## Vitesse correspondant à une jauge pleine (un peu au-dessus du plafond en
 ## l'air pour qu'on voie le dépassement après un pump ou une figure boostée).
-const GAUGE_MAX := 3000.0   # [1.49] jusqu'à SUPER_MAX_SPEED : la physique réelle va plus vite dans les grosses descentes
+const GAUGE_MAX := 5000.0   # [1.68] plus de plafond à 3000 : la jauge va jusqu'à ~la chute libre (4800 px/s) ; [1.49] 3000 = ancien SUPER_MAX_SPEED
 ## Touche pour allumer / éteindre le compteur en jeu (F2 = panneau physique).
 const TOGGLE_KEY := KEY_F3
 

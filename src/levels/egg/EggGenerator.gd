@@ -155,7 +155,7 @@ const BRIDGE_END_X := -6200.0  # fin du pont
 const BRIDGE_DROP := 650.0     # le pont descend de ça vers la droite (on y reprend de l'élan)
 const CEIL_X0 := -6700.0       # plafond suspendu au-dessus de la crevasse
 const CEIL_X1 := -1200.0
-const CEIL_UNDER := 750.0      # dessous du plafond, au-dessus du BOUT du pont
+const CEIL_UNDER := 650.0      # dessous du plafond, au-dessus du BOUT du pont ; [1.68] 750 -> 650 : avec la résistance de l'air au grappin, le balancier sur la 1re prise retombe ~70 px plus bas et la 2e prise était hors de portée (1200 px)
 const BRIDGE_FALL_Y := -2600.0 # sous cette hauteur (côté gauche) = chute : réapparition
 ## [1.60] CREVASSE dans le dos de l'œuf (choix de l'équipe, pour fermer le
 ## raccourci « on remonte le dos de l'œuf en glissant ») : une grande fente

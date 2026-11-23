@@ -15,6 +15,8 @@ func _handle_input(player: CharacterBody2D, delta: float) -> void:
 	#   de la vitesse dès qu'on arrivait plus vite que 980 (après un saut).
 	# Maintenant : accélération le long du mouvement, plus forte en descente,
 	# jusqu'à pump_max_speed ; au-delà, le pump n'enlève rien.
+	# [1.68] plus de limite : le pump est une puissance (gain = P / v), voir
+	# Player.pump_power().
 	# [PUMP MUR 1.54] Le calcul du pump est maintenant dans
 	# Player.apply_pump_accel() (même formule qu'avant, inchangée) : il est
 	# partagé avec le grappin au sol (HookingOnGroundState), qui pumpe le

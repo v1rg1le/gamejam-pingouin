@@ -30,7 +30,7 @@ const PARAMS = [
 	["pump_slope_bonus", "Pump : bonus en descente", 0.0, 4.0, 0.05],
 	["pump_uphill_factor", "Pump : efficacité en montée", 0.0, 1.0, 0.05],
 	["pump_impulse", "Pump : impulsion à l'appui", 0.0, 400.0, 5.0],
-	["pump_max_speed", "Vitesse max du pump", 500.0, 3000.0, 25.0],
+	["pump_max_speed", "Pump : vitesse d'équilibre sur le plat (1.68)", 500.0, 3000.0, 25.0],
 	# [PHYSIQUE RÉELLE 1.49] 1 = résistance de l'air + frottement (nouveau),
 	# 0 = anciens plafonds doux (les 3 réglages « ancien » ci-dessous)
 	["realistic_physics", "Physique réelle (1) / ancienne (0)", 0.0, 1.0, 1.0],
