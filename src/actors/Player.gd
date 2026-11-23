@@ -406,10 +406,14 @@ func _physics_process(delta: float) -> void:
 	if _respawning:
 		return  # [MORT / RESPAWN] le pingouin est "gelé" pendant la petite animation de respawn
 
-	is_on_ground = ground_detector_right.is_colliding() and ground_detector_left.is_colliding()
-	is_almost_on_ground = \
-		(ground_detector_right.is_colliding() and !ground_detector_left.is_colliding()) or \
-		(!ground_detector_right.is_colliding() and ground_detector_left.is_colliding())
+	# [1.67] un capteur tourné vers le HAUT (Pinpouin à l'envers, en figure ou
+	# au balancier) qui touche un plafond ne compte pas comme sol (voir
+	# _ray_sees_floor) : avant, Pinpouin pouvait rester « posé » sous un
+	# plafond de caverne pendant de longues secondes (vu au bot, Gruyère 1.66).
+	var r_ok := _ray_sees_floor(ground_detector_right)
+	var l_ok := _ray_sees_floor(ground_detector_left)
+	is_on_ground = r_ok and l_ok
+	is_almost_on_ground = (r_ok and !l_ok) or (!r_ok and l_ok)
 
 	# [SAUT MUR 1.58] on retient la pente du dernier sol touché (saut coyote)
 	if is_on_ground:
@@ -670,6 +674,13 @@ func _apply_godot3_slide(v: Vector2) -> Vector2:
 			filter_used = true
 		if to_local(col.get_position()).y >= 3.0 and n.y < -0.5:  # contact aux pieds, pente < 60°
 			impact_normal = n
+		# [1.67] contre un PLAFOND (normale vers le bas), on n'enlève que la
+		# vitesse qui rentre dedans : sinon la gravité était retirée à chaque
+		# image en longeant un plafond qui descend, et Pinpouin restait
+		# collé dessous de longues secondes (vu au bot dans le Gruyère).
+		# Sols et murs : inchangés (projection complète, comme avant).
+		if n.y > 0.5 and v.dot(n) >= 0.0:
+			continue
 		v = v.slide(n)
 
 	# [FIX VITESSE -> 0] Amorti d'atterrissage : quand on retombe "contre" une
@@ -722,11 +733,21 @@ func _apply_godot3_slide(v: Vector2) -> Vector2:
 
 # Normale moyenne du sol sous le pingouin, mesurée par les 2 raycasts.
 # Renvoie Vector2.ZERO si aucun raycast ne touche.
+## [1.67] Le capteur voit-il un SOL ? Non s'il est tourné vers le haut (plus
+## de ~120° de rotation : la direction du rayon monte). Les half-pipes
+## (parois verticales, rayon à l'horizontale) ne sont pas touchés.
+func _ray_sees_floor(ray: RayCast2D) -> bool:
+	if not ray.is_colliding():
+		return false
+	var dir := ray.global_transform.basis_xform(ray.target_position).normalized()
+	return dir.y > -0.5
+
+
 func _get_ground_normal() -> Vector2:
 	var n := Vector2.ZERO
-	if ground_detector_right.is_colliding():
+	if _ray_sees_floor(ground_detector_right):
 		n += ground_detector_right.get_collision_normal()
-	if ground_detector_left.is_colliding():
+	if _ray_sees_floor(ground_detector_left):
 		n += ground_detector_left.get_collision_normal()
 	return n.normalized() if n != Vector2.ZERO else Vector2.ZERO
 

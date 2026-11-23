@@ -516,9 +516,9 @@ func _add_egg(name: String, center: Vector2) -> void:
 ## grand virage en U (PipeBend, boosts) qui remonte dans l'entrée du bas de
 ## la caverne 3 par en dessous (-55) : la redirection « façon quarter pipe ».
 const CAVES := [
-	{"seed": 1440, "entries": [0, 1], "exits": [0, 1, 2], "theta": [8.0, 8.0], "phi": [-18.0, -18.0, -18.0]},
-	{"seed": 2302, "entries": [0, 1, 2], "exits": [0, 1, 2, 3], "theta": [55.0, 55.0, 55.0], "phi": [-18.0, -18.0, -18.0, 70.0], "phi_r": [0.0, 0.0, 0.0, 500.0]},
-	{"seed": 3303, "entries": [0, 1, 2, 3], "exits": [0, 1, 2], "theta": [55.0, 55.0, 55.0, -55.0], "theta_r": [0.0, 0.0, 0.0, 800.0], "phi": [-18.0, -18.0, -18.0]},
+	{"seed": 1440, "entries": [0, 1], "exits": [0, 1, 2], "theta": [8.0, 8.0], "phi": [-15.0, -15.0, -15.0]},
+	{"seed": 2302, "entries": [0, 1, 2], "exits": [0, 1, 2, 3], "theta": [55.0, 55.0, 55.0], "phi": [-15.0, -15.0, -15.0, 70.0], "phi_r": [0.0, 0.0, 0.0, 500.0]},
+	{"seed": 3303, "entries": [0, 1, 2, 3], "exits": [0, 1, 2], "theta": [55.0, 55.0, 55.0, -55.0], "theta_r": [0.0, 0.0, 0.0, 800.0], "phi": [-15.0, -15.0, -15.0]},
 	{"seed": 4404, "entries": [0, 1, 2], "exits": [0, 1], "theta": [55.0, 55.0, 55.0], "phi": [8.0, 8.0]},
 ]
 # -----------------------------------------------------------------------------
@@ -547,7 +547,25 @@ const KICK_TURN := -26.0       # tremplin : de +8° (pente du couloir de sortie)
 const KICK_RADIUS := 900.0
 const CATCH_DEG := 55.0        # rampe d'accueil : de 55° (on tombe) à 8° (couloir d'entrée)
 const CATCH_RADIUS := 1400.0
-const LADDER_EGG := Vector2(400.0, -500.0)   # œuf de l'échelle, depuis le bout du tremplin de son étage
+## [1.67] Retour de l'équipe : « les œufs plus pile entre les deux
+## plateformes, sur la trajectoire de Pinpouin mais un peu plus haut, pour
+## appuyer la nécessité du grappin ; si on le loupe, on atterrit plus bas,
+## tant pis ». Au milieu du vide (1250 px après le tremplin), 500 px au-dessus
+## du départ : calculé avec la vraie physique, la trajectoire de l'étage passe
+## de 260 px (2200 px/s) à 190 px (1100 px/s) SOUS le centre de l'œuf : il
+## est juste au-dessus, à portée de grappin. Les sauts LENTS (< 1100 px/s) de
+## l'étage du dessus peuvent le heurter : on retombe alors plus bas.
+## (1.66 : Vector2(400, -500), juste après le tremplin)
+## [1.67, réglage final] au bot, en se balançant sous l'œuf, Pinpouin
+## butait sous la rampe d'accueil du DESSUS (elle avançait de 950 px dans le
+## vide, son bout était juste à droite de l'œuf) : rampes raccourcies
+## (rayon 1400 -> 1000, CATCH_RADIUS_166) et tremplins à -15° (au lieu de
+## -18°). Recalculé : de 1300 à 2500 px/s on retombe en face, plus lent un
+## étage plus bas ; la trajectoire la plus rapide passe ~250 px sous le centre
+## de l'œuf ; le bout de la rampe du dessus est 570 px à droite et 200 px
+## SOUS l'œuf : en lâchant à hauteur de l'œuf, on passe par-dessus.
+const LADDER_EGG := Vector2(1250.0, -470.0)
+const CATCH_RADIUS_166 := 1000.0   # œuf de l'échelle, depuis le bout du tremplin de son étage
 var void_zones: Array = []     # [{rect, a, b, kick_ends: {l: Vector2}, mouths: {l: Vector2}, eggs: {l: name}}]
 const CAVE_COLUMNS := 10       # [1.63] 10 colonnes : ~35 à 45 s par caverne au bot (niveau visé : 3 à 5 min pour un joueur)
 const PASS_W := 1450.0         # largeur d'un passage (flanc à flanc)
@@ -577,6 +595,7 @@ func _make_cave(i: int, origin: Vector2) -> CaveGenerator:
 	g.entry_lanes.assign(cfg.entries)
 	g.exit_lanes.assign(cfg.exits)
 	g.entry_angles.assign(cfg.get("theta", []))     # [1.66] angles θ / φ
+	g.entry_bend_radius = CATCH_RADIUS_166          # [1.67] rampes d'accueil plus courtes
 	g.exit_angles.assign(cfg.get("phi", []))
 	g.entry_radii.assign(cfg.get("theta_r", []))
 	g.exit_radii.assign(cfg.get("phi_r", []))
@@ -721,24 +740,35 @@ func _add_passage(a: CaveGenerator, b: CaveGenerator) -> void:
 ## avec boosts (PipeBend partout). On cherche les longueurs droites qui
 ## raccordent les deux bouts ; montée de 700 px si possible, moins sinon.
 func _add_u_pipe(p0: Vector2, h0: float, p1: Vector2, h1: float) -> void:
-	var r1 := 500.0
-	var r2 := 500.0
+	# [1.67] « virage en U plus doux » (retour de l'équipe) : on essaie le
+	# plus GRAND rayon qui tient entre les deux bouts (900 px, puis par pas
+	# de 50 px ; 1.66 : 500 fixe), avec la plus longue montée droite possible
 	var u1 := Vector2.from_angle(deg_to_rad(h0))
 	var u2 := Vector2.from_angle(deg_to_rad(h1))
-	var arc1 := PipeBend.arc(Vector2.ZERO, h0, -h0, r1)
-	var arc2 := PipeBend.arc(Vector2.ZERO, 0.0, h1, r2)
-	var d1 := arc1[arc1.size() - 1]
-	var d2 := arc2[arc2.size() - 1]
-	var l2 := 700.0
-	var l1 := 0.0
+	var r1 := 900.0
+	var r2 := 900.0
+	var d1 := Vector2.ZERO
+	var d2 := Vector2.ZERO
+	var l2 := 0.0
+	var l1 := -1.0
 	var lb := -1.0
-	while l2 >= 0.0:
-		var rest := p1 - p0 - d1 - d2 - u2 * l2
-		l1 = rest.y / u1.y
-		lb = rest.x - l1 * u1.x
-		if l1 >= 0.0 and lb >= 0.0:
-			break
-		l2 -= 50.0
+	var r := 900.0
+	while r >= 400.0 and (l1 < 0.0 or lb < 0.0):
+		r1 = r
+		r2 = r
+		var arc1 := PipeBend.arc(Vector2.ZERO, h0, -h0, r1)
+		var arc2 := PipeBend.arc(Vector2.ZERO, 0.0, h1, r2)
+		d1 = arc1[arc1.size() - 1]
+		d2 = arc2[arc2.size() - 1]
+		l2 = 700.0
+		while l2 >= 0.0:
+			var rest := p1 - p0 - d1 - d2 - u2 * l2
+			l1 = rest.y / u1.y
+			lb = rest.x - l1 * u1.x
+			if l1 >= 0.0 and lb >= 0.0:
+				break
+			l2 -= 50.0
+		r -= 50.0
 	if l1 < 0.0 or lb < 0.0:
 		push_warning("[GRUYÈRE] virage en U impossible entre %s et %s" % [p0, p1])
 		return
@@ -752,7 +782,7 @@ func _add_u_pipe(p0: Vector2, h0: float, p1: Vector2, h1: float) -> void:
 	for bz in PipeBend.boosts_along(line, 360.0, 2.5, 150.0):
 		_add_boost_node(bz)
 	u_pipes.append(line)
-	print("[GRUYÈRE] virage en U : descente %d, fond %d, montée %d" % [l1, lb, l2])
+	print("[GRUYÈRE] virage en U : rayon %d, descente %d, fond %d, montée %d" % [r1, l1, lb, l2])
 
 
 var u_pipes: Array = []        # [1.66] virages en U (bot, images)

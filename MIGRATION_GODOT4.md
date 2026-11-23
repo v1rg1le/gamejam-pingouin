@@ -1346,3 +1346,10 @@ Demande de l'équipe (capture du salon et croquis du menu), choix validés : un 
 - **Routes équivalentes** : rappels jaunes dans les glissades de tous les étages ; au-dessus des trous à prises (sans vide dessous), un boost en l'air au milieu ; un boost à l'arrivée de chaque trou. Bot : haut 2:14, bas 2:09 (rester sur son étage) ; changer d'étage (œufs, montées au grappin) coûte du temps : hasard 2:23 à 3:04 ; Chill 2:40 ; sans PUMP 2:30 ; mode enfant 2:32. Or 130 s.
 - Contrôles : 1 000 graines (4 → 3 étages) : 100 % ; check_all 148 fichiers, 0 échec.
 
+## 78. Œufs au milieu du vide, U plus doux, or à 2:00, Pinpouin collé aux plafonds (23/11, version 1.67)
+
+- **Œufs** (retour de l'équipe : « pile entre les deux plateformes, sur la trajectoire mais un peu plus haut, pour appuyer le grappin ») : `LADDER_EGG` = 1250 px après le tremplin, 470 px plus haut. Au bot, en se balançant, Pinpouin butait sous la rampe d'accueil du dessus : rampes raccourcies (rayon 1400 -> 1000) et tremplins à -15° (au lieu de -18°). Recalculé : de 1300 à 2500 px/s on retombe en face, plus lent un étage plus bas ; la trajectoire la plus rapide passe ~250 px sous l'œuf ; le bout de la rampe du dessus est 570 px à droite et 200 px sous l'œuf. Bot : en lâchant à hauteur de l'œuf on monte d'un étage, et on peut enchaîner l'œuf du dessus.
+- **Virage en U plus doux** : le plus grand rayon qui tient (750 au lieu de 500).
+- **Pinpouin collé sous un plafond** (vu au bot, jusqu'à 28 s) : en longeant un plafond qui descend, la projection « à la Godot 3 » retirait aussi la gravité à chaque image. `Player._apply_godot3_slide` : contre un plafond, on n'enlève que la vitesse qui rentre dedans (sols et murs inchangés) ; `Player._ray_sees_floor` : un capteur tourné vers le haut ne compte plus comme sol. Hook you fool (gap_bot) : temps identique au centième avant / après ; L'Œuf 107 s (inchangé).
+- **Or : 2:00** (demande de l'équipe ; Manu 2:07 avec des ratés). Bot : haut 2:10, bas 2:09, hasard 2:00,5 à 3:04, sans PUMP 2:06, Chill 2:23, mode enfant 2:50.
+
