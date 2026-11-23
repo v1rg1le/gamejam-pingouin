@@ -85,6 +85,17 @@ var _font: Font
 const KID_PAUSE_HOLD = 1.0    # s d'appui pour ouvrir la pause en mode enfant
 var _pause_finger := -1       # doigt posé sur le bouton pause (mode enfant)
 var _pause_hold := 0.0        # temps d'appui écoulé
+# [ZOOM LIBRE 1.72] Pincer à deux doigts dans la zone de jeu (option « Zoom
+# libre ») : écarter = plus près, rapprocher = plus loin. Le 1er doigt posé
+# dans la zone de jeu lance le grappin (comme avant) ; si un 2e doigt s'y pose
+# moins de PINCH_WINDOW s après, c'était un pincement : on relâche le grappin
+# et les deux doigts règlent le zoom (Settings.zoom_factor).
+const PINCH_WINDOW := 0.3
+var _pinch := {}              # index du doigt -> position (repère de référence)
+var _pinch_d0 := 0.0          # écart des deux doigts au début du pincement
+var _pinch_f0 := 1.0          # facteur de zoom au début du pincement
+var _free_hook_ms := 0        # heure (ms) du dernier « grappin libre »
+var _free_hook_pos := Vector2.ZERO
 
 
 func _ready() -> void:
@@ -159,6 +170,10 @@ func _input(event: InputEvent) -> void:
 		_finger_up(event.index)
 		return
 	if not _should_show():
+		return
+	# [ZOOM LIBRE 1.72] doigts d'un pincement en cours
+	if _pinch_input(event):
+		get_viewport().set_input_as_handled()
 		return
 	if event is InputEventScreenTouch:
 		var pos := _to_reference(event.position)
@@ -243,11 +258,50 @@ func _free_hook_down(index: int, pos: Vector2) -> void:
 	if aim.length() < 1.0:
 		return
 	_fingers[index] = "hook_free"
+	_free_hook_ms = Time.get_ticks_msec()   # [ZOOM LIBRE 1.72]
+	_free_hook_pos = pos
 	_hook_finger = index
 	_hook_origin = pos
 	_free_hook = true
 	_aim_vec = Vector2.ZERO
 	_fire_hook(aim.normalized())
+
+
+# [ZOOM LIBRE 1.72] Gère les pincements ; renvoie vrai si l'événement a servi.
+func _pinch_input(event: InputEvent) -> bool:
+	if not Settings.free_zoom:
+		_pinch.clear()
+		return false
+	if event is InputEventScreenTouch:
+		var pos := _to_reference(event.position)
+		if event.pressed:
+			if _pinch.size() >= 2:
+				return false
+			# 2e doigt dans la zone de jeu juste après un « grappin libre »
+			var in_play := _button_at(pos) == null and _left_pad_button(pos) == null and not PhysicsTuner.covers(pos) and not _blocked_by_ui(pos)
+			if in_play and _free_hook and _hook_finger != -1 and _fingers.get(_hook_finger, "") == "hook_free" \
+					and Time.get_ticks_msec() - _free_hook_ms <= int(PINCH_WINDOW * 1000.0):
+				var first := _hook_finger
+				var first_pos := _free_hook_pos + _aim_vec
+				_finger_up(first)          # on relâche le grappin parti par erreur
+				_pinch[first] = first_pos
+				_pinch[event.index] = pos
+				_pinch_d0 = maxf(first_pos.distance_to(pos), 20.0)
+				_pinch_f0 = Settings.zoom_factor
+				return true
+			return false
+		if _pinch.has(event.index):
+			_pinch.clear()             # un doigt relevé : fin du pincement
+			return true
+		return false
+	if event is InputEventScreenDrag and _pinch.has(event.index):
+		_pinch[event.index] = _to_reference(event.position)
+		if _pinch.size() == 2:
+			var p: Array = _pinch.values()
+			var d: float = maxf((p[0] as Vector2).distance_to(p[1]), 20.0)
+			Settings.zoom_factor = clampf(_pinch_f0 * d / _pinch_d0, Settings.ZOOM_FACTOR_MIN, Settings.ZOOM_FACTOR_MAX)
+		return true
+	return false
 
 
 func _finger_up(index: int) -> void:

@@ -86,6 +86,31 @@ var ui_size: float = 1.0          # [RESPONSIVE 1.14] réglage « Taille de l'in
 # [FLÈCHES 1.16] flèches vers les autres joueurs en multi (choix dans Options)
 enum { ARROWS_ALL, ARROWS_NEIGHBOURS, ARROWS_NONE }
 var player_arrows: int = ARROWS_ALL
+# -----------------------------------------------------------------------------
+# [OPTIONS 1.72] Nouveaux réglages (demandes de l'équipe, 23/11)
+# -----------------------------------------------------------------------------
+## Plein écran (PC et navigateur ; sans effet sur téléphone, déjà plein
+## écran). Touche F11 en jeu comme dans les menus. Mémorisé.
+var fullscreen: bool = false
+## Zoom libre : molette de la souris, manette (stick droit en tenant le clic
+## du stick droit R3), téléphone (pincer à deux doigts). Le facteur choisi
+## s'ajoute au zoom automatique de la caméra (AdaptiveCamera). Coupé par défaut.
+var free_zoom: bool = false
+## Facteur du zoom libre (1 = zoom automatique seul ; > 1 = plus près ;
+## < 1 = plus loin). Pas mémorisé : chaque lancement repart à 1.
+var zoom_factor: float = 1.0
+const ZOOM_FACTOR_MIN := 0.5
+const ZOOM_FACTOR_MAX := 1.8
+## [DEV 1.72] Afficher sous la vitesse la résistance de l'air et le
+## frottement du sol (coefficients + freinage en cours, en gras quand le jeu
+## les applique). Onglet « Développeur » des options. Coupé par défaut.
+var show_coefs: bool = false
+## [DEV 1.72] Figure de la touche FIGURE : -1 = au hasard (comme avant),
+## sinon l'indice dans TRICKS. Onglet « Développeur ».
+var fixed_trick: int = -1
+## Les figures du jeu (animations de Player.tscn) et leur nom affiché (mêmes
+## noms que TrickScore.gd). L'ordre sert d'indice pour fixed_trick.
+const TRICKS := [["trick_spin", "Toupie"], ["trick_boule", "Boule"], ["trick_etoile_ninja", "Étoile ninja"], ["trick_carpe", "Carpe"]]
 
 
 func _ready() -> void:
@@ -128,7 +153,16 @@ func _load_options() -> void:
 		game_mode = clampi(int(cfg.get_value("options", "game_mode", MODE_CHILL)), MODE_CHILL, MODE_SCORE)   # [MODES 1.25]
 		ui_size = clampf(float(cfg.get_value("options", "ui_size", 1.0)), 0.8, 1.5)
 		player_arrows = clampi(int(cfg.get_value("options", "player_arrows", ARROWS_ALL)), ARROWS_ALL, ARROWS_NONE)
+		# [OPTIONS 1.72]
+		fullscreen = bool(cfg.get_value("options", "fullscreen", false))
+		free_zoom = bool(cfg.get_value("options", "free_zoom", false))
+		show_coefs = bool(cfg.get_value("options", "show_coefs", false))
+		fixed_trick = clampi(int(cfg.get_value("options", "fixed_trick", -1)), -1, TRICKS.size() - 1)
 	apply_music_volume()
+	# [OPTIONS 1.72] plein écran retrouvé au lancement (pas dans le navigateur :
+	# il n'y est permis qu'après un clic du joueur)
+	if not is_web:
+		apply_fullscreen()
 
 
 ## [MODES 1.25] Vrai si la partie en cours (ou à lancer) est en mode Chill.
@@ -146,11 +180,34 @@ func set_option(key: String, value) -> void:
 		apply_music_volume()
 	if key == "ui_size":   # [RESPONSIVE 1.14] appliqué tout de suite aux menus
 		_last_scene_path = ""
+	if key == "fullscreen":   # [OPTIONS 1.72]
+		apply_fullscreen()
+	if key == "free_zoom" and not value:   # [OPTIONS 1.72] zoom libre coupé : retour au zoom auto
+		zoom_factor = 1.0
 	var cfg := ConfigFile.new()
 	cfg.load(OPTIONS_PATH)   # on garde les autres sections (records, fantôme, nom…)
 	cfg.set_value("options", key, value)
 	cfg.save(OPTIONS_PATH)
 	emit_signal("options_changed")
+
+
+## [OPTIONS 1.72] Plein écran / fenêtre. Sur téléphone, rien à faire (le jeu
+## y est toujours plein écran). Mode « plein écran » de Godot (fenêtre sans
+## bord à la taille de l'écran : passage rapide, pas de changement de
+## résolution) ; le jeu s'adapte tout seul (content_scale_aspect EXPAND).
+func apply_fullscreen() -> void:
+	if is_mobile_device:
+		return
+	var want := DisplayServer.WINDOW_MODE_FULLSCREEN if fullscreen else DisplayServer.WINDOW_MODE_WINDOWED
+	if DisplayServer.window_get_mode() != want:
+		DisplayServer.window_set_mode(want)
+
+
+## [OPTIONS 1.72] Change le facteur du zoom libre (borné), si l'option est active.
+func change_zoom_factor(mult: float) -> void:
+	if not free_zoom:
+		return
+	zoom_factor = clampf(zoom_factor * mult, ZOOM_FACTOR_MIN, ZOOM_FACTOR_MAX)
 
 
 ## Volume de la musique : bus "Music" (cf. default_bus_layout.tres).
@@ -304,6 +361,12 @@ func is_continue_press(event: InputEvent) -> bool:
 
 
 func _input(event: InputEvent) -> void:
+	# [OPTIONS 1.72] F11 : plein écran / fenêtre, partout (menus et jeu),
+	# mémorisé comme la case des options
+	if event is InputEventKey and event.pressed and not event.echo and event.keycode == KEY_F11 and not is_mobile_device:
+		set_option("fullscreen", not fullscreen)
+		get_viewport().set_input_as_handled()
+		return
 	# [ENTRÉES 1.14] une touche de volume ne doit pas faire passer en mode
 	# « clavier » (ce qui cachait les boutons tactiles en pleine course !)
 	if is_system_key(event):

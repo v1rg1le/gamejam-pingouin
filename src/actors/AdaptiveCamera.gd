@@ -37,6 +37,24 @@ extends Camera2D
 #      prises trouvées (palier spécial gap_zoom, plus large que les autres,
 #      utilisé uniquement dans ce cas). Le pingouin reste toujours à l'écran.
 #
+#  [CAMÉRA DOUCE 1.72] (retour de l'équipe : « la caméra fait souvent des
+#  à-coups, est-ce que tu peux lerp un peu en prévention avant un
+#  agrandissement ? ») :
+#   6. Le zoom, le regard vers l'avant et le suivi vertical passent par des
+#      RESSORTS amortis (« smooth damp ») au lieu d'un lissage exponentiel :
+#      avec l'exponentiel, la vitesse du zoom sautait d'un coup à chaque
+#      nouveau palier (l'à-coup) ; un ressort démarre en douceur, accélère,
+#      puis freine avant d'arriver : vitesse continue, plus d'à-coup.
+#   7. Le suivi vertical n'utilise plus la marge « drag » de Godot (la vue
+#      restait figée puis repartait d'un coup quand Pinpouin sortait de la
+#      marge) : la hauteur de la vue suit Pinpouin avec un ressort court
+#      (follow_y_time), qui gomme les petites bosses.
+#   8. ZOOM LIBRE (option) : molette de la souris, stick droit en tenant le
+#      clic du stick droit (R3) à la manette, pincer à deux doigts sur
+#      téléphone (TouchControls). Le facteur choisi (Settings.zoom_factor)
+#      multiplie le zoom automatique, qui continue de travailler. Clic molette
+#      ou clic court sur R3 : retour au zoom automatique seul.
+#
 #  [MIGRATION GODOT 4.7] Rappel : en Godot 4, zoom < 1 = VUE PLUS LARGE
 #  (c'était l'inverse en Godot 3).
 #  Tout est réglable dans l'inspecteur du nœud Camera2D du Player.
@@ -90,6 +108,17 @@ extends Camera2D
 ## Temps de réponse (s) du décalage (lissage : pas d'à-coup aux demi-tours).
 @export var look_ahead_time: float = 0.8
 
+@export_group("Caméra douce (1.72)")
+## [CAMÉRA DOUCE 1.72] Ressorts amortis (sinon : lissage exponentiel d'avant).
+@export var smooth_follow_enabled: bool = true
+## Temps de réponse (s) du suivi vertical (petit : la vue ne traîne pas en
+## chute ; assez pour gommer les bosses).
+@export var follow_y_time: float = 0.12
+## Au-delà de cet écart (px), la vue saute directement (réapparition).
+@export var snap_distance: float = 1500.0
+## Temps de réponse (s) du zoom libre (molette / stick / pincement).
+@export var free_zoom_time: float = 0.12
+
 @export_group("Dézoom au-dessus des trous (1.5)")
 ## [CAMÉRA 1.5] Au-dessus d'un trou, montrer les prises à portée du grappin.
 @export var gap_view_enabled: bool = true
@@ -112,6 +141,16 @@ var _in_gap: bool = false             # dernier scan : au-dessus d'un trou
 var _gap_offset: Vector2 = Vector2.ZERO  # décalage pour centrer les prises du grappin
 var _gap_zoom_needed: float = 1.0     # zoom qui montre toutes les prises
 var _view_offset: Vector2 = Vector2.ZERO # décalage lissé appliqué à la caméra
+# [CAMÉRA DOUCE 1.72] états des ressorts
+var _auto_zoom := 1.0                  # zoom automatique (ressort), avant zoom libre
+var _auto_zoom_vel := 0.0
+var _view_offset_vel := Vector2.ZERO
+var _cy := INF                         # hauteur (monde) du centre de la vue, ressort
+var _cy_vel := 0.0
+var _factor := 1.0                     # zoom libre lissé
+var _factor_vel := 0.0
+var _r3_time := -1.0                   # R3 tenu depuis (s) ; -1 = relâché
+var _r3_moved := false                 # le stick a servi pendant l'appui
 ## [TUTO 1.55] Point du monde à garder dans le cadre (ou null). Posé par le
 ## tuto (TutorialCoach) dans les ateliers FALAISE : la prise du grappin est
 ## haut au-dessus du mur, hors de l'écran ; sans ça, l'invite « la prise est
@@ -141,6 +180,12 @@ func _ready() -> void:
 		zoom_levels = zoom_levels_mobile
 		gap_zoom = gap_zoom_mobile
 	zoom = Vector2.ONE * zoom_levels[0]
+	_auto_zoom = zoom_levels[0]
+	_factor = Settings.zoom_factor
+	if smooth_follow_enabled:
+		# [CAMÉRA DOUCE 1.72] plus de marge « drag » verticale : remplacée par
+		# le ressort de _apply_smooth_vertical (voir l'en-tête, point 7)
+		drag_vertical_enabled = false
 	if look_ahead_enabled:
 		# [CAMÉRA 1.5] la caméra colle au pingouin (plus de traîne horizontale,
 		# qui le plaçait à droite à grande vitesse) ; c'est l'offset d'avance qui
@@ -161,7 +206,16 @@ func _physics_process(delta: float) -> void:
 			wanted_shift = Vector2(touch_view_shift.x * _player.facing, touch_view_shift.y)
 		position = position.lerp(wanted_shift, 1.0 - exp(-delta * 1.5))  # lent : pas d'à-coup aux demi-tours
 
+	# [CAMÉRA DOUCE 1.72] zoom libre : manette (R3 tenu + stick droit)
+	_update_gamepad_zoom(delta)
+	var wanted_factor: float = Settings.zoom_factor if Settings.free_zoom else 1.0
+	if smooth_follow_enabled:
+		_factor = _smooth_damp(_factor, wanted_factor, "_factor_vel", free_zoom_time, delta)
+	else:
+		_factor = wanted_factor
+
 	if not adaptive_zoom_enabled or _player == null:
+		zoom = Vector2.ONE * (zoom_levels[0] * _factor)
 		return
 
 	_scan_timer -= delta
@@ -169,11 +223,16 @@ func _physics_process(delta: float) -> void:
 		_scan_timer = scan_interval
 		_choose_target_zoom()
 
-	# Lissage exponentiel : rapide pour dézoomer, lent pour re-zoomer.
-	var current := zoom.x
-	var tau := zoom_out_time if _target_zoom < current else zoom_in_time
-	var k := 1.0 - exp(-delta / max(0.01, tau / 3.0))
-	current = lerpf(current, _target_zoom, k)
+	var tau := zoom_out_time if _target_zoom < _auto_zoom else zoom_in_time
+	if smooth_follow_enabled:
+		# [CAMÉRA DOUCE 1.72] ressort amorti : départ en douceur (« en
+		# prévention »), pas de saut de vitesse à chaque nouveau palier
+		_auto_zoom = _smooth_damp(_auto_zoom, _target_zoom, "_auto_zoom_vel", tau * 0.4, delta)
+	else:
+		# Lissage exponentiel (avant 1.72) : rapide pour dézoomer, lent pour re-zoomer.
+		var k := 1.0 - exp(-delta / max(0.01, tau / 3.0))
+		_auto_zoom = lerpf(_auto_zoom, _target_zoom, k)
+	var current := _auto_zoom * _factor
 	zoom = Vector2(current, current)
 
 
@@ -257,8 +316,106 @@ func _update_view_offset(delta: float) -> void:
 	var tau := maxf(0.05, look_ahead_time)
 	if (_in_gap and gap_view_enabled) or focus_point != null:
 		tau *= 2.0   # au-dessus d'un trou : recentrage plus lent (les prises changent à chaque scan)
-	_view_offset = _view_offset.lerp(target, 1.0 - exp(-delta / (tau / 3.0)))
-	offset = _view_offset
+	if not smooth_follow_enabled:
+		_view_offset = _view_offset.lerp(target, 1.0 - exp(-delta / (tau / 3.0)))
+		offset = _view_offset
+		return
+	# [CAMÉRA DOUCE 1.72] ressort amorti (vitesse continue : pas d'à-coup quand
+	# le regard change de cible, ex. arrivée au-dessus d'un trou)
+	_view_offset.x = _smooth_damp(_view_offset.x, target.x, "_view_offset_vel:x", tau * 0.35, delta)
+	_view_offset.y = _smooth_damp(_view_offset.y, target.y, "_view_offset_vel:y", tau * 0.35, delta)
+	_apply_smooth_vertical(delta, lim)
+
+
+# [CAMÉRA DOUCE 1.72] Suivi vertical par ressort (remplace la marge « drag »).
+# _cy = hauteur, dans le monde, du centre de la vue ; elle suit Pinpouin (plus
+# le regard vers le bas) avec un temps de réponse court. Le décalage final
+# garde toujours Pinpouin à l'écran (lim).
+func _apply_smooth_vertical(delta: float, lim: Vector2) -> void:
+	var want_y: float = _player.global_position.y + _view_offset.y
+	if _cy == INF or absf(want_y - _cy) > snap_distance:
+		_cy = want_y          # premier passage ou réapparition : on saute
+		_cy_vel = 0.0
+	else:
+		_cy = _smooth_damp(_cy, want_y, "_cy_vel", follow_y_time, delta)
+	var off := Vector2(_view_offset.x, _cy - _player.global_position.y)
+	offset = off.clamp(-lim, lim)
+
+
+# [CAMÉRA DOUCE 1.72] Ressort critique amorti (même formule que le
+# « SmoothDamp » des moteurs de jeu) : rejoint `target` en ~smooth_time
+# secondes, sans dépasser, avec une vitesse qui varie en douceur. `vel_name`
+# = nom de la variable qui garde la vitesse (« nom » ou « nom:x » / « nom:y »
+# pour un Vector2).
+func _smooth_damp(current: float, target: float, vel_name: String, smooth_time: float, delta: float) -> float:
+	var parts := vel_name.split(":")
+	var holder = get(parts[0])
+	var vel: float = holder if parts.size() == 1 else (holder.x if parts[1] == "x" else holder.y)
+	smooth_time = maxf(0.0001, smooth_time)
+	var omega := 2.0 / smooth_time
+	var x := omega * delta
+	var e := 1.0 / (1.0 + x + 0.48 * x * x + 0.235 * x * x * x)
+	var change := current - target
+	var temp := (vel + omega * change) * delta
+	vel = (vel - omega * temp) * e
+	var out := target + (change + temp) * e
+	# pas de dépassement de la cible
+	if (target - current > 0.0) == (out > target):
+		out = target
+		vel = (out - target) / delta if delta > 0.0 else 0.0
+	if parts.size() == 1:
+		set(parts[0], vel)
+	else:
+		var v2: Vector2 = holder
+		if parts[1] == "x":
+			v2.x = vel
+		else:
+			v2.y = vel
+		set(parts[0], v2)
+	return out
+
+
+# [CAMÉRA DOUCE 1.72] Zoom libre à la souris : molette = plus près / plus
+# loin, clic molette = retour au zoom automatique seul.
+func _unhandled_input(event: InputEvent) -> void:
+	if not Settings.free_zoom or not (event is InputEventMouseButton) or not event.pressed:
+		return
+	if event.button_index == MOUSE_BUTTON_WHEEL_UP:
+		Settings.change_zoom_factor(1.1)
+	elif event.button_index == MOUSE_BUTTON_WHEEL_DOWN:
+		Settings.change_zoom_factor(1.0 / 1.1)
+	elif event.button_index == MOUSE_BUTTON_MIDDLE:
+		Settings.zoom_factor = 1.0
+	else:
+		return
+	get_viewport().set_input_as_handled()
+
+
+# [CAMÉRA DOUCE 1.72] Zoom libre à la manette : tenir le clic du stick droit
+# (R3) et pousser le stick droit vers le haut (plus près) ou le bas (plus
+# loin). Un clic court sur R3 sans pousser le stick : retour au zoom auto.
+func _update_gamepad_zoom(delta: float) -> void:
+	if not Settings.free_zoom:
+		_r3_time = -1.0
+		return
+	var held := false
+	var axis := 0.0
+	for dev in Input.get_connected_joypads():
+		if Input.is_joy_button_pressed(dev, JOY_BUTTON_RIGHT_STICK):
+			held = true
+			axis = Input.get_joy_axis(dev, JOY_AXIS_RIGHT_Y)
+	if held:
+		if _r3_time < 0.0:
+			_r3_time = 0.0
+			_r3_moved = false
+		_r3_time += delta
+		if absf(axis) > 0.25:
+			_r3_moved = true
+			Settings.change_zoom_factor(exp(-axis * 1.5 * delta))   # haut (axe < 0) = plus près
+	elif _r3_time >= 0.0:
+		if not _r3_moved and _r3_time < 0.35:
+			Settings.zoom_factor = 1.0
+		_r3_time = -1.0
 
 
 # Zoom (arrondi à un palier) qui permet de voir le prochain point d'atterrissage.

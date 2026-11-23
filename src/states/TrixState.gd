@@ -50,7 +50,12 @@ func enter(player: CharacterBody2D, _previous_state: PlayerState) -> void:
 #	player.anim_player.play("trick_etoile_ninja")
 #	player.anim_player.play("trick_carpe")
 
-	player.anim_player.play(animations[randi() % animations.size()])
+	# [DEV 1.72] Onglet « Développeur » des options : figure fixée (pour
+	# tester une figure précise) ; -1 = au hasard, comme avant
+	if Settings.fixed_trick >= 0 and Settings.fixed_trick < Settings.TRICKS.size():
+		player.anim_player.play(Settings.TRICKS[Settings.fixed_trick][0])
+	else:
+		player.anim_player.play(animations[randi() % animations.size()])
 #	print(animations[randi() % animations.size()])
 
 #	lancer le trix

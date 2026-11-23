@@ -19,7 +19,29 @@ extends Control
 #   - "Coller le fantôme d'un ami" : lit le presse-papiers et ajoute le
 #     fantôme (RaceManager.import_ghost_text) ;
 #   - "Dossier des fantômes" (PC seulement) : comme dans le menu des niveaux.
+#
+#  [OPTIONS 1.72] Demande de l'équipe : « ranger le menu des options, comme
+#  un vrai UX designer, par catégorie, avec des onglets sur le côté ».
+#  Les réglages sont maintenant répartis en ONGLETS à gauche :
+#    JEU          mode enfant, aide au début, clin d'œil, tuto figé, fantôme
+#    AFFICHAGE    plein écran (F11), taille de l'interface, zoom libre,
+#                 flèches des joueurs (multi)
+#    SON          musique, effets
+#    FANTÔMES     échange de fantômes (l'ancienne colonne de droite)
+#    DÉVELOPPEUR  panneau physique (F2), vitesse (F3), air et frottement sous
+#                 la vitesse, figure fixée pour la touche FIGURE
+#  Les nœuds de la scène (et les variables qui les désignent) sont gardés : ils
+#  sont simplement déplacés dans les pages des onglets par _build_tabs(), à la
+#  fin de _ready(). Clavier / manette : haut / bas dans les onglets, droite
+#  pour entrer dans la page, gauche pour revenir aux onglets.
 # =============================================================================
+
+## [OPTIONS 1.72] Onglets, dans l'ordre : [clé, titre affiché]
+const TABS := [["jeu", "JEU"], ["affichage", "AFFICHAGE"], ["son", "SON"], ["fantomes", "FANTÔMES"], ["dev", "DÉVELOPPEUR"]]
+## [OPTIONS 1.72] Dernier onglet ouvert (gardé tant que le jeu tourne)
+static var _last_tab := "jeu"
+var _pages := {}          # clé -> VBoxContainer de la page
+var _tab_buttons := {}    # clé -> Button de l'onglet
 
 # Courses qui peuvent avoir un fantôme (mêmes niveaux que le menu "COURSES")
 const RACES = [
@@ -104,8 +126,9 @@ func _ready() -> void:
 	folder_button.pressed.connect(func():
 		OS.shell_open(ProjectSettings.globalize_path(RaceManager.GHOST_DIR)))
 	back_button.pressed.connect(_go_back)
+	_build_tabs()   # [OPTIONS 1.72] rangement en onglets (voir l'en-tête)
 	if Settings.controls != Settings.TOUCH:
-		help_on_start.grab_focus()
+		_tab_buttons[_last_tab].grab_focus()
 
 
 func _fill_ghost_list() -> void:
@@ -180,7 +203,9 @@ func _add_sfx_slider() -> void:
 	var box: VBoxContainer = music_slider.get_parent()
 	var title: Label = box.get_node("MusicTitle").duplicate()
 	title.text = "Volume des effets"
+	title.name = "SfxTitle"   # [OPTIONS 1.72] noms pour le rangement en onglets
 	var slider := HSlider.new()
+	slider.name = "SfxSlider"
 	slider.custom_minimum_size = music_slider.custom_minimum_size
 	slider.min_value = music_slider.min_value
 	slider.max_value = music_slider.max_value
@@ -195,7 +220,9 @@ func _add_sfx_slider() -> void:
 func _add_ui_size_slider() -> void:
 	var box: VBoxContainer = music_slider.get_parent()
 	var title: Label = box.get_node("MusicTitle").duplicate()
+	title.name = "UiSizeTitle"   # [OPTIONS 1.72]
 	var slider := HSlider.new()
+	slider.name = "UiSizeSlider"
 	slider.custom_minimum_size = music_slider.custom_minimum_size
 	slider.min_value = 0.8
 	slider.max_value = 1.5
@@ -221,7 +248,9 @@ func _add_arrows_choice() -> void:
 	var box: VBoxContainer = music_slider.get_parent()
 	var title: Label = box.get_node("MusicTitle").duplicate()
 	title.text = "Flèches des joueurs (multi)"
+	title.name = "ArrowsTitle"   # [OPTIONS 1.72]
 	var choice := OptionButton.new()
+	choice.name = "ArrowsChoice"
 	choice.custom_minimum_size = Vector2(0, 40)
 	choice.add_item("Toutes", Settings.ARROWS_ALL)
 	choice.add_item("Devant et derrière seulement", Settings.ARROWS_NEIGHBOURS)
@@ -230,3 +259,153 @@ func _add_arrows_choice() -> void:
 	choice.item_selected.connect(func(index): Settings.set_option("player_arrows", choice.get_item_id(index)))
 	box.add_child(title)
 	box.add_child(choice)
+
+
+# =============================================================================
+#  [OPTIONS 1.72] Rangement en onglets latéraux
+# =============================================================================
+func _build_tabs() -> void:
+	var columns: HBoxContainer = $Margin/VBox/Columns
+	var game_box: VBoxContainer = $Margin/VBox/Columns/GamePanel/VBox
+	var ghost_box: VBoxContainer = $Margin/VBox/Columns/GhostPanel/VBox
+	var panel_style: StyleBox = $Margin/VBox/Columns/GamePanel.get_theme_stylebox("panel")
+	var header_model: Label = game_box.get_node("GameHeader")
+
+	# --- nouveaux réglages (même style que les autres interrupteurs)
+	var fullscreen := _new_switch("Fullscreen", "Plein écran (touche F11)", Settings.fullscreen,
+		func(v): Settings.set_option("fullscreen", v),
+		"Le jeu occupe tout l'écran. F11 marche aussi en jeu et dans les menus.")
+	fullscreen.visible = not Settings.is_mobile_device   # téléphone : déjà plein écran
+	var free_zoom := _new_switch("FreeZoom", "Zoom libre", Settings.free_zoom,
+		func(v): Settings.set_option("free_zoom", v),
+		"S'ajoute au zoom automatique de la caméra.")
+	var zoom_help := _hint("Souris : molette (clic molette = zoom auto).\nManette : tenir le stick droit enfoncé (R3) et le pousser\nvers le haut ou le bas (clic court sur R3 = zoom auto).\nTéléphone : pincer à deux doigts dans la zone de jeu.")
+	var coefs := _new_switch("ShowCoefs", "Afficher l'air et le frottement sous la vitesse", Settings.show_coefs,
+		func(v): Settings.set_option("show_coefs", v),
+		"Coefficients de la résistance de l'air (k) et du frottement de la glace (μ),\navec le freinage en cours. En gras quand le jeu l'applique.")
+	var trick_title: Label = game_box.get_node("MusicTitle").duplicate()
+	trick_title.name = "TrickTitle"
+	trick_title.text = "Touche FIGURE"
+	var trick_choice := OptionButton.new()
+	trick_choice.name = "TrickChoice"
+	trick_choice.custom_minimum_size = Vector2(0, 40)
+	trick_choice.add_item("Au hasard (normal)", 0)
+	for i in Settings.TRICKS.size():
+		trick_choice.add_item(Settings.TRICKS[i][1], i + 1)
+	trick_choice.select(Settings.fixed_trick + 1)
+	trick_choice.item_selected.connect(func(index): Settings.set_option("fixed_trick", trick_choice.get_item_id(index) - 1))
+
+	# --- mise en page : [onglets] [page]
+	var layout := HBoxContainer.new()
+	layout.name = "Tabs"
+	layout.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	layout.add_theme_constant_override("separation", 18)
+	var vbox: VBoxContainer = $Margin/VBox
+	vbox.add_child(layout)
+	vbox.move_child(layout, columns.get_index())
+	columns.visible = false   # vidée ci-dessous (nœuds déplacés), gardée pour la scène
+
+	var tab_panel := PanelContainer.new()
+	tab_panel.add_theme_stylebox_override("panel", panel_style)
+	tab_panel.custom_minimum_size = Vector2(230, 0)
+	layout.add_child(tab_panel)
+	var tab_list := VBoxContainer.new()
+	tab_list.add_theme_constant_override("separation", 8)
+	tab_panel.add_child(tab_list)
+
+	var page_panel := PanelContainer.new()
+	page_panel.add_theme_stylebox_override("panel", panel_style)
+	page_panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	layout.add_child(page_panel)
+	var scroll := ScrollContainer.new()
+	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	page_panel.add_child(scroll)
+
+	var group := ButtonGroup.new()
+	for t in TABS:
+		var b := Button.new()
+		b.name = "Tab_" + t[0]
+		b.text = t[1]
+		b.toggle_mode = true
+		b.button_group = group
+		b.custom_minimum_size = Vector2(0, 52)
+		b.alignment = HORIZONTAL_ALIGNMENT_LEFT
+		b.add_theme_font_size_override("font_size", 20)
+		tab_list.add_child(b)
+		_tab_buttons[t[0]] = b
+		var page := VBoxContainer.new()
+		page.name = "Page_" + t[0]
+		page.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		page.add_theme_constant_override("separation", 12)
+		var h: Label = header_model.duplicate()
+		h.text = t[1]
+		page.add_child(h)
+		scroll.add_child(page)
+		_pages[t[0]] = page
+		b.pressed.connect(_show_tab.bind(t[0]))
+		# manette / clavier : arriver sur un onglet l'ouvre déjà
+		b.focus_entered.connect(_show_tab.bind(t[0]))
+
+	# --- contenu de chaque page (les nœuds existants sont déplacés)
+	_move(["KidMode", "HelpOnStart", "MasterWink", "TutorialPause", "GhostEnabled"], game_box, _pages["jeu"])
+	_pages["affichage"].add_child(fullscreen)
+	_move(["UiSizeTitle", "UiSizeSlider"], game_box, _pages["affichage"])
+	_pages["affichage"].add_child(free_zoom)
+	_pages["affichage"].add_child(zoom_help)
+	_move(["ArrowsTitle", "ArrowsChoice"], game_box, _pages["affichage"])
+	_move(["MusicTitle", "MusicSlider", "SfxTitle", "SfxSlider"], game_box, _pages["son"])
+	_move(["GhostHelp", "GhostList", "PasteButton", "FolderButton"], ghost_box, _pages["fantomes"])
+	_pages["dev"].add_child(_hint("Pour régler et tester le jeu. Tout est coupé par défaut."))
+	_move(["PhysicsPanel", "ShowSpeed"], game_box, _pages["dev"])
+	_pages["dev"].add_child(coefs)
+	_pages["dev"].add_child(trick_title)
+	_pages["dev"].add_child(trick_choice)
+
+	# clavier / manette : depuis une page, « gauche » revient à son onglet
+	for key in _pages:
+		for c in _pages[key].get_children():
+			if c is Control and c.focus_mode != Control.FOCUS_NONE:
+				c.focus_neighbor_left = c.get_path_to(_tab_buttons[key])
+	_show_tab(_last_tab)
+
+
+## Ouvre la page `key` (et coche son onglet).
+func _show_tab(key: String) -> void:
+	_last_tab = key
+	for k in _pages:
+		_pages[k].visible = k == key
+	_tab_buttons[key].button_pressed = true
+	# « droite » depuis l'onglet : premier réglage de la page
+	for c in _pages[key].get_children():
+		if c is Control and c.visible and c.focus_mode != Control.FOCUS_NONE:
+			_tab_buttons[key].focus_neighbor_right = _tab_buttons[key].get_path_to(c)
+			break
+
+
+## Déplace des nœuds (par nom) de `from` vers `to`, dans l'ordre donné.
+func _move(names: Array, from: Node, to: Node) -> void:
+	for n in names:
+		var node := from.get_node_or_null(n)
+		if node != null:
+			node.reparent(to, false)
+
+
+## Interrupteur au style des autres (copie de « Aide en début de niveau »).
+func _new_switch(node_name: String, text: String, value: bool, on_toggle: Callable, tip := "") -> CheckButton:
+	var c: CheckButton = help_on_start.duplicate(Node.DUPLICATE_GROUPS | Node.DUPLICATE_SCRIPTS)
+	c.name = node_name
+	c.text = text
+	c.tooltip_text = tip
+	c.button_pressed = value
+	c.toggled.connect(on_toggle)
+	return c
+
+
+## Petit texte d'aide sous un réglage.
+func _hint(text: String) -> Label:
+	var l := Label.new()
+	l.text = text
+	l.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	l.add_theme_font_size_override("font_size", 15)
+	l.add_theme_color_override("font_color", Color(1, 1, 1, 0.75))
+	return l

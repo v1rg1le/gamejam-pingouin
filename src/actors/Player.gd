@@ -486,7 +486,15 @@ func _physics_process(delta: float) -> void:
 # [PHYSIQUE 1.10] Plafonds « doux » : au-dessus de la vitesse max (sol ou air),
 # on retire chaque seconde over_speed_drag de l'EXCÉDENT. Pas de coupure nette.
 # Le grappin garde son propre réglage (MAX_SPEED_HOOKED, dans HookingInAirState).
+## [DEV 1.72] Freinage appliqué à la dernière image (px/s²), pour l'affichage
+## « coefficients » sous le compteur de vitesse (SpeedMeter) : 0 = pas
+## appliqué cette image-là (ex. frottement en l'air).
+var last_air_decel := 0.0
+var last_friction_decel := 0.0
+
 func _apply_soft_speed_caps(delta: float) -> void:
+	last_air_decel = 0.0        # [DEV 1.72] remis à zéro à chaque image
+	last_friction_decel = 0.0
 	if _states == null or _states.current == null:
 		return
 	if _states.current.sub_state_name == "HOOKING":
@@ -571,6 +579,7 @@ func _apply_air_drag_and_friction(delta: float) -> void:
 
 	# --- 1. Résistance de l'air : décélération k·v², au sol comme en l'air
 	var decel := drag_coefficient() * dragged_speed * dragged_speed
+	last_air_decel = decel   # [DEV 1.72] affiché sous le compteur de vitesse
 
 	# --- 2. Frottement de glisse (au sol seulement) : μ·g·cos θ.
 	# cos θ = composante verticale de la normale du sol (1 sur le plat).
@@ -578,6 +587,7 @@ func _apply_air_drag_and_friction(delta: float) -> void:
 		var n := _get_ground_normal()
 		var cos_theta := absf(n.y) if n != Vector2.ZERO else 1.0
 		decel += ground_friction * gravity * cos_theta
+		last_friction_decel = ground_friction * gravity * cos_theta   # [DEV 1.72]
 
 	# On retire la vitesse le long du mouvement, sans jamais changer de sens
 	# (un frottement arrête, il ne fait pas repartir en arrière).

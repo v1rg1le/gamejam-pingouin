@@ -66,6 +66,18 @@ var _over_cap := false            # vrai = jauge orange (frein doux / perte de v
 var _accel := 0.0                 # [1.49] accélération lissée (px/s²), pour l'orange
 var _last_raw := -1.0             # [1.49] vitesse brute de l'image précédente
 var _limit_mark := 0.0            # [1.49] vitesse limite de la pente (0 = pas de repère)
+# [DEV 1.72] Sous la jauge, deux lignes (option « Afficher l'air et le
+# frottement », onglet Développeur) :
+#    Air   k = 3,47e-5 /px   −73 px/s²
+#    Glace μ = 0,020         −16 px/s²
+# La ligne passe en GRAS et en blanc vif quand le jeu applique ce freinage à
+# cette image (frottement : seulement au sol ; air : dès que Pinpouin bouge),
+# en gris pâle sinon.
+var _air_label: Label
+var _friction_label: Label
+var _coef_font: Font              # police grasse (même police, plus épaisse)
+var _air_on_frames := 0           # images de suite avec/sans freinage (anti-clignotement)
+var _fric_on_frames := 0
 
 
 ## Appelé par RaceManager avant add_child().
@@ -113,6 +125,18 @@ func _ready() -> void:
 	_gauge.draw.connect(_draw_gauge)
 	box.add_child(_gauge)
 
+	# [DEV 1.72] lignes des coefficients (air, frottement du sol)
+	_air_label = _make_label(13, Color(1, 1, 1))
+	_friction_label = _make_label(13, Color(1, 1, 1))
+	_air_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+	_friction_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+	box.add_child(_air_label)
+	box.add_child(_friction_label)
+	var bold := FontVariation.new()
+	bold.base_font = _air_label.get_theme_font("font")
+	bold.variation_embolden = 0.9   # gras « synthétique » : aucun nouvel asset
+	_coef_font = bold
+
 	# [RESPONSIVE 1.14] agrandi sur téléphone comme le reste du HUD
 	UiScaler.apply(self)
 	_refresh_visibility()
@@ -132,7 +156,14 @@ func _make_label(size: int, color: Color) -> Label:
 
 # Le compteur n'est visible que si l'option est active ET qu'il y a un pingouin.
 func _refresh_visibility() -> void:
-	visible = Settings.show_speed and player != null and is_instance_valid(player)
+	# [DEV 1.72] le cadre s'affiche aussi pour les seuls coefficients
+	visible = (Settings.show_speed or Settings.show_coefs) and player != null and is_instance_valid(player)
+	if _kmh_label != null:
+		_kmh_label.visible = Settings.show_speed
+		_detail_label.visible = Settings.show_speed
+		_gauge.visible = Settings.show_speed
+		_air_label.visible = Settings.show_coefs
+		_friction_label.visible = Settings.show_coefs
 
 
 func _unhandled_input(event: InputEvent) -> void:
@@ -153,6 +184,8 @@ func _process(delta: float) -> void:
 	# unité à chaque image au sol. Assez court pour voir les vraies chutes
 	# brusques (grappin, choc) d'une image à l'autre.
 	_speed = lerpf(_speed, raw, clampf(delta * 20.0, 0.0, 1.0))
+	if Settings.show_coefs:
+		_update_coefs()
 
 	# Où est Pinpouin ? (même logique que Player._apply_soft_speed_caps)
 	var hooking: bool = player.chain.hooked
@@ -205,6 +238,48 @@ func _show_realistic(raw: float, delta: float, hooking: bool, on_ground: bool, w
 	_kmh_label.text = "%d km/h" % roundi(_speed / PX_PER_METER * 3.6)
 	_detail_label.text = "%d px/s · %s%s" % [roundi(_speed), where, slope_text]
 	_gauge.queue_redraw()
+
+
+# [DEV 1.72] Lignes « Air » et « Glace » : coefficient + freinage de la
+# dernière image (Player.last_air_decel / last_friction_decel). Gras et blanc
+# vif quand le freinage est appliqué ; on attend 3 images de suite avant de
+# changer de style (sinon ça clignote sur chaque petite bosse au sol).
+func _update_coefs() -> void:
+	var k: float = player.drag_coefficient()
+	var mu: float = player.ground_friction
+	var air: float = player.last_air_decel
+	var fric: float = player.last_friction_decel
+	_air_on_frames = clampi(_air_on_frames + (1 if air > 0.0 else -1), -3, 3)
+	_fric_on_frames = clampi(_fric_on_frames + (1 if fric > 0.0 else -1), -3, 3)
+	_air_label.text = "Air    k = %s /px   −%d px/s²" % [_sci(k), roundi(air)]
+	_friction_label.text = "Glace  μ = %s        −%d px/s²" % [("%.3f" % mu).replace(".", ","), roundi(fric)]
+	if player.realistic_physics < 0.5:
+		_air_label.text = "Air : ancienne physique (plafonds)"
+		_friction_label.text = "Glace : ancienne physique (plafonds)"
+	_style_coef(_air_label, _air_on_frames > 0)
+	_style_coef(_friction_label, _fric_on_frames > 0)
+
+
+## Écriture scientifique à la française : 3,47·10⁻⁵ (GDScript n'a pas de %e).
+func _sci(v: float) -> String:
+	if v <= 0.0:
+		return "0"
+	var e := int(floor(log(v) / log(10.0)))
+	var m := v / pow(10.0, e)
+	var sup := {"-": "⁻", "0": "⁰", "1": "¹", "2": "²", "3": "³", "4": "⁴", "5": "⁵", "6": "⁶", "7": "⁷", "8": "⁸", "9": "⁹"}
+	var ex := ""
+	for ch in str(e):
+		ex += sup.get(ch, ch)
+	return ("%.2f" % m).replace(".", ",") + "·10" + ex
+
+
+func _style_coef(l: Label, active: bool) -> void:
+	if active:
+		l.add_theme_font_override("font", _coef_font)
+		l.add_theme_color_override("font_color", Color(1, 1, 1))
+	else:
+		l.remove_theme_font_override("font")
+		l.add_theme_color_override("font_color", Color(0.75, 0.8, 0.9, 0.55))
 
 
 # Plafond relevé pendant le boost d'une figure réussie ([BOOST FIGURE 1.30]
