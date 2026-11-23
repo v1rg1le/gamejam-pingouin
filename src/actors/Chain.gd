@@ -90,7 +90,17 @@ func _physics_process(_delta: float) -> void:
 
 	if flying:
 		# `if move_and_collide()` always moves, but returns true if we did collide
-		if $Tip.move_and_collide(direction * SPEED):
+		var hit = $Tip.move_and_collide(direction * SPEED)
+		# [CAVERNES 1.63] la roche des cavernes (groupe « no_hook ») ne retient
+		# pas le crochet : il rebondit, comme s'il ratait. Dans une galerie, le
+		# plafond est partout ; sans cette règle on se balancerait d'un bout à
+		# l'autre en ignorant les prises (décision de l'équipe : on ne s'accroche
+		# qu'aux prises visibles).
+		if hit and hit.get_collider() != null and hit.get_collider().is_in_group("no_hook"):
+			release()
+			emit_signal("chain_released")
+			hit = null
+		if hit:
 			var hook_distance = $Tip.global_position.distance_to(get_parent().global_position)
 			if hook_distance < distance_min_hook:
 				# [GRAPPIN] accroche quasiment sur le joueur : instable, on annule

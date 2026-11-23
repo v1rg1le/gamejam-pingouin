@@ -878,6 +878,9 @@ func _has_rescue_hook_in_reach(space: PhysicsDirectSpaceState2D) -> bool:
 		var hit := space.intersect_ray(q)
 		if hit.is_empty():
 			continue
+		# [CAVERNES 1.63] roche où le grappin ne s'accroche pas : pas un secours
+		if hit.collider != null and hit.collider.is_in_group("no_hook"):
+			continue
 		# à la hauteur du bord d'où il est parti, ou plus haut : bloc, plafond,
 		# coin du bord… (marge de 50 px pour le coin du bord)
 		if hit.position.y <= _last_support_y + 50.0:

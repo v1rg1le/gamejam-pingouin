@@ -128,6 +128,10 @@ const PLAT_ABOVE := [0.0, 260.0, 320.0]
 ## joueur passe directement par-dessus en balancier.
 const EGG_BACK := [0.0, -120.0, -120.0]
 const EGG_UP := [0.0, 420.0, 460.0]
+## [ŒUF 1.63] la descente après l'œuf : son bord est à EGG_DROP SOUS l'œuf
+## et au moins EGG_LAND_MIN à sa droite.
+const EGG_DROP := 650.0
+const EGG_LAND_MIN := 250.0
 const EGG_RX := 130.0          # demi-largeur (collision = ellipse : le crochet s'y plante)
 const EGG_RY := 170.0          # demi-hauteur
 
@@ -159,7 +163,7 @@ func _ready() -> void:
 	checkpoints.append({"name": "départ", "pos": spawn_point, "vel": Vector2(300, 0), "x": -INF})
 	for m in 3:
 		cur = _build_motif(m, cur)
-	_add_finish(cur)
+	_add_caves(cur)   # [CAVERNES 1.63] (remplace l'arrivée provisoire de la 1.62)
 	get_parent()._set_spawn_position(spawn_point)
 
 
@@ -304,7 +308,7 @@ func _build_motif(m: int, entry: Vector2) -> Vector2:
 			# au bot, posé lentement après l'œuf, Pinpouin ne pouvait plus
 			# remonter la lèvre d'un pilier aussi long (100 px/s, chute au bord).
 			# Ici toute la 1re partie descend : on reprend de l'élan.
-			top = _wave_top(cur, HIGH_LAND_W, m, 12.0, 0.7, 380.0)
+			top = _wave_top(cur, HIGH_LAND_W, m, 26.0, 0.7, 380.0)
 		elif first:
 			# pilier de départ : la pente de lancement puis la vague
 			top = _join(_hermite(START_RAMP, cur, 0.0, 30.0, 16), _wave_top(cur, w + 300.0, m, 30.0))
@@ -370,6 +374,17 @@ func _build_motif(m: int, entry: Vector2) -> Vector2:
 		for q in traj:
 			dmin = minf(dmin, q.distance_to(egg))
 		print("[GRUYÈRE] %s : à %d px de la trajectoire prévue" % [name, roundi(dmin)])
+		# [ŒUF 1.63] demande de l'équipe : l'œuf GARDE SA PLACE, mais la descente
+		# qui suit est PLUS BAS : on attrape l'œuf par en dessous, on passe en
+		# balancier sous lui et on se laisse retomber dans la descente.
+		# Le bord de la descente est posé EGG_DROP sous l'œuf, puis repoussé
+		# vers la droite tant que la trajectoire du saut (sans grappin) arrive
+		# au-dessus de lui : sans l'œuf, on passe sous le bord et on tombe.
+		var ey: float = egg.y + EGG_DROP
+		var ex: float = egg.x + EGG_LAND_MIN
+		while _traj_y(traj, ex) < ey + 150.0 and ex < egg.x + 1500.0:
+			ex += 50.0
+		land_edge = Vector2(ex, ey)
 		platforms_high.append({"edge": land_edge, "egg": name, "motif": m})
 		target = egg
 	# zone de dézoom : de la remontée du bol jusqu'à l'arrivée
@@ -427,6 +442,26 @@ func _add_bowl(m: int, entry: Vector2) -> Vector2:
 	return lip
 
 
+## Petite prise ronde (même dessin que les prises des cavernes et de L'Œuf).
+const HOLD_TEXTURE := preload("res://sprites/levels/egg/prise.png")
+func _add_small_hold(name: String, center: Vector2) -> void:
+	holds[name] = center
+	var body := StaticBody2D.new()
+	body.collision_layer = 2
+	body.position = center
+	body.z_index = 6
+	var shape := CollisionShape2D.new()
+	var circle := CircleShape2D.new()
+	circle.radius = 55.0
+	shape.shape = circle
+	body.add_child(shape)
+	var spr := Sprite2D.new()
+	spr.texture = HOLD_TEXTURE
+	spr.scale = Vector2(4, 4)
+	body.add_child(spr)
+	add_child(body)
+
+
 ## Œuf à grappiner : ellipse de glace (collision en polygone : le crochet s'y
 ## plante, Pinpouin peut aussi s'y poser). Clin d'œil au niveau L'Œuf.
 func _add_egg(name: String, center: Vector2) -> void:
@@ -457,34 +492,172 @@ func _add_egg(name: String, center: Vector2) -> void:
 
 
 # =============================================================================
-#  Arrivée PROVISOIRE (maquette de la partie 1) : un dernier pilier, l'arche,
-#  puis le half-pipe. Les cavernes viendront s'intercaler ici (étape 2).
+#  [CAVERNES 1.63] Partie 2 : trois cavernes, des passages à l'air libre entre
+#  elles, et l'arrivée de tous les chemins dans le half-pipe.
+# -----------------------------------------------------------------------------
+#  Plan validé avec l'équipe (23/11) :
+#   - 3 cavernes générées (CaveGenerator), une GRAINE FIXE chacune (même niveau
+#     en Chill et en Score) ;
+#   - entre deux cavernes, un PASSAGE À L'AIR LIBRE : chaque sortie s'ouvre sur
+#     un rebord, en face le balcon de l'entrée du même étage (un saut) ; tomber
+#     entre les deux ramène sur le sol de l'étage le plus bas, qui mène à
+#     l'entrée la plus basse (jamais de chute mortelle dans un passage) ;
+#   - fin : la sortie du HAUT se laisse tomber dans le half-pipe ; la sortie
+#     du BAS arrive sous lui et on y monte au grappin (deux prises).
+#  Étages des entrées / sorties : chaque entrée doit être servie par une
+#  sortie du même étage (ou être l'étage le plus bas).
 # =============================================================================
-func _add_finish(edge: Vector2) -> void:
-	# pilier d'arrivée (sommet arrondi où l'on se hisse depuis l'œuf 3, puis
-	# longue descente douce vers l'arche)
-	var p1 := Vector2(edge.x + 900.0, edge.y + 260.0)
-	var p2 := Vector2(edge.x + 2600.0, edge.y + 500.0)
-	var top := _join(_hermite(edge, p1, 8.0, 18.0, 16), _hermite(p1, p2, 18.0, 0.0, 16))
+const CAVES := [
+	{"seed": 1440, "entries": [0, 1], "exits": [0, 1, 2]},
+	{"seed": 2302, "entries": [0, 1, 2], "exits": [0, 1, 2, 3]},
+	{"seed": 3303, "entries": [0, 1, 2, 3], "exits": [0, 1]},
+]
+const CAVE_COLUMNS := 10       # [1.63] 10 colonnes : ~35 à 45 s par caverne au bot (niveau visé : 3 à 5 min pour un joueur)
+const PASS_W := 1450.0         # largeur d'un passage (flanc à flanc)
+const PASS_DROP := 150.0       # le flanc suivant commence un peu plus bas
+const EXIT_LEDGE := 300.0      # rebord devant une sortie
+const BALCONY := 450.0         # balcon devant une entrée
+const FINAL_LEDGE := 700.0     # long rebord devant la sortie du haut de la dernière caverne
+const STUB_TAN := 0.140541     # tan(8°) : pente des couloirs d'entrée et de sortie
+var caves: Array = []          # CaveGenerator
+var hp_holds: Array = []       # prises de la montée vers le half-pipe (bot)
+var cave_cp = null             # dernier carrefour atteint dans les cavernes
+var cave_lip := Vector2.ZERO   # lèvre du pilier qui fait face à la caverne 1 (bot)
+var hp_x := 0.0                # bord gauche du half-pipe (bot)
+var hp_deck_y := 0.0
+
+
+func _cave_origin_for_entry(lane0_start: Vector2) -> Vector2:
+	# le couloir d'entrée de l'étage 0 commence à `lane0_start` (sur le flanc)
+	return lane0_start + Vector2(CaveGenerator.STUB, CaveGenerator.STUB * STUB_TAN)
+
+
+func _make_cave(i: int, origin: Vector2) -> CaveGenerator:
+	var cfg: Dictionary = CAVES[i]
+	var g := CaveGenerator.new()
+	g.name = "Caverne%d" % (i + 1)
+	g.cave_seed = cfg.seed
+	g.entry_lanes.assign(cfg.entries)
+	g.exit_lanes.assign(cfg.exits)
+	g.columns = CAVE_COLUMNS
+	g.position = origin
+	add_child(g)
+	caves.append(g)
+	return g
+
+
+## Début (sur le flanc) du couloir d'entrée de l'étage l / fin du couloir de sortie.
+func _entry_start(g: CaveGenerator, l: int) -> Vector2:
+	return g.position + g.node_pos(0, l) - Vector2(CaveGenerator.STUB, CaveGenerator.STUB * STUB_TAN)
+
+
+func _exit_end(g: CaveGenerator, l: int) -> Vector2:
+	return g.position + g.node_pos(g.columns, l) + Vector2(CaveGenerator.STUB, CaveGenerator.STUB * STUB_TAN)
+
+
+## Petit bloc de roche (rebord, balcon) collé à un flanc : dessus de a à b.
+func _add_ledge(a: Vector2, b: Vector2, thick := 220.0) -> void:
+	var top := PackedVector2Array([a, b])
+	var poly := PackedVector2Array([a, b, Vector2(b.x, b.y + thick), Vector2(a.x, a.y + thick)])
+	_add_body(poly, [top], 3)
+
+
+func _add_caves(edge: Vector2) -> void:
+	# --- pilier d'arrivée de l'œuf 3 : longue descente, petite lèvre au bout
+	var lipp := edge + Vector2(2400.0, 520.0)
+	var top := _join(_hermite(edge, edge + Vector2(1200.0, 420.0), 26.0, 12.0, 16), _hermite(edge + Vector2(1200.0, 420.0), lipp, 12.0, -6.0, 12))
+	_add_pillar(top)
+	cave_lip = lipp
+	checkpoints.append({"name": "avant les cavernes", "pos": top[4] + Vector2(0, -60), "vel": Vector2(700, 0), "x": edge.x + 50.0})
+	# --- caverne 1 : son entrée du haut en face de la lèvre, l'autre en dessous
+	var e0 := lipp + Vector2(EXIT_LEDGE * 0.0 + BALCONY + 700.0, PASS_DROP)
+	var g1 := _make_cave(0, _cave_origin_for_entry(e0))
+	_add_ledge(e0 - Vector2(BALCONY, 0), e0)
+	# sol de l'étage 1 : du pied du pilier jusqu'à l'entrée basse (on y retombe)
+	var e1 := _entry_start(g1, 1)
+	var fl := _hermite(Vector2(lipp.x, e1.y - 60.0), e1, 6.0, 8.0, 10)
+	var poly := fl.duplicate()
+	poly.append(Vector2(e1.x, e1.y + 4000.0))
+	poly.append(Vector2(lipp.x, e1.y + 4000.0))
+	_add_body(poly, [fl], 2)
+	# --- caverne 2 puis 3, avec un passage avant chacune
+	var prev := g1
+	for i in range(1, CAVES.size()):
+		var x0 := _exit_end(prev, 0)
+		var g := _make_cave(i, _cave_origin_for_entry(x0 + Vector2(PASS_W, PASS_DROP)))
+		_add_passage(prev, g)
+		prev = g
+	_add_final(prev)
+
+
+## Passage à l'air libre entre la caverne `a` (sorties) et `b` (entrées).
+func _add_passage(a: CaveGenerator, b: CaveGenerator) -> void:
+	var low: int = a.exit_lanes.max()
+	for l in a.exit_lanes:
+		if l == low:
+			continue
+		var x := _exit_end(a, l)
+		_add_ledge(x, x + Vector2(EXIT_LEDGE, -25.0))      # petite lèvre pour sauter
+	for l in b.entry_lanes:
+		if l == low:
+			continue
+		var e := _entry_start(b, l)
+		_add_ledge(e - Vector2(BALCONY, 0), e)
+	# étage le plus bas : un sol continu de la sortie à l'entrée (on y retombe)
+	var xs := _exit_end(a, low)
+	var es := _entry_start(b, low)
+	var mid := (xs + es) * 0.5 + Vector2(0, 220.0)
+	var fl := _join(_hermite(xs, mid, 8.0, 0.0, 10), _hermite(mid, es, 0.0, 8.0, 10))
+	var poly := fl.duplicate()
+	poly.append(Vector2(es.x, es.y + 4000.0))
+	poly.append(Vector2(xs.x, xs.y + 4000.0))
+	_add_body(poly, [fl], 2)
+
+
+## Fin : half-pipe entre les deux sorties de la dernière caverne.
+func _add_final(g: CaveGenerator) -> void:
+	var x0 := _exit_end(g, 0)
+	var x1 := _exit_end(g, 1)
 	var hp = half_pipe_res.instantiate()
 	var hp_w: float = hp.map_width
-	top.append(Vector2(p2.x + 400.0, p2.y))
-	_add_pillar(top)
-	checkpoints.append({"name": "arrivée", "pos": top[3] + Vector2(0, -60), "vel": Vector2(400, 0), "x": edge.x + 50.0})
-	finish_x = p2.x + 100.0
-	var gate = finish_gate_res.instantiate()
-	gate.position = Vector2(finish_x, p2.y)
-	gate.finish_band_height = 1500.0
-	add_child(gate)
+	# vallée de 1050 px entre le flanc et le half-pipe (au bot, avec 650 px,
+	# le balancier de la montée ramenait Pinpouin contre le flanc, dans la
+	# sortie du bas, et la 2e prise était cachée par la roche)
+	var hx := x0.x + FINAL_LEDGE + 350.0
+	var deck_y := x0.y + 350.0
+	hp_x = hx
+	hp_deck_y = deck_y
 	hp.with_finish = false
-	hp.position = Vector2(p2.x + 401.0, p2.y + 600.0 + 512.0)
+	hp.position = Vector2(hx, deck_y + 512.0)
 	add_child(hp)
-	# [maquette] mur au bout du half-pipe : au bot, arrivé à 1600 px/s, on
-	# survolait tout le half-pipe et on tombait derrière
-	var wx: float = hp.position.x + hp_w
-	_add_body(PackedVector2Array([Vector2(wx, p2.y - 2500.0), Vector2(wx + 600.0, p2.y - 2500.0),
-		Vector2(wx + 600.0, p2.y + 4000.0), Vector2(wx, p2.y + 4000.0)]), [], 2)
-	print("[GRUYÈRE] half-pipe en ", hp.position, " largeur ", hp_w)
+	# sortie du haut : un rebord, puis on se laisse tomber dans le half-pipe
+	_add_ledge(x0, x0 + Vector2(FINAL_LEDGE, -40.0))
+	# sortie du bas : sol jusqu'au pied du half-pipe (son flanc gauche fait mur)
+	var fl := _hermite(x1, Vector2(hx + 2.0, x1.y + 120.0), 8.0, 0.0, 10)
+	var poly := fl.duplicate()
+	poly.append(Vector2(hx + 2.0, x1.y + 4000.0))
+	poly.append(Vector2(x1.x, x1.y + 4000.0))
+	_add_body(poly, [fl], 2)
+	# montée au grappin (mêmes écarts que la montée des salles de croisement)
+	var h1 := Vector2(hx - 450.0, x1.y + 120.0 - 820.0)
+	var h2 := Vector2(hx + 60.0, deck_y - 420.0)
+	# petites prises rondes (comme dans les cavernes) : un gros œuf cachait la
+	# 2e prise quand on tire depuis la 1re (au bot, le crochet se replantait
+	# dans le 1er œuf)
+	_add_small_hold("hp_monte1", h1)
+	_add_small_hold("hp_monte2", h2)
+	hp_holds = ["hp_monte1", "hp_monte2"]
+	# arche : sur le deck gauche ; bande haute (on arrive aussi en tombant)
+	finish_x = hx + 260.0
+	var gate = finish_gate_res.instantiate()
+	gate.position = Vector2(finish_x, deck_y)
+	gate.finish_band_height = 2200.0
+	add_child(gate)
+	# mur au bout du half-pipe (on ne le survole pas)
+	var wx: float = hx + hp_w
+	_add_body(PackedVector2Array([Vector2(wx, deck_y - 3000.0), Vector2(wx + 600.0, deck_y - 3000.0),
+		Vector2(wx + 600.0, deck_y + 5000.0), Vector2(wx, deck_y + 5000.0)]), [], 2)
+	print("[GRUYÈRE] half-pipe en ", hp.position, " ; arche x = ", finish_x)
 
 
 # =============================================================================
@@ -499,7 +672,38 @@ func _physics_process(_delta: float) -> void:
 	if next < checkpoints.size() and p.is_on_ground and pos.x > checkpoints[next].x:
 		_cp = next
 		print("[GRUYÈRE] point de passage : ", checkpoints[_cp].name)
+	_cave_checkpoints(p, pos)
 	_update_camera_focus(p)
+
+
+## [CAVERNES 1.63] Dans les cavernes, le point de passage est le dernier
+## CARREFOUR (nœud) touché au sol : on réapparaît sur la route qu'on avait
+## prise, juste après le carrefour. Un PUITS (trou sans galerie dessous) fait
+## réapparaître là.
+func _cave_checkpoints(p, pos: Vector2) -> void:
+	for g in caves:
+		var lp: Vector2 = pos - g.position
+		if lp.x < -CaveGenerator.STUB - 50.0 or lp.x > g.columns * CaveGenerator.COL_W + CaveGenerator.STUB + 50.0:
+			continue
+		for r in g.pits:
+			if r.has_point(lp):
+				print("[GRUYÈRE] puits : réapparition au dernier carrefour")
+				p.die()
+				return
+		if not p.is_on_ground:
+			continue
+		for k in g.active:
+			var s: PackedStringArray = k.split(":")
+			var c := int(s[0])
+			var l := int(s[1])
+			if c >= g.columns:
+				continue
+			var n: Vector2 = g.node_pos(c, l)
+			if lp.x > n.x - 100.0 and lp.x < n.x + 300.0 and absf(lp.y - n.y) < 160.0:
+				var key := "%s:%s" % [g.name, k]
+				if cave_cp == null or cave_cp.key != key:
+					cave_cp = {"key": key, "pos": g.position + n + Vector2(140.0, -70.0), "vel": Vector2(700.0, 0.0), "cave": g, "c": c, "l": l}
+					print("[GRUYÈRE] carrefour : ", key)
 
 
 ## Caméra : dans une zone de grand saut (cadres rouges du croquis), on garde
@@ -521,6 +725,8 @@ func _update_camera_focus(p) -> void:
 func respawn_sample(_pos: Vector2):
 	if RaceManager.bonus_active or RaceManager.free_ride:
 		return null
+	if cave_cp != null:
+		return {"pos": cave_cp.pos, "vel": cave_cp.vel}
 	var c: Dictionary = checkpoints[_cp]
 	return {"pos": c.pos, "vel": c.vel}
 
@@ -535,6 +741,20 @@ func progress(pos: Vector2) -> float:
 
 
 func kid_skip() -> void:
+	# [CAVERNES 1.63] dans une caverne : carrefour suivant sur le même étage
+	# (sinon n'importe quel carrefour de la colonne suivante)
+	if cave_cp != null:
+		var g = cave_cp.cave
+		var c: int = cave_cp.c + 1
+		if c < g.columns:
+			var l: int = cave_cp.l
+			if not g.active.has("%d:%d" % [c, l]):
+				for l2 in g.lanes_n:
+					if g.active.has("%d:%d" % [c, l2]):
+						l = l2
+						break
+			cave_cp = {"key": "%s:%d:%d" % [g.name, c, l], "pos": g.position + g.node_pos(c, l) + Vector2(140.0, -70.0), "vel": Vector2(700.0, 0.0), "cave": g, "c": c, "l": l}
+		return
 	if _cp + 1 < checkpoints.size():
 		_cp += 1
 
