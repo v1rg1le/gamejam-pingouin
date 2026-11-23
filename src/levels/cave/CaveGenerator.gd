@@ -200,6 +200,36 @@ var entry_tips := {}
 const STUB_DEG := 8.0          # [1.66] pente des couloirs d'entrée et de sortie (fixe)
 const DIVE_STRAIGHT := 600.0   # [1.66] tout droit après un virage qui plonge
 var floor_chains: Array = []   # morceaux de sol (bordure de glace)
+
+# -----------------------------------------------------------------------------
+# [LISSAGE 1.70] Sols lissés « comme Flat and fun »
+# -----------------------------------------------------------------------------
+# Retour de l'équipe : « encore des bugs dus au terrain dans les cavernes,
+# plus sur Flat and fun ». Mesure (outil terrain_stats.gd, hors projet) :
+# Flat = une seule courbe, un point tous les 64 px, 0,4 % de cassures de plus
+# de 10° ; cavernes = 448 morceaux (courbes de 8 à 12 points raccordées bout
+# à bout), 8 % de cassures de plus de 10° dont 146 de plus de 25°. Chaque
+# cassure fait perdre de la vitesse ou décoller Pinpouin de quelques pixels.
+# Remède à la source : chaque coin entre deux segments « de sol » (pente
+# < SMOOTH_SLOPE_MAX_DEG des deux côtés) qui tourne de plus de
+# SMOOTH_MAX_TURN_DEG est remplacé par un petit arc (courbe de Bézier
+# tangente aux deux segments), découpé pour qu'aucun pas ne tourne de plus de
+# SMOOTH_MAX_TURN_DEG. Les murs (au-delà de SMOOTH_SLOPE_MAX_DEG) et les
+# plafonds accrochables ne sont pas touchés. Écart à la forme d'origine :
+# quelques pixels.
+## [LISSAGE 1.70] Interrupteur (false = collisions d'avant la 1.70).
+@export var smooth_floors := true
+## [LISSAGE 1.70] Rotation maximale entre deux segments de sol voisins.
+const SMOOTH_MAX_TURN_DEG := 4.0
+## [LISSAGE 1.70] Au-delà de cette pente, un segment est un mur : ses coins
+## restent nets (un mur doit rester un mur).
+const SMOOTH_SLOPE_MAX_DEG := 55.0
+## [LISSAGE 1.70] Longueur maximale prise de chaque côté d'un coin pour
+## l'arrondir (en px) ; jamais plus de la moitié du segment voisin.
+const SMOOTH_MAX_CUT := 90.0
+## [LISSAGE 1.70] Deux bouts de chaînes à moins de cette distance sont le
+## même point (raccord entre deux morceaux de sol).
+const SMOOTH_JOIN_EPS := 1.0
 var carved: Array = []         # polygones creusés (dessin)
 var mountain := PackedVector2Array()
 var check := {}                # résultats des contrôles
@@ -259,6 +289,156 @@ func _add_chain(pts: PackedVector2Array, hook := false) -> void:
 	chain_hook.append(h)
 	if h:
 		ceil_chains.append(pts)
+
+
+## [LISSAGE 1.70] Recolle bout à bout les chaînes de sol (non accrochables)
+## dont un bout touche le bout d'une autre et qui continuent à peu près dans
+## le même sens, puis arrondit les coins de chaque chaîne. Remplit à nouveau
+## `chains` / `chain_hook` (les plafonds accrochables restent tels quels :
+## leurs prises et leur habillage de stalactites en dépendent).
+func _smooth_collision_chains() -> void:
+	var keep: Array = []          # chaînes accrochables : inchangées
+	var pool: Array = []          # chaînes à recoller / lisser
+	for ci in chains.size():
+		if chain_hook[ci]:
+			keep.append(chains[ci])
+		else:
+			pool.append(chains[ci])
+	# --- 1. recollage : une chaîne qui finit là où une autre commence (ou
+	# finit : on la retourne) et qui continue dans un sens voisin (< 60°)
+	# devient une seule chaîne. Sans ça, le raccord entre deux morceaux est
+	# un coin que le lissage ne voit pas (deux formes de collision séparées).
+	var merged := true
+	while merged:
+		merged = false
+		for i in pool.size():
+			var a: PackedVector2Array = pool[i]
+			for j in pool.size():
+				if i == j:
+					continue
+				var b: PackedVector2Array = pool[j]
+				var joined := _try_join(a, b)
+				if joined.size() > 0:
+					pool[i] = joined
+					pool.remove_at(j)
+					merged = true
+					break
+			if merged:
+				break
+	# --- 2. arrondi des coins de chaque chaîne
+	chains = []
+	chain_hook = []
+	for ch in pool:
+		chains.append(_round_corners(ch))
+		chain_hook.append(false)
+	for ch in keep:
+		chains.append(ch)
+		chain_hook.append(true)
+
+
+## [LISSAGE 1.70] Essaie de mettre `b` au bout de `a` (en retournant l'une ou
+## l'autre si besoin). Renvoie la chaîne recollée, ou un tableau vide si les
+## bouts ne se touchent pas ou si le raccord ferait un angle > 60°.
+func _try_join(a: PackedVector2Array, b: PackedVector2Array) -> PackedVector2Array:
+	if a.size() < 2 or b.size() < 2:
+		return PackedVector2Array()
+	var variants := [[a, b], [a, _reversed(b)], [_reversed(a), b], [_reversed(a), _reversed(b)]]
+	for v in variants:
+		var p: PackedVector2Array = v[0]
+		var q: PackedVector2Array = v[1]
+		if p[p.size() - 1].distance_to(q[0]) > SMOOTH_JOIN_EPS:
+			continue
+		var d1: Vector2 = p[p.size() - 1] - p[p.size() - 2]
+		var d2: Vector2 = q[1] - q[0]
+		if d1.length() < 0.01 or d2.length() < 0.01:
+			continue
+		if absf(rad_to_deg(d1.angle_to(d2))) > 60.0:
+			continue      # vrai coin (sol contre mur) : on ne recolle pas
+		var out := p.duplicate()
+		for k in range(1, q.size()):
+			out.append(q[k])
+		return out
+	return PackedVector2Array()
+
+
+func _reversed(c: PackedVector2Array) -> PackedVector2Array:
+	var out := PackedVector2Array()
+	for k in range(c.size() - 1, -1, -1):
+		out.append(c[k])
+	return out
+
+
+## [LISSAGE 1.70] Pente d'un segment par rapport à l'horizontale (0..90°).
+func _seg_slope_deg(d: Vector2) -> float:
+	return absf(rad_to_deg(atan2(absf(d.y), absf(d.x))))
+
+
+## [LISSAGE 1.70] Remplace chaque coin « de sol » qui tourne de plus de
+## SMOOTH_MAX_TURN_DEG par un arc de Bézier quadratique (point de contrôle =
+## le coin, tangent aux deux segments), découpé en assez de pas pour ne
+## jamais tourner de plus de SMOOTH_MAX_TURN_DEG d'un pas à l'autre.
+## Deux passes : la 1re arrondit, la 2e reprend les petits restes aux
+## raccords entre deux arcs voisins.
+func _round_corners(ch: PackedVector2Array) -> PackedVector2Array:
+	var cur := _dedupe(ch)
+	for _pass in 2:
+		cur = _dedupe(_round_corners_once(cur))
+	return cur
+
+
+## [LISSAGE 1.70] Retire les points presque confondus (< 2 px : raccords
+## entre deux courbes, fin d'un arc posée sur le début du suivant). Un segment
+## de 0,5 px a une direction au hasard et faisait une cassure que rien ne
+## lissait. Le premier et le dernier point sont toujours gardés.
+func _dedupe(ch: PackedVector2Array) -> PackedVector2Array:
+	if ch.size() < 2:
+		return ch
+	var out := PackedVector2Array([ch[0]])
+	for k in range(1, ch.size() - 1):
+		if ch[k].distance_to(out[out.size() - 1]) >= 2.0:
+			out.append(ch[k])
+	var last: Vector2 = ch[ch.size() - 1]
+	if out.size() > 1 and last.distance_to(out[out.size() - 1]) < 2.0:
+		out[out.size() - 1] = last
+	else:
+		out.append(last)
+	return out
+
+
+func _round_corners_once(ch: PackedVector2Array) -> PackedVector2Array:
+	if ch.size() < 3:
+		return ch
+	var out := PackedVector2Array([ch[0]])
+	for i in range(1, ch.size() - 1):
+		var p0: Vector2 = ch[i - 1]
+		var c: Vector2 = ch[i]
+		var p2: Vector2 = ch[i + 1]
+		var d1 := c - p0
+		var d2 := p2 - c
+		var l1 := d1.length()
+		var l2 := d2.length()
+		if l1 < 0.5 or l2 < 0.5:
+			out.append(c)
+			continue
+		var turn := absf(rad_to_deg(d1.angle_to(d2)))
+		# coin d'un mur, ou coin déjà doux : on le garde tel quel
+		if turn <= SMOOTH_MAX_TURN_DEG or turn >= 90.0 \
+				or _seg_slope_deg(d1) > SMOOTH_SLOPE_MAX_DEG or _seg_slope_deg(d2) > SMOOTH_SLOPE_MAX_DEG:
+			out.append(c)
+			continue
+		# longueur prise de chaque côté du coin : au plus 45 % des segments
+		# voisins (le coin suivant garde sa part, sans que deux arcs se
+		# touchent) et SMOOTH_MAX_CUT
+		var cut := minf(SMOOTH_MAX_CUT, minf(l1, l2) * 0.45)
+		var a := c - d1 / l1 * cut          # début de l'arc (sur le segment d'avant)
+		var b := c + d2 / l2 * cut          # fin de l'arc (sur le segment d'après)
+		var n := int(ceil(turn / SMOOTH_MAX_TURN_DEG))
+		for k in n + 1:
+			var t := float(k) / n
+			# Bézier quadratique a -> b, contrôle au coin c
+			out.append(a * (1.0 - t) * (1.0 - t) + c * 2.0 * t * (1.0 - t) + b * t * t)
+	out.append(ch[ch.size() - 1])
+	return out
 
 
 ## [1.65] Ajoute un boost (BoostArea en mode turbo) posé en `pos` (sur le sol
@@ -1101,6 +1281,12 @@ func _build_nodes() -> void:
 	var rims := Node2D.new()
 	rims.z_index = 2
 	add_child(rims)
+	# [LISSAGE 1.70] avant de fabriquer les collisions : on recolle les
+	# morceaux de sol bout à bout, puis on arrondit leurs cassures (voir
+	# _smooth_collision_chains plus bas). Ce sont ces chaînes lissées qui
+	# servent aux collisions ET à la bordure dessinée (rims).
+	if smooth_floors:
+		_smooth_collision_chains()
 	for ci in chains.size():
 		var ch: PackedVector2Array = chains[ci]
 		var segs := PackedVector2Array()

@@ -691,6 +691,15 @@ var _last_floor_n := Vector2.ZERO
 ## leur moyenne n'est pas fiable (bosse ou creux entre les deux) : le filtre
 ## « arête fantôme » ne s'en sert pas.
 const GHOST_RAYS_AGREE_DEG := 10.0
+## [GLISSE 1.70] Coin saillant touché par le dessous plat de la capsule : la
+## normale du contact doit différer de celle de la pente d'au moins
+## GHOST_VERTEX_MIN_DEG (sinon rien à corriger) et de moins de
+## GHOST_VERTEX_MAX_DEG (au-delà : vrai mur ou rebord, on le respecte).
+const GHOST_VERTEX_MIN_DEG := 3.0
+const GHOST_VERTEX_MAX_DEG := 50.0
+## [GLISSE 1.70] Tolérance (px) : un contact jusqu'à 2 px sous la corde des
+## capteurs compte encore comme « sur la pente ».
+const GHOST_VERTEX_BELOW_PX := 2.0
 
 func _apply_godot3_slide(v: Vector2) -> Vector2:
 	var count := get_slide_collision_count()
@@ -826,6 +835,30 @@ func _is_ghost_collision(col: KinematicCollision2D, n: Vector2, ground_normal: V
 		var nl: Vector2 = ground_detector_left.get_collision_normal()
 		if absf(rad_to_deg(nr.angle_to(nl))) > GHOST_RAYS_AGREE_DEG:
 			return false
+		# [GLISSE 1.70] Sommet d'un petit coin SAILLANT sur une pente.
+		# La capsule de Pinpouin est couchée et ne tourne jamais : son dessous
+		# est un segment plat de 20 px. Sur une pente (rampe à 27° des
+		# cavernes, arrivée du Gruyère), le moindre point anguleux du sol
+		# vient toucher ce dessous plat, et le moteur renvoie la normale de la
+		# capsule, (0, -1), au lieu de celle de la pente : vitesse verticale
+		# effacée d'un coup (sonde : 1836 -> 1618 px/s en une image).
+		# Test : les deux capteurs sont d'accord (même pente), on trace la
+		# corde entre leurs deux points d'impact. Si le contact est SUR ou
+		# AU-DESSUS de cette corde, c'est un coin saillant (sommet) : fantôme,
+		# on glisse avec la normale de la pente. S'il est en dessous de la
+		# corde, c'est un vrai creux (pied d'une montée) : on n'y touche pas.
+		if _ray_sees_floor(ground_detector_right) and _ray_sees_floor(ground_detector_left):
+			var hr: Vector2 = ground_detector_right.get_collision_point()
+			var hl: Vector2 = ground_detector_left.get_collision_point()
+			var chord := hr - hl
+			if chord.length() > 4.0:
+				var chord_n := chord.orthogonal().normalized()
+				if chord_n.y > 0.0:
+					chord_n = -chord_n          # normale tournée vers le haut
+				var above: float = (col.get_position() - hl).dot(chord_n)
+				var diff: float = absf(rad_to_deg(n.angle_to(ground_normal)))
+				if diff > GHOST_VERTEX_MIN_DEG and diff < GHOST_VERTEX_MAX_DEG and above > -GHOST_VERTEX_BELOW_PX:
+					return true
 	return abs(rad_to_deg(n.angle_to(ground_normal))) > ghost_normal_max_angle_deg
 
 
