@@ -230,6 +230,16 @@ const DRAG_REF_SLOPE_DEG := 10.0
 var _trick_boost_left: float = 0.0     # temps restant du boost en cours
 var _trick_boost_extra: float = 0.0    # px/s ajoutés aux plafonds pendant le boost
 
+# [BOOST 1.65] Turbo des zones de boost (BoostArea.gd, façon Trackmania) :
+# une ACCÉLÉRATION (px/s²) dans le sens de la flèche, donnée tant qu'on est
+# dans la zone puis pendant boost_time secondes. Voir pad_boost().
+var _pad_boost_left: float = 0.0       # temps restant du turbo (s)
+var _pad_boost_time: float = 0.0       # durée totale (pour l'atténuation finale)
+var _pad_boost_accel: float = 0.0      # accélération du turbo (px/s²)
+var _pad_boost_dir: Vector2 = Vector2.RIGHT   # sens de la flèche (monde)
+var _pad_boost_ground: bool = true     # boost de sol (suit la pente) ou d'air
+var _pad_boost_color: Color = Color.WHITE     # couleur de la flèche (traînée)
+
 # =============================================================================
 #  [NEIGE 1.31] Gerbe de neige et d'éclats de glace derrière Pinpouin AU SOL
 #  (demande de Manu). Elle grossit avec la vitesse : 3 gerbes empilées
@@ -419,6 +429,7 @@ func _physics_process(delta: float) -> void:
 		g *= air_pump_gravity
 	_velocity.y += g * delta
 
+	_apply_pad_boost(delta)         # [BOOST 1.65] turbo des zones de boost
 	_apply_soft_speed_caps(delta)   # [PHYSIQUE 1.10]
 	_velocity.x = clamp(_velocity.x, -SUPER_MAX_SPEED.x, SUPER_MAX_SPEED.x)
 	_velocity.y = clamp(_velocity.y, -SUPER_MAX_SPEED.y, SUPER_MAX_SPEED.y)
@@ -576,6 +587,11 @@ func _update_speed_trail() -> void:
 	# rose franc (couleur > 1 = plus opaque que la traînée blanche normale),
 	# plus épaisse et plus longue pendant le boost
 	_trail.modulate = Color(1.0, 0.35, 0.8, 1.6) if boosting else Color.WHITE
+	# [BOOST 1.65] pendant un turbo de zone : traînée de la couleur de la flèche
+	if is_pad_boosting():
+		boosting = true
+		var pc := _pad_boost_color
+		_trail.modulate = Color(pc.r, pc.g, pc.b, 1.6)
 	_trail.width = 26.0 if boosting else 14.0
 	if boosting and speed_trail_from > 0.0:
 		speed = maxf(speed, speed_trail_from + 840.0)
@@ -905,6 +921,7 @@ func die() -> void:
 		get_tree().call_deferred("reload_current_scene")
 		return
 	_respawning = true
+	_pad_boost_left = 0.0   # [BOOST 1.65] pas de turbo qui continue après une mort
 	_respawn_sample = _pick_respawn_sample()
 	chain.release()
 	_fall_timer = 0.0
@@ -989,6 +1006,7 @@ func teleport_to(pos: Vector2, vel: Vector2) -> void:
 	if _respawning:
 		return
 	_respawning = true
+	_pad_boost_left = 0.0   # [BOOST 1.65] pas de turbo qui continue après une mort
 	chain.release()
 	_fall_timer = 0.0
 	var tween := create_tween()
@@ -1240,6 +1258,53 @@ func trick_boost(combo: int) -> void:
 	_trick_boost_extra = amount
 
 
+
+
+# =============================================================================
+#  [BOOST 1.65] Turbo des zones de boost (BoostArea.gd), façon Trackmania.
+#  Appelé À CHAQUE IMAGE par une zone tant que le pingouin est dedans :
+#   dir    : sens de la flèche dans le monde
+#   accel  : accélération en px/s² (force × BoostArea.BOOST_MAX_ACCEL)
+#   time   : durée du turbo après la sortie de la zone
+#   color  : couleur de la flèche (la traînée prend cette couleur)
+#   ground : boost de sol (on pousse le long de la pente) ou d'air
+#  Si deux zones se touchent, la plus forte l'emporte.
+# =============================================================================
+func pad_boost(dir: Vector2, accel: float, time: float, color: Color, ground: bool) -> void:
+	if _pad_boost_left > 0.0 and accel < _pad_boost_accel:
+		_pad_boost_left = maxf(_pad_boost_left, time)   # une zone plus faible prolonge seulement
+		return
+	_pad_boost_dir = dir.normalized()
+	_pad_boost_accel = accel
+	_pad_boost_left = time
+	_pad_boost_time = maxf(time, 0.01)
+	_pad_boost_color = color
+	_pad_boost_ground = ground
+
+
+## [BOOST 1.65] Applique le turbo en cours (appelé avant l'air et le frottement).
+func _apply_pad_boost(delta: float) -> void:
+	if _pad_boost_left <= 0.0:
+		return
+	_pad_boost_left -= delta
+	# le turbo est plein, puis s'éteint en douceur sur le dernier tiers
+	var fade := clampf(_pad_boost_left / (_pad_boost_time / 3.0), 0.0, 1.0)
+	var dir := _pad_boost_dir
+	if _pad_boost_ground and is_on_ground:
+		# au sol : on pousse le long de la pente (jamais dans le sol ni pour
+		# décoller), dans le sens de la flèche
+		var n := _get_ground_normal()
+		if n != Vector2.ZERO:
+			var tangent := Vector2(-n.y, n.x)
+			if tangent.dot(dir) < 0.0:
+				tangent = -tangent
+			dir = tangent
+	_velocity += dir * _pad_boost_accel * fade * delta
+
+
+## [BOOST 1.65] Vrai pendant un turbo (pour la traînée colorée).
+func is_pad_boosting() -> bool:
+	return _pad_boost_left > 0.0 and _pad_boost_accel > 0.0
 
 # [NEIGE 1.31] Crée les 3 gerbes (une seule fois) puis les règle à chaque image.
 func _make_snow_spray() -> void:

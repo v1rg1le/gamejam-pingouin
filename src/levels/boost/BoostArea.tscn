@@ -1,30 +1,36 @@
-[gd_scene load_steps=6 format=2]
+[gd_scene load_steps=6 format=3]
 
-[ext_resource path="res://src/levels/boost/BoostArea.gd" type="Script" id=1]
-[ext_resource path="res://sprites/actors/boost/Speed_arrow1.png" type="Texture2D" id=2]
-[ext_resource path="res://sprites/actors/boost/Speed_arrow2.png" type="Texture2D" id=3]
+[ext_resource type="Script" uid="uid://c7slhhuu81i7e" path="res://src/levels/boost/BoostArea.gd" id="1"]
+[ext_resource type="Texture2D" uid="uid://cpfxi5wnq5ojd" path="res://sprites/actors/boost/Speed_arrow1.png" id="2"]
+[ext_resource type="Texture2D" uid="uid://b31c2h1j2mjf3" path="res://sprites/actors/boost/Speed_arrow2.png" id="3"]
 
-[sub_resource type="RectangleShape2D" id=1]
-extents = Vector2( 64, 64 )
+[sub_resource type="RectangleShape2D" id="1"]
+size = Vector2(128, 128)
 
-[sub_resource type="SpriteFrames" id=2]
-animations = [ {
-"frames": [ ExtResource( 2 ), ExtResource( 3 ) ],
+[sub_resource type="SpriteFrames" id="2"]
+animations = [{
+"frames": [{
+"duration": 1.0,
+"texture": ExtResource("2")
+}, {
+"duration": 1.0,
+"texture": ExtResource("3")
+}],
 "loop": true,
-"name": "default",
+"name": &"default",
 "speed": 5.0
-} ]
+}]
 
 [node name="BoostArea" type="Area2D"]
 collision_layer = 4
-script = ExtResource( 1 )
-accel_mode = true
+script = ExtResource("1")
 
 [node name="CollisionShape2D" type="CollisionShape2D" parent="."]
-shape = SubResource( 1 )
+shape = SubResource("1")
 
 [node name="AnimatedSprite2D" type="AnimatedSprite2D" parent="."]
-position = Vector2( 0, -7.5 )
-frames = SubResource( 2 )
+position = Vector2(0, -7.5)
+sprite_frames = SubResource("2")
 frame = 1
+
 [connection signal="body_entered" from="." to="." method="_on_BoostArea_body_entered"]

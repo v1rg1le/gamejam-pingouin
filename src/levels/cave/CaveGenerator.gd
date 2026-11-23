@@ -53,6 +53,21 @@ class_name CaveGenerator
 #     glaces »), en gardant le terrain bien lisible (roche opaque + contour).
 #  Toutes les épreuves ont des dimensions validées au bot (gruyere_bot.gd).
 #
+#  [CAVERNES 1.65] Retours de l'équipe après la 1.64 :
+#   - le DESSOUS de la galerie du dessus (le plafond d'un couloir) est
+#     ACCROCHABLE sur toute sa longueur, avec un habillage de glace à
+#     stalactites qui le rend lisible ; les murs et le reste de la roche
+#     restent non accrochables ;
+#   - plus de trous mortels entre deux galeries : on change d'étage
+#     seulement aux salles et on « descend juste la galerie ». Les épreuves
+#     des étages du haut deviennent des CUVETTES (creux arrondi : on peut y
+#     glisser sans mourir). TOUT EN BAS seulement, un trou donne sur le VIDE ;
+#   - les montées obligatoires au grappin deviennent des RAMPES avec des
+#     BOOSTS (BoostArea, mode turbo) ; `climb_style = "grappin"` remet les
+#     anciennes montées (levier de difficulté pour de futures cavernes) ;
+#   - de petits boosts « rappels » dans les glissades du bas, et un boost en
+#     l'air au-dessus des trous du vide.
+#
 #  Coordonnées LOCALES : le nœud (colonne 0, étage 0) est en (0, 0) ; y vers
 #  le bas. Unités : px.
 # =============================================================================
@@ -73,6 +88,15 @@ signal player_reached_node(c: int, l: int)
 @export var columns: int = 8
 ## Mode « croquis » : pas de décor ni de joueur suivi (planche des graines).
 @export var sketch_only: bool = false
+## [1.65] Montées obligatoires (galerie du bas qui ne continue pas) :
+## "rampe" = pente montante avec boosts (Gruyère) ; "grappin" = deux prises
+## (plus difficile : levier pour de futures cavernes).
+@export var climb_style: String = "rampe"
+## [1.65] Trous mortels seulement à l'étage du bas (ils donnent sur le vide).
+## false = anciens trous à tous les étages.
+@export var pits_only_bottom: bool = true
+## [1.65] Plafonds des couloirs accrochables au grappin.
+@export var hookable_ceilings: bool = true
 
 # --- Dimensions -----------------------------------------------------------------
 const COL_W := 2600.0          # largeur d'une colonne (un couloir ou une salle)
@@ -110,6 +134,13 @@ const GLASS_COLOR := Color(1.0, 1.0, 1.0, 0.55)    # voile de glace des galeries
 ## « galerie des glaces » : la tuile de glace pixel art de L'Œuf, à moitié transparente
 const GLASS_TILE := preload("res://sprites/levels/egg/tuile_glace.png")
 const EDGE_TEXTURE := preload("res://sprites/levels/tiles/tile_ice_up_long1.png")
+## [1.65] habillage des plafonds accrochables : bandeau de glace et stalactites
+## (nouvelle image, 32×16 px d'art, affichée ×4)
+const CEIL_TEXTURE := preload("res://sprites/levels/cave/plafond_glace.png")
+const BOOST_SCENE := preload("res://src/levels/boost/BoostArea.tscn")
+## [1.65] profondeur d'une cuvette (creux arrondi sans danger, étages du haut) :
+## il reste ~90 px de roche au-dessus du couloir du dessous
+const BOWL_DEPTH := 170.0
 const HOLD_TEXTURE := preload("res://sprites/levels/egg/prise.png")
 
 # --- Résultats ------------------------------------------------------------------
@@ -125,6 +156,10 @@ var holds := {}                # nom -> position locale
 var pits: Array = []           # Rect2 locaux : tomber dedans = réapparition
 var signs: Array = []          # [1.64] panneaux {pos (sol), dir}
 var chains: Array = []         # PackedVector2Array : collisions (segments ouverts)
+var chain_hook: Array = []     # [1.65] pour chaque chaîne : accrochable au grappin (plafond) ?
+var ceil_chains: Array = []    # [1.65] plafonds accrochables (habillage de stalactites)
+var glass_polys: Array = []    # [1.65] polygones du voile de glace (pas les fentes du vide)
+var boosts: Array = []         # [1.65] boosts {pos, rot, strength, scale, air}
 var floor_chains: Array = []   # morceaux de sol (bordure de glace)
 var carved: Array = []         # polygones creusés (dessin)
 var mountain := PackedVector2Array()
@@ -174,6 +209,23 @@ func _join(a: PackedVector2Array, b: PackedVector2Array) -> PackedVector2Array:
 ## Angle de la pente générale (le sol arrive et repart des nœuds avec cet angle).
 func _joint_deg() -> float:
 	return rad_to_deg(atan2(DROP, COL_W))
+
+
+## [1.65] Ajoute une chaîne de collision ; `hook` = plafond accrochable.
+func _add_chain(pts: PackedVector2Array, hook := false) -> void:
+	if pts.size() < 2:
+		return
+	var h := hook and hookable_ceilings
+	chains.append(pts)
+	chain_hook.append(h)
+	if h:
+		ceil_chains.append(pts)
+
+
+## [1.65] Ajoute un boost (BoostArea en mode turbo) posé en `pos` (sur le sol
+## pour un boost de sol), tourné de `rot_deg`, de force 0..1.
+func _add_boost(pos: Vector2, rot_deg: float, strength: float, arrow_scale: float, air := false) -> void:
+	boosts.append({"pos": pos, "rot": rot_deg, "strength": strength, "scale": arrow_scale, "air": air})
 
 
 # =============================================================================
@@ -391,6 +443,10 @@ func _build_geometry() -> void:
 	pits = []
 	signs = []
 	chains = []
+	chain_hook = []
+	ceil_chains = []
+	glass_polys = []
+	boosts = []
 	floor_chains = []
 	carved = []
 	var room_at := {}
@@ -436,47 +492,78 @@ func _pick_kind(l: int) -> String:
 ## Couloir de l'étage l entre les colonnes c et c+1, avec son épreuve.
 func _build_tube(c: int, l: int) -> void:
 	var kind := _pick_kind(l)
+	# [1.65] un trou n'est mortel qu'à l'étage du BAS (il donne sur le vide) ;
+	# ailleurs, l'épreuve se fait au-dessus d'une CUVETTE sans danger
+	var deadly := (l == lanes_n - 1) or not pits_only_bottom
 	# [1.63] pas de simple TROU juste après un balancier (couloir à prises ou
 	# salle où l'on reste en haut) : on en ressort lancé très loin et on
 	# survolait le bord du trou (au bot : 2000 px de vol, droit dans le puits,
 	# à chaque réapparition). On met alors une glissade (ou un balancier).
-	if kind == "trou" and _after_swing.has(_k(c - 1, l)):
+	if deadly and kind == "trou" and _after_swing.has(_k(c - 1, l)):
 		kind = "glissade" if _rng.randf() < 0.6 else "balancier"
 	# [1.64] pas de prises (donc pas de dôme) si l'étage du dessus est creusé ici
 	if (kind == "balancier" or kind == "double") and l > 0 and _carved_at.has(_k(c, l - 1)):
 		kind = "glissade" if _after_swing.has(_k(c - 1, l)) else "trou"
+	# [1.65] hors de l'étage du bas, le « trou » devient une cuvette
+	if kind == "trou" and not deadly:
+		kind = "cuvette"
 	var p0 := node_pos(c, l)
 	var p1 := node_pos(c + 1, l)
 	var aj := _joint_deg()
 	var base := func(x: float) -> float: return lerpf(p0.y, p1.y, (x - p0.x) / (p1.x - p0.x))
 	var floor_pts := PackedVector2Array()
-	var t := {"c": c, "l": l, "kind": kind, "holds": []}
+	var t := {"c": c, "l": l, "kind": kind, "holds": [], "deadly": false}
+	var void_slot := PackedVector2Array()     # [1.65] fente vers le vide (étage du bas)
+	var side_a := PackedVector2Array()        # [1.65] sol avant le trou du vide
+	var side_b := PackedVector2Array()        # [1.65] sol après le trou du vide
 	match kind:
 		"glissade":
 			# un creux puis une bosse : on prend de l'élan au PUMP
 			var d1 := Vector2(p0.x + COL_W * 0.40, base.call(p0.x + COL_W * 0.40) + 200.0)
 			var d2 := Vector2(p0.x + COL_W * 0.75, base.call(p0.x + COL_W * 0.75) + 20.0)
 			floor_pts = _join(_join(_hermite(p0, d1, aj, 0.0), _hermite(d1, d2, 0.0, -8.0)), _hermite(d2, p1, -8.0, aj))
+			# [1.65] « petit rappel » : un boost jaune sur la remontée, dans la
+			# moitié basse de la caverne (là où l'on va le moins vite), une
+			# glissade sur deux environ
+			if l >= lanes_n / 2 and _rng.randf() < 0.55:
+				var bx := p0.x + COL_W * 0.55
+				var by := _sample_y(floor_pts, bx)
+				_add_boost(Vector2(bx, by), _slope_deg(floor_pts, bx), 0.28, 2.0)
 		_:
 			var gap := 0.0
 			match kind:
-				"trou": gap = _rng.randf_range(450.0, 620.0)
+				"trou", "cuvette": gap = _rng.randf_range(450.0, 620.0)
 				"balancier": gap = _rng.randf_range(1000.0, 1200.0)
 				"double": gap = _rng.randf_range(1500.0, 1700.0)
-			var xa := p0.x + (COL_W - gap) * (0.42 if kind == "trou" else 0.5)
+			var xa := p0.x + (COL_W - gap) * (0.42 if (kind == "trou" or kind == "cuvette") else 0.5)
 			var lip := Vector2(xa, base.call(xa) - 30.0)
 			var land := Vector2(xa + gap, base.call(xa + gap) + 70.0)
 			var a := _hermite(p0, lip, aj, -14.0)           # petit tremplin au bord
 			var b := _hermite(land, p1, 12.0, aj)
-			# puits : on descend le long du bord, fond, on remonte sous l'arrivée
-			var bottom := maxf(lip.y, land.y) + PIT_DEPTH
-			floor_pts = a
-			floor_pts.append(Vector2(lip.x, bottom))
-			floor_pts.append(Vector2(land.x, bottom))
-			floor_pts = _join(floor_pts, b)
-			# zone « tombé dans le puits » : de 100 px sous le bord jusqu'au fond (pas
-			# plus bas : le couloir de l'étage du dessous commence juste en dessous)
-			pits.append(Rect2(lip.x, maxf(lip.y, land.y) + 100.0, gap, PIT_DEPTH - 100.0))
+			if deadly:
+				# [1.65] étage du bas : le trou traverse la montagne et donne
+				# sur le VIDE. Le sol descend le long des bords jusque sous la
+				# montagne ; la fente est creusée dans la roche (sans voile).
+				var deep := node_pos(columns, lanes_n - 1).y + MOUNTAIN_BOTTOM + 400.0
+				side_a = a
+				side_b = b
+				floor_pts = a.duplicate()
+				floor_pts.append(Vector2(lip.x, deep))
+				floor_pts.append(Vector2(land.x, deep))
+				floor_pts = _join(floor_pts, b)
+				void_slot = PackedVector2Array([lip, land, Vector2(land.x, deep), Vector2(lip.x, deep)])
+				# zone « tombé dans le vide » : dès 150 px sous le bord
+				pits.append(Rect2(lip.x, maxf(lip.y, land.y) + 150.0, gap, deep - maxf(lip.y, land.y)))
+				t.deadly = true
+				# [1.65] boost EN L'AIR au milieu d'un trou simple : grande
+				# flèche qui aide à passer (et montre le chemin)
+				if kind == "trou":
+					_add_boost(Vector2(xa + gap * 0.5, lip.y - 130.0), -12.0, 0.4, 3.0, true)
+			else:
+				# [1.65] cuvette : creux arrondi, sans danger (on glisse dedans
+				# et on remonte de l'autre côté ; au PUMP ou au grappin au plafond)
+				var mid := Vector2((lip.x + land.x) * 0.5, maxf(lip.y, land.y) + BOWL_DEPTH)
+				floor_pts = _join(_join(_join(a, _hermite(lip, mid, 60.0, 0.0, 10)), _hermite(mid, land, 0.0, -55.0, 10)), b)
 			t.gap = gap
 			t.lip = lip
 			t.land = land
@@ -500,18 +587,45 @@ func _build_tube(c: int, l: int) -> void:
 		ceil_pts.append(Vector2(da, ya))
 		ceil_pts = _join(ceil_pts, _join(_hermite(Vector2(da, ya), dm, -40.0, 0.0, 10), _hermite(dm, Vector2(db, yb), 0.0, 40.0, 10)))
 	ceil_pts.append(p1 + Vector2(0, -TUNNEL_H))
-	chains.append(ceil_pts)
-	chains.append(floor_pts)
-	floor_chains.append(floor_pts)
+	_add_chain(ceil_pts, true)      # [1.65] plafond accrochable
+	_add_chain(floor_pts)
+	if t.deadly:
+		# le sol de part et d'autre du trou a sa bordure de glace, pas les parois
+		floor_chains.append(side_a)
+		floor_chains.append(side_b)
+	else:
+		floor_chains.append(floor_pts)
 	var poly := ceil_pts.duplicate()
-	var rev := floor_pts.duplicate()
-	rev.reverse()
-	poly.append_array(rev)
+	if t.deadly:
+		# le voile de glace et la roche : couloir fermé au niveau des bords ;
+		# la fente du vide est creusée à part (pas de voile dedans)
+		var rev2 := _join(side_a, side_b)
+		rev2.reverse()
+		poly.append_array(rev2)
+		carved.append(void_slot)
+	else:
+		var rev := floor_pts.duplicate()
+		rev.reverse()
+		poly.append_array(rev)
 	carved.append(poly)
+	glass_polys.append(poly)
 	tubes.append(t)
 	_carved_at[_k(c, l)] = true
 	if t.holds.size() > 0:
 		_after_swing[_k(c, l)] = true
+
+
+## [1.65] Hauteur d'une ligne brisée (x croissants) en x.
+func _sample_y(line: PackedVector2Array, x: float) -> float:
+	for i in line.size() - 1:
+		if line[i].x <= x and line[i + 1].x >= x and line[i + 1].x > line[i].x:
+			return lerpf(line[i].y, line[i + 1].y, (x - line[i].x) / (line[i + 1].x - line[i].x))
+	return line[line.size() - 1].y
+
+
+## [1.65] Pente (degrés, < 0 = qui monte vers la droite) d'une ligne brisée en x.
+func _slope_deg(line: PackedVector2Array, x: float) -> float:
+	return rad_to_deg(atan2(_sample_y(line, x + 25.0) - _sample_y(line, x - 25.0), 50.0))
 
 
 ## Salle de croisement entre les étages a (haut) et a+1 (bas), colonnes c, c+1.
@@ -530,9 +644,24 @@ func _build_room(r: Dictionary) -> void:
 	var ylr := node_pos(c + 1, a + 1).y
 	var H := TUNNEL_H
 	var aj := _joint_deg()
+	# [1.65] RAMPE : la galerie du bas ne continue pas (lr fermé) mais celle du
+	# haut, oui -> au lieu de monter au grappin, le sol remonte en pente douce
+	# (~21°) jusqu'à la sortie haute, avec des boosts (voir plus bas)
+	var ramp: bool = climb_style == "rampe" and r.ll and r.ur and not r.lr
+	r["ramp"] = ramp
 	# sol du bas : un creux léger
 	var mid := Vector2((x0 + x1) * 0.5, (yll + ylr) * 0.5 + 150.0)
 	var floor_line := _join(_hermite(Vector2(x0, yll), mid, aj, 0.0), _hermite(mid, Vector2(x1, ylr), 0.0, aj))
+	var ramp_a := Vector2.ZERO
+	var ramp_e := Vector2.ZERO
+	if ramp:
+		# petit creux en entrant, ligne droite qui monte, puis on rejoint le
+		# seuil de la sortie haute en (x1, yur) avec la pente générale
+		ramp_a = Vector2(x0 + 550.0, yll - 40.0)
+		ramp_e = Vector2(x1 - 200.0, yur + 30.0)
+		var alpha := rad_to_deg(atan2(ramp_a.y - ramp_e.y, ramp_e.x - ramp_a.x))
+		floor_line = _join(_join(_hermite(Vector2(x0, yll), ramp_a, aj, -alpha, 10),
+			_hermite(ramp_a, ramp_e, -alpha, -alpha, 12)), _hermite(ramp_e, Vector2(x1, yur), -alpha, aj, 8))
 	var floor_y := func(x: float) -> float:
 		for i in floor_line.size() - 1:
 			if floor_line[i].x <= x and floor_line[i + 1].x >= x:
@@ -546,7 +675,9 @@ func _build_room(r: Dictionary) -> void:
 	# plafond (haut-gauche -> haut-droite)
 	add.call(Vector2(x0, yul - H), false)
 	# --- côté droit, de haut en bas
-	if r.ur:
+	if r.ur and ramp:
+		add.call(Vector2(x1, yur - H), true)                  # ouverture haute droite (la rampe y arrive)
+	elif r.ur:
 		add.call(Vector2(x1, yur - H), true)                  # ouverture haute droite
 		add.call(Vector2(x1, yur), false)                     # dessus du rebord
 		add.call(Vector2(x1 - LEDGE_R, yur), false)           # face du rebord
@@ -561,16 +692,18 @@ func _build_room(r: Dictionary) -> void:
 		if r.lr:
 			add.call(Vector2(x1, ylr - H), true)
 	# sol (de droite à gauche), coupé par les faces des rebords sans ouverture basse
-	var fx1 := x1 if (r.lr or not r.ur) else x1 - LEDGE_R
+	var fx1 := x1 if (r.lr or not r.ur or ramp) else x1 - LEDGE_R
 	var fx0 := x0 if (r.ll or not r.ul) else x0 + LEDGE_L
-	if r.ur and not r.lr:
+	if r.ur and not r.lr and not ramp:
 		add.call(Vector2(fx1, floor_y.call(fx1)), false)
 	var rev := PackedVector2Array()
 	for p in floor_line:
 		if p.x > fx0 + 1.0 and p.x < fx1 - 1.0:
 			rev.append(p)
 	rev.reverse()
-	if r.lr or not r.ur:
+	if ramp:
+		add.call(Vector2(x1, yur), false)                     # haut de la rampe
+	elif r.lr or not r.ur:
 		add.call(Vector2(x1, ylr), false)
 	for p in rev:
 		add.call(p, false)
@@ -594,19 +727,30 @@ func _build_room(r: Dictionary) -> void:
 	# le dernier côté revient au premier point (plafond haut-gauche) : c'est
 	# l'ouverture haute gauche si elle existe, sinon un mur
 	carved.append(pts)
+	glass_polys.append(pts)
+	# [1.65] chaînes de collision : on coupe aux ouvertures ET quand on passe
+	# d'un plafond (accrochable) à autre chose. Un côté est un plafond si
+	# l'intérieur de la salle est SOUS lui : le contour tourne dans le sens
+	# des aiguilles d'une montre (y vers le bas), donc l'intérieur est à
+	# droite du sens de parcours, c'est-à-dire du côté (-d.y, d.x).
 	var chain := PackedVector2Array()
+	var chain_is_ceil := false
 	for i in pts.size():
 		var j := (i + 1) % pts.size()
+		if open[i]:
+			_add_chain(chain, chain_is_ceil)
+			chain = PackedVector2Array()
+			continue
+		var d := pts[j] - pts[i]
+		var is_ceil := Vector2(-d.y, d.x).normalized().y > 0.7
+		if chain.size() > 0 and is_ceil != chain_is_ceil:
+			_add_chain(chain, chain_is_ceil)
+			chain = PackedVector2Array()
 		if chain.is_empty():
 			chain.append(pts[i])
-		if open[i]:
-			if chain.size() >= 2:
-				chains.append(chain)
-			chain = PackedVector2Array()
-		else:
-			chain.append(pts[j])
-	if chain.size() >= 2:
-		chains.append(chain)
+			chain_is_ceil = is_ceil
+		chain.append(pts[j])
+	_add_chain(chain, chain_is_ceil)
 	# morceaux de sol pour la bordure de glace : le sol du bas et les rebords
 	var fl := PackedVector2Array()
 	for p in floor_line:
@@ -615,7 +759,7 @@ func _build_room(r: Dictionary) -> void:
 	floor_chains.append(fl)
 	if r.ul:
 		floor_chains.append(PackedVector2Array([Vector2(x0, yul), Vector2(x0 + LEDGE_L, yul)]))
-	if r.ur:
+	if r.ur and not ramp:
 		floor_chains.append(PackedVector2Array([Vector2(x1 - LEDGE_R, yur), Vector2(x1, yur)]))
 	# --- prises
 	var tag := "c%d_s%d" % [c, a]
@@ -624,7 +768,15 @@ func _build_room(r: Dictionary) -> void:
 		# rester en haut : balancier au milieu, sous le plafond
 		var hx := (x0 + LEDGE_L + x1 - LEDGE_R) * 0.5
 		holds[tag + "_haut"] = Vector2(hx, lerpf(yul, yur, 0.5) - H + HOLD_UNDER_CEIL)
-	if r.ll and r.ur:
+	if ramp:
+		# [1.65] boosts de la rampe : un boost ORANGE au pied (là où la pente
+		# commence), puis deux « rappels » jaunes sur la montée : avec eux on
+		# grimpe tout seul, même en arrivant lentement (vérifié au bot)
+		var run := ramp_e.x - ramp_a.x
+		for bz in [[ramp_a.x - 150.0, 0.45, 3.0], [ramp_a.x + run * 0.35, 0.28, 2.0], [ramp_a.x + run * 0.72, 0.28, 2.0]]:
+			var bx: float = bz[0]
+			_add_boost(Vector2(bx, floor_y.call(bx)), rad_to_deg(atan2(floor_y.call(bx + 25.0) - floor_y.call(bx - 25.0), 50.0)), bz[1], bz[2])
+	elif r.ll and r.ur:
 		# monter : une prise au milieu de la salle, puis une au-dessus du rebord
 		var mx := x1 - LEDGE_R - 450.0
 		holds[tag + "_monte1"] = Vector2(mx, floor_y.call(mx) - 700.0)   # [1.64] 820 -> 700 (étages plus serrés)
@@ -645,10 +797,11 @@ func _build_stub(p: Vector2, ang: float, is_entry: bool) -> void:
 	var b := p if is_entry else p + d
 	var fl := PackedVector2Array([a, b])
 	var cl := PackedVector2Array([a + Vector2(0, -TUNNEL_H), b + Vector2(0, -TUNNEL_H)])
-	chains.append(fl)
-	chains.append(cl)
+	_add_chain(fl)
+	_add_chain(cl, true)      # [1.65] plafond du couloir d'entrée / de sortie : accrochable
 	floor_chains.append(fl)
 	carved.append(PackedVector2Array([cl[0], cl[1], fl[1], fl[0]]))
+	glass_polys.append(carved[carved.size() - 1])
 
 
 ## Montagne : flancs verticaux (où débouchent les couloirs), sommets au-dessus.
@@ -677,7 +830,7 @@ func _build_mountain() -> void:
 	var top := PackedVector2Array()
 	for i in range(1, mountain.size() - 1):
 		top.append(mountain[i])
-	chains.append(top)
+	_add_chain(top)
 	floor_chains.append(top)
 
 
@@ -692,9 +845,9 @@ func _flank_chains(x: float, top: float, bottom: float, lanes: Array, angles: Ar
 	cuts.sort_custom(func(u, v): return u[0] < v[0])
 	var y0 := top
 	for cut in cuts:
-		chains.append(PackedVector2Array([Vector2(x, y0), Vector2(x, cut[0])]))
+		_add_chain(PackedVector2Array([Vector2(x, y0), Vector2(x, cut[0])]))
 		y0 = cut[1]
-	chains.append(PackedVector2Array([Vector2(x, y0), Vector2(x, bottom)]))
+	_add_chain(PackedVector2Array([Vector2(x, y0), Vector2(x, bottom)]))
 
 
 # =============================================================================
@@ -743,7 +896,7 @@ func _build_nodes() -> void:
 		glass.name = "Glace"
 		glass.z_index = -5
 		add_child(glass)
-		for poly in carved:
+		for poly in glass_polys:       # [1.65] pas de voile dans les fentes du vide
 			var g := Polygon2D.new()
 			g.polygon = poly
 			g.color = GLASS_COLOR
@@ -757,10 +910,17 @@ func _build_nodes() -> void:
 	body.collision_layer = 2
 	body.add_to_group("no_hook")   # [CAVERNES] le grappin ne s'accroche pas à la roche
 	add_child(body)
+	# [1.65] les plafonds accrochables : un corps à part, HORS du groupe
+	# « no_hook » (même calque 2 : le pingouin et le grappin les touchent)
+	var ceil_body := StaticBody2D.new()
+	ceil_body.name = "Plafonds"
+	ceil_body.collision_layer = 2
+	add_child(ceil_body)
 	var rims := Node2D.new()
 	rims.z_index = 2
 	add_child(rims)
-	for ch in chains:
+	for ci in chains.size():
+		var ch: PackedVector2Array = chains[ci]
 		var segs := PackedVector2Array()
 		for i in ch.size() - 1:
 			segs.append(ch[i])
@@ -769,7 +929,10 @@ func _build_nodes() -> void:
 		shape.segments = segs
 		var cs := CollisionShape2D.new()
 		cs.shape = shape
-		body.add_child(cs)
+		if chain_hook[ci]:
+			ceil_body.add_child(cs)
+		else:
+			body.add_child(cs)
 		var rim := Line2D.new()
 		rim.points = ch
 		rim.width = RIM_WIDTH
@@ -788,7 +951,30 @@ func _build_nodes() -> void:
 		edge.points = fl
 		edge.z_index = 3
 		add_child(edge)
-	# --- prises (les seules accroches du grappin dans la caverne)
+	# --- [1.65] habillage des plafonds accrochables : bandeau de glace et
+	# stalactites (l'œil comprend « ici, le grappin accroche »)
+	for ch in ceil_chains:
+		var ice := Line2D.new()
+		ice.texture = CEIL_TEXTURE
+		ice.texture_mode = Line2D.LINE_TEXTURE_TILE
+		ice.texture_repeat = CanvasItem.TEXTURE_REPEAT_ENABLED
+		ice.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+		ice.width = 64.0                       # 16 px d'art × 4
+		ice.position = Vector2(0, 28)          # le bandeau colle au plafond, les stalactites pendent
+		ice.points = ch
+		ice.z_index = 3
+		add_child(ice)
+	# --- [1.65] boosts (BoostArea en mode turbo)
+	for bz in boosts:
+		var ba = BOOST_SCENE.instantiate()
+		ba.position = bz.pos
+		ba.rotation_degrees = bz.rot
+		ba.boost_strength = bz.strength
+		ba.arrow_scale = bz.scale
+		ba.in_air = bz.air
+		ba.z_index = 5
+		add_child(ba)
+	# --- prises (accroches du grappin dans la caverne, avec les plafonds)
 	for n in holds:
 		_add_hold(n, holds[n])
 	# --- [1.64] panneaux (montées obligatoires)
@@ -844,5 +1030,6 @@ func debug_data() -> Dictionary:
 		tb.append([t.c, t.l, t.kind])
 	return {"seed": cave_seed, "lanes": lanes_n, "columns": columns, "entries": entry_lanes,
 		"exits": exit_lanes, "nodes": nodes, "edges": ed, "tubes": tb, "rooms": rooms,
+		"boosts": boosts, "ceilings": ceil_chains.size(),
 		"check": check, "attempts": attempts, "paths": paths,
 		"COL_W": COL_W, "LANE_GAP": LANE_GAP, "DROP": DROP, "TUNNEL_H": TUNNEL_H}
