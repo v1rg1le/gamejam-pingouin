@@ -94,7 +94,7 @@ const HOLD_RADIUS := 55.0
 const HOLD_UNDER_CEIL := 160.0 # une prise pend à 160 px sous le plafond
 const MOUNTAIN_TOP := 1100.0   # roche au-dessus du plafond de l'étage du haut (au moins)
 const MOUNTAIN_BOTTOM := 5000.0 # la montagne descend jusque-là sous le dernier étage
-const SLAB := 60.0             # largeur des tranches de roche (dessin)
+const SLAB := 500.0            # largeur des tranches de roche (dessin) : plus étroite que tout polygone creusé (couloir d'entrée : 700), donc jamais de trou au milieu d'une tranche ; 500 plutôt que 60 : ~10 fois moins de polygones à dessiner (téléphones)
 
 const ROCK_COLOR := Color(0.30, 0.42, 0.58, 1)
 const RIM_COLOR := Color(0.12, 0.24, 0.42, 1)
