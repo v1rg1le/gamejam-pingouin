@@ -210,23 +210,16 @@ var floor_chains: Array = []   # morceaux de sol (bordure de glace)
 # de 10° ; cavernes = 448 morceaux (courbes de 8 à 12 points raccordées bout
 # à bout), 8 % de cassures de plus de 10° dont 146 de plus de 25°. Chaque
 # cassure fait perdre de la vitesse ou décoller Pinpouin de quelques pixels.
-# Remède à la source : chaque coin entre deux segments « de sol » (pente
-# < SMOOTH_SLOPE_MAX_DEG des deux côtés) qui tourne de plus de
-# SMOOTH_MAX_TURN_DEG est remplacé par un petit arc (courbe de Bézier
-# tangente aux deux segments), découpé pour qu'aucun pas ne tourne de plus de
-# SMOOTH_MAX_TURN_DEG. Les murs (au-delà de SMOOTH_SLOPE_MAX_DEG) et les
-# plafonds accrochables ne sont pas touchés. Écart à la forme d'origine :
-# quelques pixels.
+# Remède à la source (1.70) : les morceaux de sol qui se touchent bout à bout
+# sont recollés, puis chaque coin « de sol » est arrondi. 1.70 : petits arcs
+# de Bézier, 4° au plus par segment. [LISSAGE C² 1.71] : arrondi commun à
+# tous les niveaux (src/levels/SmoothCurve.gd) : courbe limite C² (courbure
+# continue), 1° au plus par segment. Murs et plafonds accrochables : pas
+# touchés. Écart à la forme d'origine : 1 à 3 px.
 ## [LISSAGE 1.70] Interrupteur (false = collisions d'avant la 1.70).
 @export var smooth_floors := true
-## [LISSAGE 1.70] Rotation maximale entre deux segments de sol voisins.
-const SMOOTH_MAX_TURN_DEG := 4.0
-## [LISSAGE 1.70] Au-delà de cette pente, un segment est un mur : ses coins
-## restent nets (un mur doit rester un mur).
-const SMOOTH_SLOPE_MAX_DEG := 55.0
-## [LISSAGE 1.70] Longueur maximale prise de chaque côté d'un coin pour
-## l'arrondir (en px) ; jamais plus de la moitié du segment voisin.
-const SMOOTH_MAX_CUT := 90.0
+## [LISSAGE 1.70] (Réglages de l'arrondi : depuis la 1.71, dans
+## src/levels/SmoothCurve.gd, communs à tous les niveaux.)
 ## [LISSAGE 1.70] Deux bouts de chaînes à moins de cette distance sont le
 ## même point (raccord entre deux morceaux de sol).
 const SMOOTH_JOIN_EPS := 1.0
@@ -329,7 +322,12 @@ func _smooth_collision_chains() -> void:
 	chains = []
 	chain_hook = []
 	for ch in pool:
-		chains.append(_round_corners(ch))
+		# [LISSAGE C² 1.71] arrondi commun à tous les niveaux (SmoothCurve.gd) :
+		# courbe limite C², au plus 1° d'un segment au suivant (1.70 : arcs
+		# de Bézier à 4°, avec des sauts de courbure aux bouts de chaque arc)
+		# coins nets seulement au-delà de 60° et arrondi large (« wide ») : la
+		# bordure des cavernes est dessinée sur la collision lissée
+		chains.append(SmoothCurve.smooth_open(ch, SmoothCurve.MAX_TURN_DEG, 60.0, true))
 		chain_hook.append(false)
 	for ch in keep:
 		chains.append(ch)
@@ -365,79 +363,6 @@ func _reversed(c: PackedVector2Array) -> PackedVector2Array:
 	var out := PackedVector2Array()
 	for k in range(c.size() - 1, -1, -1):
 		out.append(c[k])
-	return out
-
-
-## [LISSAGE 1.70] Pente d'un segment par rapport à l'horizontale (0..90°).
-func _seg_slope_deg(d: Vector2) -> float:
-	return absf(rad_to_deg(atan2(absf(d.y), absf(d.x))))
-
-
-## [LISSAGE 1.70] Remplace chaque coin « de sol » qui tourne de plus de
-## SMOOTH_MAX_TURN_DEG par un arc de Bézier quadratique (point de contrôle =
-## le coin, tangent aux deux segments), découpé en assez de pas pour ne
-## jamais tourner de plus de SMOOTH_MAX_TURN_DEG d'un pas à l'autre.
-## Deux passes : la 1re arrondit, la 2e reprend les petits restes aux
-## raccords entre deux arcs voisins.
-func _round_corners(ch: PackedVector2Array) -> PackedVector2Array:
-	var cur := _dedupe(ch)
-	for _pass in 2:
-		cur = _dedupe(_round_corners_once(cur))
-	return cur
-
-
-## [LISSAGE 1.70] Retire les points presque confondus (< 2 px : raccords
-## entre deux courbes, fin d'un arc posée sur le début du suivant). Un segment
-## de 0,5 px a une direction au hasard et faisait une cassure que rien ne
-## lissait. Le premier et le dernier point sont toujours gardés.
-func _dedupe(ch: PackedVector2Array) -> PackedVector2Array:
-	if ch.size() < 2:
-		return ch
-	var out := PackedVector2Array([ch[0]])
-	for k in range(1, ch.size() - 1):
-		if ch[k].distance_to(out[out.size() - 1]) >= 2.0:
-			out.append(ch[k])
-	var last: Vector2 = ch[ch.size() - 1]
-	if out.size() > 1 and last.distance_to(out[out.size() - 1]) < 2.0:
-		out[out.size() - 1] = last
-	else:
-		out.append(last)
-	return out
-
-
-func _round_corners_once(ch: PackedVector2Array) -> PackedVector2Array:
-	if ch.size() < 3:
-		return ch
-	var out := PackedVector2Array([ch[0]])
-	for i in range(1, ch.size() - 1):
-		var p0: Vector2 = ch[i - 1]
-		var c: Vector2 = ch[i]
-		var p2: Vector2 = ch[i + 1]
-		var d1 := c - p0
-		var d2 := p2 - c
-		var l1 := d1.length()
-		var l2 := d2.length()
-		if l1 < 0.5 or l2 < 0.5:
-			out.append(c)
-			continue
-		var turn := absf(rad_to_deg(d1.angle_to(d2)))
-		# coin d'un mur, ou coin déjà doux : on le garde tel quel
-		if turn <= SMOOTH_MAX_TURN_DEG or turn >= 90.0 \
-				or _seg_slope_deg(d1) > SMOOTH_SLOPE_MAX_DEG or _seg_slope_deg(d2) > SMOOTH_SLOPE_MAX_DEG:
-			out.append(c)
-			continue
-		# longueur prise de chaque côté du coin : au plus 45 % des segments
-		# voisins (le coin suivant garde sa part, sans que deux arcs se
-		# touchent) et SMOOTH_MAX_CUT
-		var cut := minf(SMOOTH_MAX_CUT, minf(l1, l2) * 0.45)
-		var a := c - d1 / l1 * cut          # début de l'arc (sur le segment d'avant)
-		var b := c + d2 / l2 * cut          # fin de l'arc (sur le segment d'après)
-		var n := int(ceil(turn / SMOOTH_MAX_TURN_DEG))
-		for k in n + 1:
-			var t := float(k) / n
-			# Bézier quadratique a -> b, contrôle au coin c
-			out.append(a * (1.0 - t) * (1.0 - t) + c * 2.0 * t * (1.0 - t) + b * t * t)
-	out.append(ch[ch.size() - 1])
 	return out
 
 

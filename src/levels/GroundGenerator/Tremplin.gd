@@ -55,7 +55,11 @@ func _ready() -> void:
 	# [FIX VITESSE -> 0] collision en segments (contour) : plus d'arêtes internes
 	# issues du découpage convexe, qui créaient des "collisions fantômes".
 	$CollisionPolygon2D.build_mode = CollisionPolygon2D.BUILD_SEGMENTS
-	$CollisionPolygon2D.polygon = curve
+	# [LISSAGE C² 1.71] collision lissée (SmoothCurve.gd : courbe limite C²,
+	# au plus 1° d'un segment au suivant) ; dessin inchangé. Les coins durs
+	# (murs, bords) et le point d'indice 0 ne bougent pas : le point 1 (coin
+	# du deck, lu par RaceManager pour la réapparition) reste le même.
+	$CollisionPolygon2D.polygon = SmoothCurve.smooth_closed(curve)
 	$Polygon2D.polygon = curve
 	$Line2D.points = curve
 	

@@ -436,7 +436,10 @@ func _add_ramp(x0: float) -> void:
 	body.collision_layer = 2   # calque "ground" : le grappin s'y accroche aussi
 	var col := CollisionPolygon2D.new()
 	col.build_mode = CollisionPolygon2D.BUILD_SEGMENTS
-	col.polygon = poly
+	# [LISSAGE C² 1.71] collision lissée (SmoothCurve.gd : courbe limite C²,
+	# au plus 1° d'un segment au suivant ; murs et coins nets gardés) ; le
+	# dessin garde les points d'origine (écart de 1 à 3 px, invisible).
+	col.polygon = SmoothCurve.smooth_closed(poly)
 	body.add_child(col)
 	var fill := Polygon2D.new()
 	fill.color = Color(0.694118, 0.862745, 0.956863, 1)   # même bleu que sol.tscn
@@ -604,7 +607,10 @@ func _add_cliff(w: Dictionary) -> void:
 	body.z_index = 5
 	var col := CollisionPolygon2D.new()
 	col.build_mode = CollisionPolygon2D.BUILD_SEGMENTS
-	col.polygon = poly
+	# [LISSAGE C² 1.71] collision lissée (SmoothCurve.gd : courbe limite C²,
+	# au plus 1° d'un segment au suivant ; murs et coins nets gardés) ; le
+	# dessin garde les points d'origine (écart de 1 à 3 px, invisible).
+	col.polygon = SmoothCurve.smooth_closed(poly)
 	body.add_child(col)
 	var fill := Polygon2D.new()
 	fill.color = Color(0.694118, 0.862745, 0.956863, 1)   # même bleu que sol.tscn
@@ -758,7 +764,10 @@ func _add_chimney(w: Dictionary) -> void:
 	body.z_index = 5
 	var col := CollisionPolygon2D.new()
 	col.build_mode = CollisionPolygon2D.BUILD_SEGMENTS
-	col.polygon = rock
+	# [LISSAGE C² 1.71] collision lissée (SmoothCurve.gd : courbe limite C²,
+	# au plus 1° d'un segment au suivant ; murs et coins nets gardés) ; le
+	# dessin garde les points d'origine (écart de 1 à 3 px, invisible).
+	col.polygon = SmoothCurve.smooth_closed(rock)
 	body.add_child(col)
 	var fill := Polygon2D.new()
 	fill.color = Color(0.694118, 0.862745, 0.956863, 1)

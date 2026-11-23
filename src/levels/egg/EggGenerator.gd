@@ -248,7 +248,10 @@ func _add_body(poly: PackedVector2Array, edges: Array = [], z := 0, color := ROC
 	body.z_index = z
 	var col := CollisionPolygon2D.new()
 	col.build_mode = CollisionPolygon2D.BUILD_SEGMENTS
-	col.polygon = poly
+	# [LISSAGE C² 1.71] collision lissée (SmoothCurve.gd : courbe limite C²,
+	# au plus 1° d'un segment au suivant ; murs et coins nets gardés) ; le
+	# dessin garde les points d'origine (écart de 1 à 3 px, invisible).
+	col.polygon = SmoothCurve.smooth_closed(poly)
 	body.add_child(col)
 	var fill := Polygon2D.new()
 	fill.color = color
@@ -499,7 +502,9 @@ func _add_outer_cave() -> void:
 		_add_fill(p)
 
 
-func _chain_to_segments(chain: PackedVector2Array, segs: PackedVector2Array) -> void:
+func _chain_to_segments(chain_in: PackedVector2Array, segs: PackedVector2Array) -> void:
+	# [LISSAGE C² 1.71] chaîne de collision lissée (SmoothCurve.gd)
+	var chain := SmoothCurve.smooth_open(chain_in)
 	for i in chain.size() - 1:
 		segs.append(chain[i])
 		segs.append(chain[i + 1])

@@ -97,7 +97,11 @@ func _ready() -> void:
 
 	# [FIX VITESSE -> 0] contour en segments = plus d'arêtes internes fantômes
 	$CollisionPolygon2D.build_mode = CollisionPolygon2D.BUILD_SEGMENTS
-	$CollisionPolygon2D.polygon = curve
+	# [LISSAGE C² 1.71] la collision est lissée (SmoothCurve.gd : courbe
+	# limite C², au plus 1° d'un segment au suivant, avant : jusqu'à 10° tous
+	# les 64 px) ; le dessin (Polygon2D, Line2D) garde les points d'origine.
+	# Le point d'indice 0 et les coins (bords verticaux) ne bougent pas.
+	$CollisionPolygon2D.polygon = SmoothCurve.smooth_closed(curve)
 	$Polygon2D.polygon = curve
 	$Line2D.points = curve
 	# [SOL 1.9] Sols retournés (scale = (-1, -1), ex. les pistes du haut de
