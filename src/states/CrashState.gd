@@ -42,7 +42,13 @@ func _handle_input(player: CharacterBody2D, delta: float) -> void:
 	# le corps se remet dans le sens de la pente (caché par la neige)
 	player.rotation = lerp_angle(player.rotation, player.landing.last_slope_rotation, 0.25)
 	# la roulade freine : il reste ~20 % de la vitesse à la fin
-	player._velocity *= clampf(1.0 - 3.2 * delta, 0.0, 1.0)
+	# [1.66] seulement au sol : en l'air (chute contre un plafond, ou rebond),
+	# la gravité doit faire retomber Pinpouin normalement (avant, la vitesse
+	# était freinée dans toutes les directions : il « flottait » en l'air)
+	if player.landing.on_real_floor():
+		player._velocity *= clampf(1.0 - 3.2 * delta, 0.0, 1.0)
+	else:
+		player._velocity.x *= clampf(1.0 - 1.5 * delta, 0.0, 1.0)
 	if _t >= ROLL_TIME:
 		# 2e petit nuage de neige : cache le passage boule → assis
 		player.landing.snow_burst(player.global_position, player._velocity, 0.8)

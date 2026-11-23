@@ -20,8 +20,14 @@ func _handle_input(player: CharacterBody2D, _delta: float) -> void:
 	if timer.is_stopped():
 #		print("timer fini")
 		player._states.go_to_state(player, "idling")
-	else:
+	elif player.landing == null or player.landing.on_real_floor():
 		player._velocity = Vector2.ZERO
+	else:
+		# [1.66] étourdi EN L'AIR (après une chute contre un plafond) : on ne
+		# fige plus Pinpouin en plein vol, il retombe par la gravité ; le
+		# temps d'étourdissement ne compte qu'une fois au sol
+		player._velocity.x = 0.0
+		timer.start(maxf(timer.time_left, 0.05))
 
 func enter(player: CharacterBody2D, _previous_state: PlayerState) -> void:
 	print('entering staggered')

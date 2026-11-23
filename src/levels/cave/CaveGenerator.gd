@@ -80,10 +80,23 @@ signal player_reached_node(c: int, l: int)
 @export var entry_lanes: Array[int] = [0, 1]
 ## Étages des sorties (dernière colonne).
 @export var exit_lanes: Array[int] = [0, 1, 2]
-## Angle du sol à chaque entrée θ (degrés, > 0 = qui descend vers la droite).
+## Angle d'ARRIVÉE à chaque entrée θ (degrés, de -90 à +90) : +90 = on
+## arrive en tombant par au-dessus, -90 = on arrive en montant par en dessous,
+## 8 (par défaut) = dans la pente du couloir. [1.66] Si θ ≠ 8, un VIRAGE en
+## morceau de pipe (PipeBend) est construit DEVANT l'entrée, hors de la
+## montagne : rampe d'accueil courbe si l'on arrive par au-dessus, tube courbe
+## (plafond qui plaque Pinpouin, boosts en l'air) si l'on arrive par en dessous.
 @export var entry_angles: Array[float] = []
-## Angle du sol à chaque sortie φ.
+## Angle de DÉPART à chaque sortie φ (degrés, de -90 à +90) : < 8 = tremplin
+## qui relance vers le haut (virage concave), > 8 = bord arrondi qui plonge.
 @export var exit_angles: Array[float] = []
+## [1.66] Rayons des virages devant les entrées / après les sorties.
+@export var entry_bend_radius: float = 1400.0
+@export var exit_bend_radius: float = 900.0
+## [1.66] Rayons par entrée / sortie (facultatif, même ordre que les étages ;
+## 0 ou absent = le rayon commun ci-dessus).
+@export var entry_radii: Array[float] = []
+@export var exit_radii: Array[float] = []
 ## Nombre de colonnes (longueur de la caverne).
 @export var columns: int = 8
 ## Mode « croquis » : pas de décor ni de joueur suivi (planche des graines).
@@ -137,6 +150,25 @@ const EDGE_TEXTURE := preload("res://sprites/levels/tiles/tile_ice_up_long1.png"
 ## [1.65] habillage des plafonds accrochables : bandeau de glace et stalactites
 ## (nouvelle image, 32×16 px d'art, affichée ×4)
 const CEIL_TEXTURE := preload("res://sprites/levels/cave/plafond_glace.png")
+## [1.66] bandeau de glace LISSE (nouvelle image) : les stalactites sont
+## maintenant posées une par une (voir STAL_*), plus espacées et de tailles
+## variées, au lieu d'un motif qui se répète
+const CEIL_SMOOTH_TEXTURE := preload("res://sprites/levels/cave/plafond_glace_lisse.png")
+const STAL_TEXTURES := [
+	preload("res://sprites/levels/cave/stalactite_1.png"),
+	preload("res://sprites/levels/cave/stalactite_2.png"),
+	preload("res://sprites/levels/cave/stalactite_3.png"),
+	preload("res://sprites/levels/cave/stalactite_4.png"),
+]
+## [1.66] Stalactites (demande de l'équipe) : tous les STAL_SPACING px le long
+## d'un plafond, on lit un BRUIT (valeur entre -1 et 1, qui varie doucement) :
+## au-dessus du seuil STAL_THRESHOLD = une stalactite, d'autant plus grande
+## que la valeur est haute ; en dessous = plafond lisse. Le bruit dépend de la
+## graine de la caverne (même décor pour tout le monde).
+const STAL_SPACING := 110.0
+const STAL_THRESHOLD := 0.0
+const STAL_NOISE_FREQ := 0.004
+const STAL_SIZES := [0.08, 0.16, 0.26]   # paliers du bruit : petite, moyenne, grande, très grande
 const BOOST_SCENE := preload("res://src/levels/boost/BoostArea.tscn")
 ## [1.65] profondeur d'une cuvette (creux arrondi sans danger, étages du haut) :
 ## il reste ~90 px de roche au-dessus du couloir du dessous
@@ -160,6 +192,13 @@ var chain_hook: Array = []     # [1.65] pour chaque chaîne : accrochable au gra
 var ceil_chains: Array = []    # [1.65] plafonds accrochables (habillage de stalactites)
 var glass_polys: Array = []    # [1.65] polygones du voile de glace (pas les fentes du vide)
 var boosts: Array = []         # [1.65] boosts {pos, rot, strength, scale, air}
+var outer_polys: Array = []    # [1.66] blocs de roche des virages hors de la montagne
+## [1.66] Bout des virages : étage -> {pos, heading}. Sortie : là où le
+## virage lâche Pinpouin ; entrée : début du virage (côté vide).
+var exit_tips := {}
+var entry_tips := {}
+const STUB_DEG := 8.0          # [1.66] pente des couloirs d'entrée et de sortie (fixe)
+const DIVE_STRAIGHT := 600.0   # [1.66] tout droit après un virage qui plonge
 var floor_chains: Array = []   # morceaux de sol (bordure de glace)
 var carved: Array = []         # polygones creusés (dessin)
 var mountain := PackedVector2Array()
@@ -447,6 +486,9 @@ func _build_geometry() -> void:
 	ceil_chains = []
 	glass_polys = []
 	boosts = []
+	outer_polys = []
+	exit_tips = {}
+	entry_tips = {}
 	floor_chains = []
 	carved = []
 	var room_at := {}
@@ -461,11 +503,15 @@ func _build_geometry() -> void:
 			if edges.has(_k(c, l)) and (l in edges[_k(c, l)]):
 				_build_tube(c, l)
 	for i in entry_lanes.size():
-		var th: float = entry_angles[i] if i < entry_angles.size() else 8.0
-		_build_stub(node_pos(0, entry_lanes[i]), th, true)
+		var th: float = entry_angles[i] if i < entry_angles.size() else STUB_DEG
+		_build_stub(node_pos(0, entry_lanes[i]), STUB_DEG, true)
+		var er: float = entry_radii[i] if i < entry_radii.size() and entry_radii[i] > 0.0 else entry_bend_radius
+		_build_entry_bend(entry_lanes[i], clampf(th, -90.0, 90.0), er)
 	for i in exit_lanes.size():
-		var ph: float = exit_angles[i] if i < exit_angles.size() else 8.0
-		_build_stub(node_pos(columns, exit_lanes[i]), ph, false)
+		var ph: float = exit_angles[i] if i < exit_angles.size() else STUB_DEG
+		_build_stub(node_pos(columns, exit_lanes[i]), STUB_DEG, false)
+		var xr: float = exit_radii[i] if i < exit_radii.size() and exit_radii[i] > 0.0 else exit_bend_radius
+		_build_exit_bend(exit_lanes[i], clampf(ph, -90.0, 90.0), xr)
 	_build_mountain()
 
 
@@ -525,7 +571,9 @@ func _build_tube(c: int, l: int) -> void:
 			# [1.65] « petit rappel » : un boost jaune sur la remontée, dans la
 			# moitié basse de la caverne (là où l'on va le moins vite), une
 			# glissade sur deux environ
-			if l >= lanes_n / 2 and _rng.randf() < 0.55:
+			# [1.66] routes équivalentes (demande de l'équipe) : les rappels sont
+			# maintenant à TOUS les étages (avant : moitié basse seulement)
+			if _rng.randf() < 0.55:
 				var bx := p0.x + COL_W * 0.55
 				var by := _sample_y(floor_pts, bx)
 				_add_boost(Vector2(bx, by), _slope_deg(floor_pts, bx), 0.28, 2.0)
@@ -567,6 +615,18 @@ func _build_tube(c: int, l: int) -> void:
 			t.gap = gap
 			t.lip = lip
 			t.land = land
+			# [1.66] ROUTES ÉQUIVALENTES (demande de l'équipe : « toutes les
+			# routes équivalentes, plus ou moins de boosts sur les couches pour
+			# compenser ») : mesuré au bot, les étages du haut (balanciers,
+			# doubles prises) étaient ~2 fois plus lents que le bas. On donne :
+			#  - au-dessus d'un trou à prises, un boost EN L'AIR au milieu (on
+			#    peut passer sans le grappin ; le balancier reste un raccourci) ;
+			#  - un boost au sol à l'arrivée de chaque trou (on repart vite).
+			if not deadly and (kind == "balancier" or kind == "double"):
+				_add_boost(Vector2(xa + gap * 0.5, lip.y - 160.0), -10.0, 0.5, 3.0, true)
+			if not deadly:
+				var lx := land.x + 120.0
+				_add_boost(Vector2(lx, _sample_y(b, lx)), _slope_deg(b, lx), 0.4, 2.0)
 			# prises : sous le plafond, au-dessus du trou
 			var n := 1 if kind == "balancier" else (2 if kind == "double" else 0)
 			for k in n:
@@ -804,6 +864,121 @@ func _build_stub(p: Vector2, ang: float, is_entry: bool) -> void:
 	glass_polys.append(carved[carved.size() - 1])
 
 
+## [1.66] Bout du couloir sur le flanc (entrée : côté gauche ; sortie : droit).
+func flank_point(l: int, is_entry: bool) -> Vector2:
+	var d := Vector2(STUB, STUB * tan(deg_to_rad(STUB_DEG)))
+	return node_pos(0, l) - d if is_entry else node_pos(columns, l) + d
+
+
+## [1.66] Bloc de roche sous (ou sur) une ligne : `thick` > 0 vers le bas.
+func _outer_slab(line: PackedVector2Array, thick: float) -> void:
+	var poly := line.duplicate()
+	for i in range(line.size() - 1, -1, -1):
+		poly.append(line[i] + Vector2(0, thick))
+	outer_polys.append(poly)
+
+
+## [1.66] Toit d'un tube courbe hors de la montagne : bloc au-dessus du
+## plafond `ceil_line`, dont le DESSUS est une pente qui descend en
+## s'éloignant du flanc (vu au bot : sur un toit presque plat collé au flanc,
+## Pinpouin restait coincé dans le coin). Ce qui tombe dessus glisse vers le
+## vide (et le virage en dessous).
+## `flank_first` : le premier point de ceil_line est contre le flanc (sortie) ;
+## sinon c'est le dernier (entrée).
+func _roof_slab(ceil_line: PackedVector2Array, flank_first: bool) -> void:
+	# bande de roche de 240 px au-dessus du plafond (polygone simple), avec
+	# une collision sur son DESSUS
+	var top := PackedVector2Array()
+	for q in ceil_line:
+		top.append(q + Vector2(0, -240.0))
+	var band := ceil_line.duplicate()
+	for i in range(top.size() - 1, -1, -1):
+		band.append(top[i])
+	outer_polys.append(band)
+	_add_chain(top)
+	if flank_first:
+		return            # plongeon : le dessus descend déjà en s'éloignant du flanc
+	# entrée par en dessous : le dessus près du flanc descend VERS le flanc
+	# (coin où l'on resterait coincé) -> un coin de roche en pente qui
+	# renvoie vers le vide
+	var corner: Vector2 = top[top.size() - 1]
+	var k := top.size() - 1
+	while k > 0 and corner.distance_to(top[k]) < 700.0:
+		k -= 1
+	var wedge := PackedVector2Array([top[k], corner, corner + Vector2(0, -320.0)])
+	outer_polys.append(wedge)
+	_add_chain(PackedVector2Array([corner + Vector2(0, -320.0), top[k]]))
+
+
+## [1.66] Virage APRÈS une sortie (hors de la montagne), voir exit_angles.
+func _build_exit_bend(l: int, phi: float, radius: float) -> void:
+	var p0 := flank_point(l, false)
+	if absf(phi - STUB_DEG) < 0.5:
+		exit_tips[l] = {"pos": p0, "heading": STUB_DEG}
+		return
+	var line := PipeBend.arc(p0, STUB_DEG, phi - STUB_DEG, radius)
+	var dive := phi > STUB_DEG + 10.0
+	if dive:
+		# le tube continue tout droit après le virage : un Pinpouin qui a
+		# décollé du bord arrondi touche le plafond même tard (la tangente au
+		# départ ne recoupe le plafond qu'à ~acos(R / (R + TUNNEL_H)) du début)
+		line = PipeBend.join([line, PipeBend.straight(line[line.size() - 1], phi, DIVE_STRAIGHT)])
+	_add_chain(line)
+	floor_chains.append(line)
+	_outer_slab(line, 260.0)
+	exit_tips[l] = {"pos": line[line.size() - 1], "heading": phi}
+	if dive:
+		# PLONGEON : le sol tourne vers le bas (bord arrondi) ; à grande vitesse
+		# Pinpouin décollait et passait par-dessus le virage suivant (vu au bot
+		# à 1550 px/s). Un PLAFOND à l'extérieur du virage (même centre, rayon
+		# + TUNNEL_H) le plaque et le fait plonger dans la bonne direction.
+		var center := p0 + Vector2.from_angle(deg_to_rad(STUB_DEG + 90.0)) * radius
+		var ceil_line := PackedVector2Array()
+		var n_arc := line.size() - 1          # le dernier point est le bout du tout droit
+		for i in n_arc:
+			ceil_line.append(center + (line[i] - center).normalized() * (radius + TUNNEL_H))
+		ceil_line.append(ceil_line[n_arc - 1] + Vector2.from_angle(deg_to_rad(phi)) * DIVE_STRAIGHT)
+		_add_chain(ceil_line)
+		_roof_slab(ceil_line, true)
+
+
+## [1.66] Virage AVANT une entrée (hors de la montagne), voir entry_angles.
+func _build_entry_bend(l: int, theta: float, radius: float) -> void:
+	var mouth := flank_point(l, true)
+	if absf(theta - STUB_DEG) < 0.5:
+		entry_tips[l] = {"pos": mouth, "heading": STUB_DEG}
+		return
+	# arc de theta vers 8°, déplacé pour finir pile à l'entrée
+	var arc := PipeBend.arc(Vector2.ZERO, theta, STUB_DEG - theta, radius)
+	var shift := mouth - arc[arc.size() - 1]
+	var floor_line := PackedVector2Array()
+	for q in arc:
+		floor_line.append(q + shift)
+	_add_chain(floor_line)
+	floor_chains.append(floor_line)
+	_outer_slab(floor_line, 240.0)
+	entry_tips[l] = {"pos": floor_line[0], "heading": theta}
+	if theta < STUB_DEG:
+		# ARRIVÉE PAR EN DESSOUS : on monte, le virage tourne vers le bas (le
+		# sol est à l'intérieur du virage) ; c'est le PLAFOND, à l'extérieur,
+		# qui plaque Pinpouin et le ramène dans la pente du couloir. Plafond =
+		# même centre, rayon + TUNNEL_H. Des boosts EN L'AIR au milieu du
+		# tube, dans le sens de la marche, gardent la vitesse.
+		var center := mouth + Vector2.from_angle(deg_to_rad(STUB_DEG + 90.0)) * radius
+		var ceil_line := PackedVector2Array()
+		for q in floor_line:
+			ceil_line.append(center + (q - center).normalized() * (radius + TUNNEL_H))
+		_add_chain(ceil_line)
+		_roof_slab(ceil_line, false)
+		var n := floor_line.size()
+		for k in [int(n * 0.2), int(n * 0.55)]:
+			var q: Vector2 = floor_line[k]
+			var mid := center + (q - center).normalized() * (radius + TUNNEL_H * 0.5)
+			var hd := rad_to_deg((floor_line[k + 1] - floor_line[k]).angle())
+			var climb := -hd
+			boosts.append({"pos": mid, "rot": hd, "strength": PipeBend.boost_strength_for_slope(climb), "scale": 3.0, "air": true})
+
+
 ## Montagne : flancs verticaux (où débouchent les couloirs), sommets au-dessus.
 func _build_mountain() -> void:
 	var deco := RandomNumberGenerator.new()
@@ -837,7 +1012,7 @@ func _build_mountain() -> void:
 func _flank_chains(x: float, top: float, bottom: float, lanes: Array, angles: Array, is_entry: bool) -> void:
 	var cuts: Array = []
 	for i in lanes.size():
-		var ang: float = angles[i] if i < angles.size() else 8.0
+		var ang: float = STUB_DEG                 # [1.66] couloirs toujours à 8°
 		var p := node_pos(0 if is_entry else columns, lanes[i])
 		var dy := STUB * tan(deg_to_rad(ang))
 		var y := p.y - dy if is_entry else p.y + dy
@@ -890,6 +1065,13 @@ func _build_nodes() -> void:
 			f.antialiased = false
 			rock.add_child(f)
 		x = x2
+	# --- [1.66] blocs des virages hors de la montagne
+	for poly in outer_polys:
+		var f := Polygon2D.new()
+		f.polygon = poly
+		f.color = ROCK_COLOR
+		f.z_index = 1
+		add_child(f)
 	# --- voile de glace dans les galeries (léger : on voit le décor à travers)
 	if not sketch_only:
 		var glass := Node2D.new()
@@ -953,17 +1135,21 @@ func _build_nodes() -> void:
 		add_child(edge)
 	# --- [1.65] habillage des plafonds accrochables : bandeau de glace et
 	# stalactites (l'œil comprend « ici, le grappin accroche »)
+	var stal_noise := FastNoiseLite.new()
+	stal_noise.seed = cave_seed * 13 + 5
+	stal_noise.frequency = STAL_NOISE_FREQ
 	for ch in ceil_chains:
 		var ice := Line2D.new()
-		ice.texture = CEIL_TEXTURE
+		ice.texture = CEIL_SMOOTH_TEXTURE      # [1.66] bandeau lisse
 		ice.texture_mode = Line2D.LINE_TEXTURE_TILE
 		ice.texture_repeat = CanvasItem.TEXTURE_REPEAT_ENABLED
 		ice.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
-		ice.width = 64.0                       # 16 px d'art × 4
-		ice.position = Vector2(0, 28)          # le bandeau colle au plafond, les stalactites pendent
+		ice.width = 32.0                       # 8 px d'art × 4
+		ice.position = Vector2(0, 12)          # le bandeau colle au plafond
 		ice.points = ch
 		ice.z_index = 3
 		add_child(ice)
+		_add_stalactites(ch, stal_noise)
 	# --- [1.65] boosts (BoostArea en mode turbo)
 	for bz in boosts:
 		var ba = BOOST_SCENE.instantiate()
@@ -986,6 +1172,42 @@ func _build_nodes() -> void:
 		spr.position = sg.pos - Vector2(spr.texture.get_width() * 2.5, spr.texture.get_height() * 5.0 - 6.0)
 		spr.z_index = 4
 		add_child(spr)
+
+
+## [1.66] Stalactites le long d'un plafond (voir STAL_*). Elles pendent à la
+## verticale ; 4 tailles d'image selon la valeur du bruit.
+func _add_stalactites(ch: PackedVector2Array, noise: FastNoiseLite) -> void:
+	var dist := STAL_SPACING * 0.5
+	var walked := 0.0
+	for i in ch.size() - 1:
+		var a := ch[i]
+		var b := ch[i + 1]
+		var seg := a.distance_to(b)
+		while dist <= walked + seg and seg > 0.0:
+			var p := a.lerp(b, (dist - walked) / seg)
+			dist += STAL_SPACING
+			# un plafond presque vertical (bord d'un dôme raide) : pas de stalactite
+			if absf((b - a).normalized().x) < 0.5:
+				continue
+			var n := noise.get_noise_2d(p.x + position.x, p.y + position.y)
+			if n <= STAL_THRESHOLD:
+				continue                              # plafond lisse
+			# taille selon la hauteur du bruit (le bruit dépasse rarement 0,6)
+			var k := 0
+			for lim in STAL_SIZES:
+				if n > lim:
+					k += 1
+			k = clampi(k, 0, 3)
+			var spr := Sprite2D.new()
+			spr.texture = STAL_TEXTURES[k]
+			spr.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+			spr.scale = Vector2(5, 5)
+			spr.centered = false
+			spr.offset = Vector2(-spr.texture.get_width() * 0.5, 0)
+			spr.position = p + Vector2(0, 16)        # sous le bandeau
+			spr.z_index = 3
+			add_child(spr)
+		walked += seg
 
 
 func _add_hold(name: String, center: Vector2) -> void:

@@ -507,11 +507,48 @@ func _add_egg(name: String, center: Vector2) -> void:
 #  Étages des entrées / sorties : chaque entrée doit être servie par une
 #  sortie du même étage (ou être l'étage le plus bas).
 # =============================================================================
+## [1.66] 4 cavernes (choix de l'équipe : « 4 cavernes + 3 zones de vide »).
+## La 3e sort maintenant par 3 étages (avant : 2, c'était la dernière).
+## Angles θ (entrées) et φ (sorties) [1.66] : -18 = tremplin, 55 = rampe
+## d'accueil (on arrive en tombant), +55 en sortie = on plonge, -55 en entrée =
+## on arrive par EN DESSOUS (tube courbe). Voir CaveGenerator.entry_angles.
+## Zone de vide 2 : la sortie du bas de la caverne 2 plonge (+70) dans un
+## grand virage en U (PipeBend, boosts) qui remonte dans l'entrée du bas de
+## la caverne 3 par en dessous (-55) : la redirection « façon quarter pipe ».
 const CAVES := [
-	{"seed": 1440, "entries": [0, 1], "exits": [0, 1, 2]},
-	{"seed": 2302, "entries": [0, 1, 2], "exits": [0, 1, 2, 3]},
-	{"seed": 3303, "entries": [0, 1, 2, 3], "exits": [0, 1]},
+	{"seed": 1440, "entries": [0, 1], "exits": [0, 1, 2], "theta": [8.0, 8.0], "phi": [-18.0, -18.0, -18.0]},
+	{"seed": 2302, "entries": [0, 1, 2], "exits": [0, 1, 2, 3], "theta": [55.0, 55.0, 55.0], "phi": [-18.0, -18.0, -18.0, 70.0], "phi_r": [0.0, 0.0, 0.0, 500.0]},
+	{"seed": 3303, "entries": [0, 1, 2, 3], "exits": [0, 1, 2], "theta": [55.0, 55.0, 55.0, -55.0], "theta_r": [0.0, 0.0, 0.0, 800.0], "phi": [-18.0, -18.0, -18.0]},
+	{"seed": 4404, "entries": [0, 1, 2], "exits": [0, 1], "theta": [55.0, 55.0, 55.0], "phi": [8.0, 8.0]},
 ]
+# -----------------------------------------------------------------------------
+#  [1.66] ZONES DE VIDE entre deux cavernes (croquis « Interconnexion des
+#  cavernes » de l'équipe) : chaque sortie 1, 2, 3 peut mener à chaque
+#  entrée A, B, C, « en utilisant le grappin ou non ». Choix de l'équipe :
+#  « saut + œufs pour changer ».
+#   - chaque SORTIE se termine par un TREMPLIN (virage PipeBend de +8° à
+#     -18°) qui lance Pinpouin au-dessus du vide ;
+#   - chaque ENTRÉE a une RAMPE D'ACCUEIL courbe (virage de 55° vers 8°,
+#     rayon 1400) : on se pose dessus en tombant, dans le sens de la pente ;
+#   - les entrées de la caverne suivante sont un étage (LANE_GAP) + 150 px
+#     plus bas que les sorties de même numéro : calculé avec la vraie
+#     physique (gravité + air), de 65 à 130 km/h (1000 à 2200 px/s) on
+#     retombe dans l'entrée EN FACE ; plus lent, une entrée plus bas ; tout
+#     en bas, plus lent = le VIDE (réapparition au dernier carrefour) ;
+#   - pour MONTER d'une entrée (ou deux), il faut les ŒUFS : un œuf par
+#     sortie (sauf celle du haut), juste après le tremplin, au-dessus de la
+#     trajectoire de l'étage du dessous ; ils forment une échelle (on peut
+#     enchaîner deux œufs pour monter de deux étages) ; deux œufs au-dessus
+#     de l'étage du haut servent de balançoire pour prendre de la vitesse.
+# -----------------------------------------------------------------------------
+const VOID_FAR := 2500.0       # distance horizontale bout du tremplin -> flanc de la caverne suivante
+const VOID_DROP := 1100.0      # l'entrée « en face » est 1100 px plus bas que le bout du tremplin
+const KICK_TURN := -26.0       # tremplin : de +8° (pente du couloir de sortie) à -18°
+const KICK_RADIUS := 900.0
+const CATCH_DEG := 55.0        # rampe d'accueil : de 55° (on tombe) à 8° (couloir d'entrée)
+const CATCH_RADIUS := 1400.0
+const LADDER_EGG := Vector2(400.0, -500.0)   # œuf de l'échelle, depuis le bout du tremplin de son étage
+var void_zones: Array = []     # [{rect, a, b, kick_ends: {l: Vector2}, mouths: {l: Vector2}, eggs: {l: name}}]
 const CAVE_COLUMNS := 10       # [1.63] 10 colonnes : ~35 à 45 s par caverne au bot (niveau visé : 3 à 5 min pour un joueur)
 const PASS_W := 1450.0         # largeur d'un passage (flanc à flanc)
 const PASS_DROP := 150.0       # le flanc suivant commence un peu plus bas
@@ -539,6 +576,10 @@ func _make_cave(i: int, origin: Vector2) -> CaveGenerator:
 	g.cave_seed = cfg.seed
 	g.entry_lanes.assign(cfg.entries)
 	g.exit_lanes.assign(cfg.exits)
+	g.entry_angles.assign(cfg.get("theta", []))     # [1.66] angles θ / φ
+	g.exit_angles.assign(cfg.get("phi", []))
+	g.entry_radii.assign(cfg.get("theta_r", []))
+	g.exit_radii.assign(cfg.get("phi_r", []))
 	g.columns = CAVE_COLUMNS
 	g.position = origin
 	add_child(g)
@@ -580,14 +621,74 @@ func _add_caves(edge: Vector2) -> void:
 	poly.append(Vector2(e1.x, e1.y + 4000.0))
 	poly.append(Vector2(lipp.x, e1.y + 4000.0))
 	_add_body(poly, [fl], 2)
-	# --- caverne 2 puis 3, avec un passage avant chacune
+	# --- cavernes suivantes, avec une ZONE DE VIDE avant chacune [1.66]
+	# (avant : un passage à l'air libre, _add_passage, gardé plus bas)
 	var prev := g1
 	for i in range(1, CAVES.size()):
-		var x0 := _exit_end(prev, 0)
-		var g := _make_cave(i, _cave_origin_for_entry(x0 + Vector2(PASS_W, PASS_DROP)))
-		_add_passage(prev, g)
+		var k0 := _kick_end(prev, 0)
+		var g := _make_cave(i, _cave_origin_for_entry(k0 + Vector2(VOID_FAR, VOID_DROP)))
+		_add_void_zone(prev, g)
 		prev = g
 	_add_final(prev)
+
+
+## [1.66] Bout du virage de sortie de l'étage l (tremplin ou plongeon),
+## construit par la caverne elle-même (exit_angles).
+func _kick_end(g: CaveGenerator, l: int) -> Vector2:
+	return g.position + g.exit_tips[l].pos
+
+
+## [1.66] Rampe d'accueil d'une entrée : virage de CATCH_DEG (on arrive en
+## tombant) vers 8° (le couloir), qui se termine pile à l'entrée `mouth`.
+func _catch_line(mouth: Vector2) -> PackedVector2Array:
+	var arc := PipeBend.arc(Vector2.ZERO, CATCH_DEG, 8.0 - CATCH_DEG, CATCH_RADIUS)
+	var shift := mouth - arc[arc.size() - 1]
+	var out := PackedVector2Array()
+	for q in arc:
+		out.append(q + shift)
+	return out
+
+
+## [1.66] Bloc de roche sous une ligne de sol (épaisseur `thick`).
+func _add_slab(top: PackedVector2Array, thick := 240.0) -> void:
+	var poly := top.duplicate()
+	for i in range(top.size() - 1, -1, -1):
+		poly.append(top[i] + Vector2(0, thick))
+	_add_body(poly, [top], 3)
+
+
+## [1.66] Zone de vide entre la caverne `a` (sorties) et `b` (entrées) : voir
+## l'en-tête « ZONES DE VIDE ».
+func _add_void_zone(a: CaveGenerator, b: CaveGenerator) -> void:
+	var zone := {"a": a, "b": b, "kick_ends": {}, "mouths": {}, "eggs": {}}
+	var top_kick := _kick_end(a, a.exit_lanes.min())
+	# tremplins et rampes d'accueil : construits par les cavernes (angles θ / φ)
+	for l in a.exit_lanes:
+		zone.kick_ends[l] = _kick_end(a, l)
+	for l in b.entry_lanes:
+		zone.mouths[l] = _entry_start(b, l)
+	# une sortie qui PLONGE (φ > 8) vers une entrée PAR EN DESSOUS (θ < 8) du
+	# même étage : virage en U entre les deux
+	for l in a.exit_lanes:
+		if b.entry_lanes.has(l) and a.exit_tips[l].heading > 8.0 and b.entry_tips[l].heading < 8.0:
+			_add_u_pipe(a.position + a.exit_tips[l].pos, a.exit_tips[l].heading,
+				b.position + b.entry_tips[l].pos, b.entry_tips[l].heading)
+	# échelle d'œufs : un œuf par sortie sauf la plus haute (pour monter)
+	var zi := void_zones.size() + 1
+	for l in a.exit_lanes:
+		if l == a.exit_lanes.min() or a.exit_tips[l].heading > 8.0:
+			continue
+		var name := "vide%d_oeuf%d" % [zi, l]
+		_add_egg(name, zone.kick_ends[l] + LADDER_EGG)
+		zone.eggs[l] = name
+	# balançoires au-dessus de l'étage du haut (prendre de la vitesse)
+	_add_egg("vide%d_haut1" % zi, top_kick + Vector2(1000.0, -800.0))
+	_add_egg("vide%d_haut2" % zi, top_kick + Vector2(1900.0, -800.0))
+	# rectangle de la zone (caméra, bot)
+	var x0 := _exit_end(a, a.exit_lanes.min()).x
+	var x1 := _entry_start(b, b.entry_lanes.min()).x
+	zone.rect = Rect2(x0, top_kick.y - 2500.0, x1 - x0, 9000.0)
+	void_zones.append(zone)
 
 
 ## Passage à l'air libre entre la caverne `a` (sorties) et `b` (entrées).
@@ -614,39 +715,94 @@ func _add_passage(a: CaveGenerator, b: CaveGenerator) -> void:
 	_add_body(poly, [fl], 2)
 
 
+## [1.66] Virage en U entre une sortie qui plonge (p0, cap h0 > 0) et une
+## entrée par en dessous (p1 = début de son tube, cap h1 < 0) : descente
+## droite, virage vers le plat, fond droit, virage vers le haut, montée droite
+## avec boosts (PipeBend partout). On cherche les longueurs droites qui
+## raccordent les deux bouts ; montée de 700 px si possible, moins sinon.
+func _add_u_pipe(p0: Vector2, h0: float, p1: Vector2, h1: float) -> void:
+	var r1 := 500.0
+	var r2 := 500.0
+	var u1 := Vector2.from_angle(deg_to_rad(h0))
+	var u2 := Vector2.from_angle(deg_to_rad(h1))
+	var arc1 := PipeBend.arc(Vector2.ZERO, h0, -h0, r1)
+	var arc2 := PipeBend.arc(Vector2.ZERO, 0.0, h1, r2)
+	var d1 := arc1[arc1.size() - 1]
+	var d2 := arc2[arc2.size() - 1]
+	var l2 := 700.0
+	var l1 := 0.0
+	var lb := -1.0
+	while l2 >= 0.0:
+		var rest := p1 - p0 - d1 - d2 - u2 * l2
+		l1 = rest.y / u1.y
+		lb = rest.x - l1 * u1.x
+		if l1 >= 0.0 and lb >= 0.0:
+			break
+		l2 -= 50.0
+	if l1 < 0.0 or lb < 0.0:
+		push_warning("[GRUYÈRE] virage en U impossible entre %s et %s" % [p0, p1])
+		return
+	var a := p0 + u1 * l1
+	var b := a + d1
+	var c := b + Vector2(lb, 0.0)
+	var d := c + d2
+	var line := PipeBend.join([PackedVector2Array([p0, a]), PipeBend.arc(a, h0, -h0, r1),
+		PackedVector2Array([b, c]), PipeBend.arc(c, 0.0, h1, r2), PackedVector2Array([d, p1])])
+	_add_slab(line, 260.0)
+	for bz in PipeBend.boosts_along(line, 360.0, 2.5, 150.0):
+		_add_boost_node(bz)
+	u_pipes.append(line)
+	print("[GRUYÈRE] virage en U : descente %d, fond %d, montée %d" % [l1, lb, l2])
+
+
+var u_pipes: Array = []        # [1.66] virages en U (bot, images)
+
+
 ## Fin : half-pipe entre les deux sorties de la dernière caverne.
+## [1.66] Retour de test : « finir par une montée avec un boost plutôt qu'un
+## grappin si on arrive d'en bas ». La sortie du BAS file sur une RAMPE
+## (virages PipeBend : creux, montée droite à 28°, arrondi sur le deck) avec
+## des boosts ; elle arrive pile sur le deck gauche du half-pipe. La sortie
+## du HAUT a toujours son rebord et se laisse tomber dans le half-pipe.
+const FINAL_RAMP_DEG := 28.0
 func _add_final(g: CaveGenerator) -> void:
 	var x0 := _exit_end(g, 0)
 	var x1 := _exit_end(g, 1)
 	var hp = half_pipe_res.instantiate()
 	var hp_w: float = hp.map_width
-	# vallée de 1050 px entre le flanc et le half-pipe (au bot, avec 650 px,
-	# le balancier de la montée ramenait Pinpouin contre le flanc, dans la
-	# sortie du bas, et la 2e prise était cachée par la roche)
-	var hx := x0.x + FINAL_LEDGE + 350.0
 	var deck_y := x0.y + 350.0
+	# --- rampe de la sortie du bas : creux (virage vers le haut), montée
+	# droite, puis arrondi (virage vers le bas) qui se pose sur le deck
+	var bend1 := PipeBend.join([PipeBend.straight(x1, 8.0, 250.0),
+		PipeBend.arc(x1 + Vector2.from_angle(deg_to_rad(8.0)) * 250.0, 8.0, -(8.0 + FINAL_RAMP_DEG), 900.0)])
+	var p1 := bend1[bend1.size() - 1]
+	var r2 := 450.0
+	var top_rise := r2 * (1.0 - cos(deg_to_rad(FINAL_RAMP_DEG)))
+	var climb_len := (p1.y - top_rise - deck_y) / sin(deg_to_rad(FINAL_RAMP_DEG))
+	var line := PipeBend.join([bend1, PipeBend.straight(p1, -FINAL_RAMP_DEG, climb_len)])
+	var p2 := line[line.size() - 1]
+	line = PipeBend.join([line, PipeBend.arc(p2, -FINAL_RAMP_DEG, FINAL_RAMP_DEG, r2)])
+	var hx: float = line[line.size() - 1].x
+	# la sortie du haut doit avoir la place de tomber dans le half-pipe
+	hx = maxf(hx, x0.x + FINAL_LEDGE + 350.0)
 	hp_x = hx
 	hp_deck_y = deck_y
 	hp.with_finish = false
 	hp.position = Vector2(hx, deck_y + 512.0)
 	add_child(hp)
+	# raccord exact : le dernier point de la rampe est le coin du deck
+	line[line.size() - 1] = Vector2(hx, deck_y)
+	var poly := line.duplicate()
+	poly.append(Vector2(hx, x1.y + 4000.0))
+	poly.append(Vector2(x1.x, x1.y + 4000.0))
+	_add_body(poly, [line], 2)
+	# boosts de la montée (couleur = force, selon la pente)
+	for bz in PipeBend.boosts_along(line, 380.0, 2.5, 200.0):
+		_add_boost_node(bz)
+	final_ramp = line
 	# sortie du haut : un rebord, puis on se laisse tomber dans le half-pipe
 	_add_ledge(x0, x0 + Vector2(FINAL_LEDGE, -40.0))
-	# sortie du bas : sol jusqu'au pied du half-pipe (son flanc gauche fait mur)
-	var fl := _hermite(x1, Vector2(hx + 2.0, x1.y + 120.0), 8.0, 0.0, 10)
-	var poly := fl.duplicate()
-	poly.append(Vector2(hx + 2.0, x1.y + 4000.0))
-	poly.append(Vector2(x1.x, x1.y + 4000.0))
-	_add_body(poly, [fl], 2)
-	# montée au grappin (mêmes écarts que la montée des salles de croisement)
-	var h1 := Vector2(hx - 450.0, x1.y + 120.0 - 820.0)
-	var h2 := Vector2(hx + 60.0, deck_y - 420.0)
-	# petites prises rondes (comme dans les cavernes) : un gros œuf cachait la
-	# 2e prise quand on tire depuis la 1re (au bot, le crochet se replantait
-	# dans le 1er œuf)
-	_add_small_hold("hp_monte1", h1)
-	_add_small_hold("hp_monte2", h2)
-	hp_holds = ["hp_monte1", "hp_monte2"]
+	hp_holds = []
 	# arche : sur le deck gauche ; bande haute (on arrive aussi en tombant)
 	finish_x = hx + 260.0
 	var gate = finish_gate_res.instantiate()
@@ -658,6 +814,22 @@ func _add_final(g: CaveGenerator) -> void:
 	_add_body(PackedVector2Array([Vector2(wx, deck_y - 3000.0), Vector2(wx + 600.0, deck_y - 3000.0),
 		Vector2(wx + 600.0, deck_y + 5000.0), Vector2(wx, deck_y + 5000.0)]), [], 2)
 	print("[GRUYÈRE] half-pipe en ", hp.position, " ; arche x = ", finish_x)
+
+
+var final_ramp := PackedVector2Array()   # [1.66] rampe finale (bot)
+const BOOST_SCENE := preload("res://src/levels/boost/BoostArea.tscn")
+
+
+## [1.66] Pose un boost (format {pos, rot, strength, scale, air}).
+func _add_boost_node(bz: Dictionary) -> void:
+	var ba = BOOST_SCENE.instantiate()
+	ba.position = bz.pos
+	ba.rotation_degrees = bz.rot
+	ba.boost_strength = bz.strength
+	ba.arrow_scale = bz.scale
+	ba.in_air = bz.air
+	ba.z_index = 5
+	add_child(ba)
 
 
 # =============================================================================
@@ -718,11 +890,18 @@ func _update_camera_focus(p) -> void:
 			target = z.target
 			break
 	var target2 = null
+	var min_zoom := 0.4
+	if target == null:
+		var vf := _void_focus(pos)
+		if vf[0] != null:
+			target = vf[0]
+			target2 = vf[1]
+			min_zoom = 0.33     # [1.66] le vide est large : on voit l'autre rive
 	if target == null:
 		var cf := _cave_focus(pos)
 		target = cf[0]
 		target2 = cf[1]
-	p.camera.focus_min_zoom = 0.4 if target != null else p.camera.FOCUS_MIN_ZOOM
+	p.camera.focus_min_zoom = min_zoom if target != null else p.camera.FOCUS_MIN_ZOOM
 	p.camera.focus_point = target
 	if "focus_point2" in p.camera:
 		p.camera.focus_point2 = target2
@@ -748,13 +927,40 @@ func _cave_focus(pos: Vector2) -> Array:
 			up = g.position + g.node_pos(c + 1, l - 1) + mid
 		if l < g.lanes_n - 1 and g.active.has("%d:%d" % [c + 1, l + 1]):
 			down = g.position + g.node_pos(c + 1, l + 1) + mid
-		if up == null and down == null:
-			return [null, null]
+		# [1.66] retour de test : « tout en bas, la caméra ne montre pas tout le
+		# chemin du bas ». Quand il n'y a pas de galerie dessous, on garde dans
+		# le cadre le SOL de sa propre galerie un peu plus loin (et 260 px
+		# en dessous : les trous sur le vide se voient)
+		if down == null:
+			down = g.position + g.node_pos(c + 1, l) + Vector2(0.0, 260.0)
 		if up == null:
 			return [down, null]
-		if down == null:
-			return [up, null]
 		return [up, down]
+	return [null, null]
+
+
+## [1.66] Dans une zone de vide : la caméra garde dans le cadre l'entrée
+## « en face » (rampe d'accueil) et l'œuf de l'étage (pour monter).
+func _void_focus(pos: Vector2) -> Array:
+	for z in void_zones:
+		if not z.rect.has_point(pos):
+			continue
+		# étage : le tremplin le plus bas qui est encore au-dessus de Pinpouin
+		# (+300 px de marge : juste après le saut, on est un peu sous le bout)
+		var lane: int = z.kick_ends.keys().min()
+		for l in z.kick_ends:
+			if z.kick_ends[l].y <= pos.y + 300.0 and l > lane:
+				lane = l
+		var mouth = null
+		for l in z.mouths:
+			if l >= lane and (mouth == null or l < mouth[0]):
+				mouth = [l, z.mouths[l]]
+		var egg = null
+		if z.eggs.has(lane):
+			egg = holds[z.eggs[lane]]
+		if mouth == null:
+			return [egg, null]
+		return [mouth[1] + Vector2(-300.0, -250.0), egg]
 	return [null, null]
 
 

@@ -15,7 +15,13 @@ func _handle_input(player: CharacterBody2D, delta: float) -> void:
 #		player._states.current._enter(player)
 #		return
 
-	if player.is_on_ground:
+	# [1.66] retour de l'équipe : en pleine figure contre un PLAFOND, les
+	# capteurs (qui tournent avec Pinpouin, à l'envers) touchaient le plafond :
+	# le jeu croyait à un atterrissage raté, lançait la roulade et laissait
+	# Pinpouin « posé » en l'air (comme sur un mur blanc invisible). On ne
+	# compte plus que les vrais sols ; contre un plafond, la figure continue
+	# et Pinpouin retombe normalement.
+	if player.is_on_ground and player.landing.on_real_floor():
 		# [ROULADE 1.50] Demande de l'équipe : toucher le sol en pleine figure
 		# fait la même chute que sur le dos (neige + roulade 0,5 s + étourdi
 		# 1 s, CrashState), au lieu de rester sonné 2 s arrêté net.

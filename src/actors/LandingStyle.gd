@@ -125,8 +125,9 @@ func update(delta: float) -> void:
 	# un VRAI sol seulement (surface tournée vers le haut) : à l'envers sous une
 	# île, les capteurs (qui tournent avec le pingouin) touchent le DESSOUS de
 	# l'île, ce qui n'est pas un atterrissage (bug vu en test : fausse chute)
-	var grounded: bool = _ray_on_floor(player.ground_detector_right) \
-		or _ray_on_floor(player.ground_detector_left) or _body_on_floor()
+	# [1.66] on_real_floor : contact SOUS Pinpouin (un plafond n'est jamais
+	# un atterrissage, même si sa normale paraît tournée vers le haut)
+	var grounded: bool = on_real_floor()
 	if not grounded:
 		_air_time += delta
 		# on retient l'écart avec la pente tant que le jeu ne redresse pas
@@ -229,6 +230,25 @@ func _update_tail_balance(delta: float, grounded: bool, hooked: bool) -> void:
 
 
 ## Ce capteur touche-t-il un sol tourné vers le haut (pas un plafond) ?
+## [1.66] Vrai si Pinpouin touche un VRAI sol (surface tournée vers le haut).
+## Sert à TrixState / CrashState / StaggeredState : toucher un PLAFOND en
+## pleine figure (capteurs tournés vers le haut, Pinpouin à l'envers) n'est
+## pas un atterrissage.
+## Vu au test : contre un plafond de caverne (segments), la normale renvoyée
+## peut pointer vers le haut ; on exige donc AUSSI que le point de contact
+## soit SOUS le centre de Pinpouin.
+func on_real_floor() -> bool:
+	var y0: float = player.global_position.y - 4.0
+	for ray in [player.ground_detector_right, player.ground_detector_left]:
+		if _ray_on_floor(ray) and ray.get_collision_point().y > y0:
+			return true
+	for i in player.get_slide_collision_count():
+		var c = player.get_slide_collision(i)
+		if c.get_normal().y < -0.6 and c.get_position().y > y0:
+			return true
+	return false
+
+
 func _ray_on_floor(ray: RayCast2D) -> bool:
 	return ray.is_colliding() and ray.get_collision_normal().y < -0.3
 
