@@ -681,11 +681,22 @@ const SMOOTH_KINK_MAX_DEG := 25.0
 ## [GLISSE LISSE 1.53] vrai si le pingouin touchait le sol AVANT le mouvement
 ## de cette image (mis à jour dans _physics_process).
 var was_grounded_before_move := false
+## [GLISSE 1.69] Normale du dernier VRAI contact « pieds » avec le sol (image
+## précédente). Sert de référence au lissage : celle des capteurs (rayons)
+## est fausse au sommet d'une bosse ou au fond d'un creux, quand les deux
+## rayons touchent de part et d'autre (vu à la sonde : 24° dans le mauvais
+## sens au sommet d'une vague de caverne).
+var _last_floor_n := Vector2.ZERO
+## [GLISSE 1.69] Au-delà de cet écart entre les normales des deux capteurs,
+## leur moyenne n'est pas fiable (bosse ou creux entre les deux) : le filtre
+## « arête fantôme » ne s'en sert pas.
+const GHOST_RAYS_AGREE_DEG := 10.0
 
 func _apply_godot3_slide(v: Vector2) -> Vector2:
 	var count := get_slide_collision_count()
 	if count == 0:
 		_ghost_filter_blocked_frames = 0
+		_last_floor_n = Vector2.ZERO  # [GLISSE 1.69] aucun contact cette image
 		return v
 
 	var ground_normal := _get_ground_normal()
@@ -742,12 +753,28 @@ func _apply_godot3_slide(v: Vector2) -> Vector2:
 	#   l'ancien sol (la gravité qui « appuie » dans le sol n'est pas comptée).
 	# - Ne touche pas aux vrais atterrissages (il était en l'air), ni aux
 	#   chocs contre un mur (grand angle) : ceux-là gardent leur règle.
-	if was_grounded_before_move and impact_normal != Vector2.ZERO and ground_normal != Vector2.ZERO:
-		var kink_deg: float = absf(rad_to_deg(ground_normal.angle_to(impact_normal)))
-		if kink_deg > 0.5 and kink_deg < SMOOTH_KINK_MAX_DEG:
-			var along_old: float = absf(v_in.dot(ground_normal.orthogonal()))
+	# [GLISSE 1.69] Retour de l'équipe : « des ralentissements au sol, même
+	# lentement ; en sautant à ce moment on a un boost ». Sonde (ground_probe,
+	# hors projet) dans les cavernes : pertes de 20 à 70 px/s en une image
+	#  1. au sommet des bosses : la référence était la normale des CAPTEURS,
+	#     fausse quand ils sont de part et d'autre de la bosse ;
+	#  2. aux jonctions de segments : 2 ou 3 contacts dans la même image, la
+	#     projection retire de la vitesse sur chacun.
+	# On prend maintenant comme référence la normale du dernier VRAI contact
+	# au sol (image précédente) ; et on lisse dès 0° (avant : > 0,5°), y
+	# compris quand plusieurs segments sont touchés à la fois.
+	var ref_n := _last_floor_n if _last_floor_n != Vector2.ZERO else ground_normal
+	if was_grounded_before_move and impact_normal != Vector2.ZERO and ref_n != Vector2.ZERO:
+		var kink_deg: float = absf(rad_to_deg(ref_n.angle_to(impact_normal)))
+		if kink_deg < SMOOTH_KINK_MAX_DEG:
+			var along_old: float = absf(v_in.dot(ref_n.orthogonal()))
 			if v.length() > 1.0 and v.length() < along_old:
 				v = v.normalized() * along_old
+	# [GLISSE 1.69] mémorisée pour l'image SUIVANTE seulement : si cette image
+	# n'a pas eu de contact « pieds », on l'efface (ZERO). Sans ça, une vieille
+	# normale de tremplin servait encore à l'atterrissage suivant et rendait
+	# de la vitesse qui n'existait pas.
+	_last_floor_n = impact_normal
 
 	# Sécurité "vrai mur" : si le filtre agit mais qu'on n'avance plus du tout
 	# pendant plusieurs frames, c'est qu'il y a un véritable obstacle.
@@ -792,6 +819,13 @@ func _is_ghost_collision(col: KinematicCollision2D, n: Vector2, ground_normal: V
 	var local_contact: Vector2 = to_local(col.get_position())
 	if local_contact.y < 3.0:  # contact sur le côté / le haut => vrai obstacle
 		return false
+	# [GLISSE 1.69] capteurs en désaccord (bosse ou creux entre eux) : leur
+	# normale moyenne est fausse, on ne remplace pas la vraie collision par elle
+	if ground_detector_right.is_colliding() and ground_detector_left.is_colliding():
+		var nr: Vector2 = ground_detector_right.get_collision_normal()
+		var nl: Vector2 = ground_detector_left.get_collision_normal()
+		if absf(rad_to_deg(nr.angle_to(nl))) > GHOST_RAYS_AGREE_DEG:
+			return false
 	return abs(rad_to_deg(n.angle_to(ground_normal))) > ghost_normal_max_angle_deg
 
 

@@ -125,9 +125,22 @@ extends ParallaxBackground
 @export var alto_layout: bool = true
 @export var art_scale: float = 4.0
 ## Ligne d'écran (sur 180) où se place le HAUT de chaque image.
-@export var alto_rows := {"clouds": -10.0, "glacier": -100.0, "mountains": -78.0}
+## [FOND 1.69] glacier -100 -> -70 : passé DEVANT les montagnes, sa brume
+## cachait presque tout ; 30 lignes plus bas, elle s'arrête au pied des
+## montagnes (essai à -55 : la bande sombre du bas des nuages réapparaît).
+@export var alto_rows := {"clouds": -10.0, "glacier": -70.0, "mountains": -78.0}
 ## Ordre d'affichage (z_index) : du plus lointain au plus proche.
-@export var alto_z := {"clouds": -126, "glacier": -123, "mountains": -120}
+## [FOND 1.69] Retour de l'équipe : « les montagnes, plus loin que le
+## glacier, bougent plus vite que lui : ce devrait être l'inverse ». Le
+## glacier (brume + falaises, en bas de l'écran) est le plan le plus PROCHE :
+## il passe maintenant DEVANT les montagnes (sa brume au pied des montagnes)
+## et va le plus vite. (1.26 : montagnes devant, -120, glacier -123.)
+@export var alto_z := {"clouds": -126, "mountains": -123, "glacier": -120}
+## [FOND 1.69] Vitesse horizontale de chaque plan (1 = avance avec le
+## terrain, 0 = collé à l'écran), du plus lointain au plus proche. Avant, la
+## vitesse était donnée selon l'ordre d'affichage (parallax_speeds), ce qui
+## donnait aux montagnes la vitesse du premier plan.
+@export var alto_speeds := {"clouds": 0.2, "mountains": 0.35, "glacier": 0.5}
 @export var alto_vertical_strength: float = 0.06
 @export var alto_max_shift: float = 40.0
 @export var alto_follow_time: float = 0.8
@@ -461,7 +474,10 @@ func _setup_alto() -> void:
 		spr.scale = Vector2(signf(spr.scale.x) * art_scale, art_scale)
 		spr.position = Vector2(spr.position.x, 0.0)
 		spr.z_index = alto_z[key]
-		layer.motion_scale = Vector2(parallax_speeds[mini(i, parallax_speeds.size() - 1)], 0.0)
+		# [FOND 1.69] vitesse selon la PROFONDEUR du plan (alto_speeds), plus
+		# selon son rang d'affichage
+		var spd: float = alto_speeds.get(key, parallax_speeds[mini(i, parallax_speeds.size() - 1)])
+		layer.motion_scale = Vector2(spd, 0.0)
 		if infinite_horizontal:
 			var period := _layer_period(layer)
 			if period > 0.0:
