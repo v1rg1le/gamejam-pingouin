@@ -145,6 +145,18 @@ var bg_follow_jumps: bool = true
 ## [GLACE 1.77] Style des plateformes : 1 = glace (nouveau, IceStyle.gd),
 ## 0 = d'origine (deux bleus + bordure de cristaux, comme jusqu'à la 1.76).
 var ground_style: int = 1
+## [BALCONS 1.79] Dessous des bouts de plateforme à la sortie / à l'entrée
+## des cavernes du Gruyère (voir CaveGenerator.balcony_style) : 0 = bloc
+## d'origine, 1 = console, 2 = stalactites rondes (CHOIX DE L'ÉQUIPE, 27/11),
+## 3 = grosse goutte, 4 = corniche.
+var gruyere_balcony_style: int = 2
+## [ŒUFS 1.79] Dessin des œufs à grappiner du Gruyère : -1 = MÉLANGE (choix
+## de l'équipe, 27/11 : « tous ») — chaque œuf garde toujours le même dessin,
+## les 5 dessins reviennent à tour de rôle dans l'ordre du niveau ; 0 = d'origine
+## (blanc + contour), 1 = glace, 2 = tacheté, 3 = craquelé, 4 = bonnet de
+## neige, 5 = bébé Pinpouin (images sprites/levels/gruyere/oeuf_*.png).
+var egg_style: int = -1
+const EGG_STYLES := ["", "glace", "tachete", "craquele", "neige", "bebe"]
 
 
 func _ready() -> void:

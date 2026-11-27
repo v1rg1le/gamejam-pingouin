@@ -218,6 +218,23 @@ var floor_chains: Array = []   # morceaux de sol (bordure de glace)
 # touchés. Écart à la forme d'origine : 1 à 3 px.
 ## [LISSAGE 1.70] Interrupteur (false = collisions d'avant la 1.70).
 @export var smooth_floors := true
+
+# --- [BALCONS 1.79] Bouts de plateforme hors de la montagne ----------------
+# Demande de l'équipe (27/11) : les bouts de sol qui sortent des cavernes
+# (tremplins de sortie, rampes d'accueil des entrées) doivent être mieux
+# intégrés : pas de trait bleu entre eux et la caverne, et une forme de
+# « balcon de glace sans barrière », avec des stalactites aux formes arrondies.
+# Seul le DESSIN du dessous change : le dessus (la collision où l'on glisse)
+# est exactement le même ; le dessous n'a jamais eu de collision.
+#   0 = bloc d'origine (bande droite de 240-260 px sous le sol)
+#   1 = console arrondie (épaisse contre la caverne, fine au bout, nez rond)
+#   2 = stalactites rondes (fine dalle + gouttes de longueurs variées)
+#   3 = grosse goutte (un seul renflement arrondi sous le balcon)
+#   4 = corniche (dalle fine, petites gouttes rondes régulières)
+@export var balcony_style := 0
+## Dessous des virages hors de la montagne : [ligne du sol, épaisseur,
+## index du point contre le flanc (0 ou dernier)] (voir _outer_slab).
+var bend_slabs: Array = []
 ## [LISSAGE 1.70] (Réglages de l'arrondi : depuis la 1.71, dans
 ## src/levels/SmoothCurve.gd, communs à tous les niveaux.)
 ## [LISSAGE 1.70] Deux bouts de chaînes à moins de cette distance sont le
@@ -592,6 +609,7 @@ func _build_geometry() -> void:
 	glass_polys = []
 	boosts = []
 	outer_polys = []
+	bend_slabs = []
 	exit_tips = {}
 	entry_tips = {}
 	floor_chains = []
@@ -976,11 +994,91 @@ func flank_point(l: int, is_entry: bool) -> Vector2:
 
 
 ## [1.66] Bloc de roche sous (ou sur) une ligne : `thick` > 0 vers le bas.
-func _outer_slab(line: PackedVector2Array, thick: float) -> void:
+func _outer_slab(line: PackedVector2Array, thick: float, flank_first := true, balcony := false) -> void:
 	var poly := line.duplicate()
 	for i in range(line.size() - 1, -1, -1):
 		poly.append(line[i] + Vector2(0, thick))
+	# [BALCONS 1.79] les bouts « à l'air libre » (tremplin, rampe d'accueil)
+	# pourront être redessinés en balcon (voir balcony_style) ; on garde la
+	# ligne du sol et le côté du flanc pour ça
+	if balcony and balcony_style > 0:
+		bend_slabs.append([line, thick, flank_first])
+		return
 	outer_polys.append(poly)
+
+
+## [BALCONS 1.79] Forme d'un balcon de glace sous la ligne de sol `line`.
+## Renvoie [polygone, ligne du dessous (pour le fin contour), bande du flanc
+## à retirer des contours]. Le dessus du polygone EST la ligne du sol (la
+## collision ne change pas). Le dessous est calculé le long du balcon, de la
+## caverne (s = 0) au bout (s = L), selon balcony_style ; toutes les formes
+## sont arrondies (gouttes en demi-ellipses, nez rond au bout, congé arrondi
+## contre la caverne pour que le balcon ait l'air de sortir de la roche).
+func _balcony_shape(line: PackedVector2Array, thick: float, flank_first: bool) -> Array:
+	var pts: PackedVector2Array = line if flank_first else PipeBend.reversed(line)
+	# rééchantillonnage tous les ~6 px (les gouttes ont besoin de points serrés)
+	var top := PackedVector2Array([pts[0]])
+	var sd: Array = [0.0]
+	for i in range(1, pts.size()):
+		var a: Vector2 = pts[i - 1]
+		var b: Vector2 = pts[i]
+		var n := maxi(1, ceili(a.distance_to(b) / 6.0))
+		for k in range(1, n + 1):
+			var q := a.lerp(b, float(k) / n)
+			sd.append(sd[-1] + q.distance_to(top[-1]))
+			top.append(q)
+	var L: float = sd[-1]
+	# gouttes (graine fixe : même balcon à chaque partie)
+	var rng := RandomNumberGenerator.new()
+	rng.seed = hash([cave_seed, Vector2i(pts[0].round())])
+	var drips: Array = []   # [centre s, largeur, longueur]
+	if balcony_style == 2:
+		var s := 70.0
+		while s < L - 60.0:
+			var w := rng.randf_range(44.0, 76.0)
+			drips.append([s + w * 0.5, w, rng.randf_range(60.0, 200.0) * (1.0 - 0.6 * s / L)])
+			s += w + rng.randf_range(4.0, 36.0)
+	elif balcony_style == 4:
+		var s := 60.0
+		while s < L - 50.0:
+			drips.append([s + 18.0, 36.0, rng.randf_range(22.0, 46.0)])
+			s += 54.0
+	var under := PackedVector2Array()
+	for i in top.size():
+		var d: float = sd[i]
+		var u := d / maxf(L, 1.0)
+		var base: float
+		match balcony_style:
+			1:   # console : épaisse contre la caverne, de plus en plus fine
+				base = 40.0 + (thick * 1.25 - 40.0) * pow(1.0 - u, 1.7)
+			2:   # dalle fine qui s'amincit, gouttes par-dessous
+				base = 60.0 + 70.0 * (1.0 - u)
+			3:   # un seul gros renflement arrondi (goutte) côté caverne
+				base = 55.0 + 60.0 * (1.0 - u) + 230.0 * exp(-pow((u - 0.32) / 0.22, 2.0))
+			_:   # corniche : dalle fine régulière
+				base = 48.0
+		# congé arrondi contre la caverne (le balcon « sort » de la roche)
+		var t := base + 140.0 * pow(maxf(0.0, 1.0 - d / 220.0), 2.0)
+		# gouttes en demi-ellipses (fond rond)
+		for dr in drips:
+			var dx: float = (d - dr[0]) / (dr[1] * 0.5)
+			if absf(dx) < 1.0:
+				t = maxf(t, base + dr[2] * sqrt(1.0 - dx * dx))
+		# nez arrondi : le dessous remonte en quart d'ellipse jusqu'au bout
+		var r := minf(t, 70.0)
+		if d > L - r:
+			var v := (d - (L - r)) / r
+			t *= sqrt(maxf(0.0, 1.0 - v * v))
+		under.append(top[i] + Vector2(0.0, t))
+	var poly := top.duplicate()
+	for i in range(under.size() - 1, -1, -1):
+		poly.append(under[i])
+	# bande du flanc : de 12 px sous le sol jusqu'au bas du balcon, 12 px de
+	# chaque côté du flanc (le contour de la montagne passe là)
+	var f: Vector2 = top[0]
+	var cut := PackedVector2Array([f + Vector2(-12.0, 12.0), f + Vector2(12.0, 12.0),
+		under[0] + Vector2(12.0, 4.0), under[0] + Vector2(-12.0, 4.0)])
+	return [poly, under, cut]
 
 
 ## [1.66] Toit d'un tube courbe hors de la montagne : bloc au-dessus du
@@ -1030,7 +1128,7 @@ func _build_exit_bend(l: int, phi: float, radius: float) -> void:
 		line = PipeBend.join([line, PipeBend.straight(line[line.size() - 1], phi, DIVE_STRAIGHT)])
 	_add_chain(line)
 	floor_chains.append(line)
-	_outer_slab(line, 260.0)
+	_outer_slab(line, 260.0, true, not dive)   # [BALCONS 1.79] tremplin = balcon
 	exit_tips[l] = {"pos": line[line.size() - 1], "heading": phi}
 	if dive:
 		# PLONGEON : le sol tourne vers le bas (bord arrondi) ; à grande vitesse
@@ -1061,7 +1159,7 @@ func _build_entry_bend(l: int, theta: float, radius: float) -> void:
 		floor_line.append(q + shift)
 	_add_chain(floor_line)
 	floor_chains.append(floor_line)
-	_outer_slab(floor_line, 240.0)
+	_outer_slab(floor_line, 240.0, false, theta > STUB_DEG)   # [BALCONS 1.79] rampe d'accueil = balcon
 	entry_tips[l] = {"pos": floor_line[0], "heading": theta}
 	if theta < STUB_DEG:
 		# ARRIVÉE PAR EN DESSOUS : on monte, le virage tourne vers le bas (le
@@ -1177,6 +1275,27 @@ func _build_nodes() -> void:
 		f.color = ROCK_COLOR
 		f.z_index = 1
 		add_child(f)
+	# --- [BALCONS 1.79] bouts à l'air libre redessinés en balcons de glace
+	var flank_cuts: Array = []   # bandes à retirer des contours (raccord au flanc)
+	var balcony_unders: Array = []   # dessous des balcons (collision accrochable)
+	for bs in bend_slabs:
+		var shape: Array = _balcony_shape(bs[0], bs[1], bs[2])
+		var bp := Polygon2D.new()
+		bp.name = "Balcon"
+		bp.polygon = shape[0]
+		bp.color = ROCK_COLOR      # même glace que la montagne (restylée par IceStyle)
+		bp.z_index = 1
+		add_child(bp)
+		# fin contour sur le DESSOUS seulement (pas contre la caverne)
+		var under_rim := Line2D.new()
+		under_rim.points = shape[1]
+		under_rim.width = 6.0
+		under_rim.default_color = RIM_COLOR
+		under_rim.joint_mode = Line2D.LINE_JOINT_ROUND
+		under_rim.z_index = 2
+		add_child(under_rim)
+		flank_cuts.append(shape[2])
+		balcony_unders.append(shape[1])
 	# --- voile de glace dans les galeries (léger : on voit le décor à travers)
 	if not sketch_only:
 		var glass := Node2D.new()
@@ -1206,6 +1325,21 @@ func _build_nodes() -> void:
 	var rims := Node2D.new()
 	rims.z_index = 2
 	add_child(rims)
+	# [BALCONS 1.79] choix de l'équipe : le DESSOUS des balcons (stalactites)
+	# est accrochable au grappin, comme les plafonds à stalactites des
+	# cavernes (même corps « Plafonds », hors du groupe no_hook). C'est aussi
+	# une vraie surface : Pinpouin ne passe plus à travers le dessous.
+	for under in balcony_unders:
+		var segs_b := PackedVector2Array()
+		for i in under.size() - 1:
+			segs_b.append(under[i])
+			segs_b.append(under[i + 1])
+		var shape_b := ConcavePolygonShape2D.new()
+		shape_b.segments = segs_b
+		var cs_b := CollisionShape2D.new()
+		cs_b.name = "DessousBalcon"
+		cs_b.shape = shape_b
+		ceil_body.add_child(cs_b)
 	# [LISSAGE 1.70] avant de fabriquer les collisions : on recolle les
 	# morceaux de sol bout à bout, puis on arrondit leurs cassures (voir
 	# _smooth_collision_chains plus bas). Ce sont ces chaînes lissées qui
@@ -1226,11 +1360,22 @@ func _build_nodes() -> void:
 			ceil_body.add_child(cs)
 		else:
 			body.add_child(cs)
-		var rim := Line2D.new()
-		rim.points = ch
-		rim.width = RIM_WIDTH
-		rim.default_color = RIM_COLOR
-		rims.add_child(rim)
+		# [BALCONS 1.79] pas de trait bleu entre un balcon et la caverne : le
+		# morceau de flanc caché derrière le balcon est retiré du contour
+		var pieces: Array = [ch]
+		for cut in flank_cuts:
+			var nxt: Array = []
+			for pc in pieces:
+				nxt.append_array(Geometry2D.clip_polyline_with_polygon(pc, cut))
+			pieces = nxt
+		for pc in pieces:
+			if pc.size() < 2:
+				continue
+			var rim := Line2D.new()
+			rim.points = pc
+			rim.width = RIM_WIDTH
+			rim.default_color = RIM_COLOR
+			rims.add_child(rim)
 	# bordure de glace sur les sols
 	for fl in floor_chains:
 		if fl.size() < 2:

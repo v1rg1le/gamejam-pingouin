@@ -140,6 +140,7 @@ var spawn_point := Vector2.ZERO
 var checkpoints: Array = []    # [{name, pos, vel, x}] dans l'ordre (x = seuil de passage)
 var _cp := 0
 var holds := {}                # nom -> centre des œufs
+var _egg_count := 0            # [ŒUFS 1.79] rang de l'œuf (dessin du mélange)
 var jump_zones: Array = []     # [{rect: Rect2, target: Vector2, motif}] zones de dézoom
 var pillars: Array = []        # [{x0, x1, top: PackedVector2Array}] (pour le bot : sol sous lui)
 var bowls: Array = []          # [{entry: Vector2, lip: Vector2}]
@@ -491,6 +492,27 @@ func _add_egg(name: String, center: Vector2) -> void:
 	rim.width = 10.0
 	rim.default_color = RIM_COLOR
 	body.add_child(rim)
+	# [ŒUFS 1.79] dessin en pixel art (tools/art/oeufs_gruyere.py) : l'image a
+	# exactement la forme de la collision (1 pixel = 4 px) ; l'ellipse et le
+	# contour d'origine sont gardés mais cachés
+	var style: int = Settings.egg_style
+	if style < 0:
+		# mélange : les 5 dessins à tour de rôle, dans l'ordre où les œufs
+		# sont posés (toujours le même ordre : chaque œuf garde son dessin)
+		style = 1 + _egg_count % (Settings.EGG_STYLES.size() - 1)
+	_egg_count += 1
+	if style > 0 and style < Settings.EGG_STYLES.size():
+		var tex := load("res://sprites/levels/gruyere/oeuf_%s.png" % Settings.EGG_STYLES[style]) as Texture2D
+		if tex != null:
+			fill.visible = false
+			rim.visible = false
+			var spr := Sprite2D.new()
+			spr.name = "DessinOeuf"
+			spr.texture = tex
+			spr.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+			spr.scale = Vector2(4.0, 4.0)
+			spr.position = center
+			body.add_child(spr)
 	add_child(body)
 
 
@@ -603,6 +625,7 @@ func _make_cave(i: int, origin: Vector2) -> CaveGenerator:
 	g.entry_radii.assign(cfg.get("theta_r", []))
 	g.exit_radii.assign(cfg.get("phi_r", []))
 	g.columns = CAVE_COLUMNS
+	g.balcony_style = Settings.gruyere_balcony_style   # [BALCONS 1.79]
 	g.position = origin
 	add_child(g)
 	caves.append(g)
