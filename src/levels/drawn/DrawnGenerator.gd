@@ -68,6 +68,10 @@ func _ready() -> void:
 	for h in DrawnLevel.hook_list(DrawnLevel.islands()):
 		var fish = fish_res.instantiate()
 		fish.position = h.pos
+		# [CRÉATEUR v2 1.80] angle et taille réglés dans l'éditeur (la forme
+		# de glace d'IceStyle et la collision suivent le nœud)
+		fish.rotation = h.rot
+		fish.scale = Vector2.ONE * h.scale
 		add_child(fish)
 
 	# 4. Murs : avant le départ (on ne recule pas dans le vide) et au bout de
@@ -86,11 +90,32 @@ func _ready() -> void:
 
 	# 6. Départ : un peu après le début du premier trait
 	var sx: float = minf(first[0].x + 150.0, first[first.size() - 1].x)
-	get_parent()._set_spawn_position(Vector2(sx, DrawnLevel.surface_y_of(first, sx) - 80.0))
+	# [CRÉATEUR v2 1.80] « Tester d'ici » : départ à l'endroit choisi dans
+	# l'éditeur, lancé à la vitesse réglée (vers la droite) ; on remet
+	# test_from à INF tout de suite (un « Rejouer » repart du vrai départ)
+	if DrawnLevel.testing_from_here():
+		var from := DrawnLevel.test_from
+		DrawnLevel.test_from = Vector2.INF
+		get_parent()._set_spawn_position(from)
+		_launch_player.call_deferred(DrawnLevel.test_speed)
+	else:
+		get_parent()._set_spawn_position(Vector2(sx, DrawnLevel.surface_y_of(first, sx) - 80.0))
 
 	# 7. Bouton « ✏ Éditer » (pas sur un niveau de la communauté : lecture seule)
 	if not DrawnLevel.is_official:
 		_add_edit_button()
+
+
+## [CRÉATEUR v2 1.80] Donne la vitesse de départ de « Tester d'ici » au
+## pingouin (il est créé par LevelRandom après ce générateur : on attend
+## qu'il existe).
+func _launch_player(speed: float) -> void:
+	for i in 10:
+		var p = get_tree().get_first_node_in_group("player")
+		if p != null:
+			p._velocity = Vector2(speed, 0.0)
+			return
+		await get_tree().physics_frame
 
 
 ## Un îlot = le trait en haut + le fond plat en bas.
@@ -103,7 +128,11 @@ func _add_island(top: PackedVector2Array, bottom: float) -> void:
 	body.collision_layer = 2
 	var col := CollisionPolygon2D.new()
 	col.build_mode = CollisionPolygon2D.BUILD_SEGMENTS   # [FIX VITESSE -> 0] contour seul
-	col.polygon = poly
+	# [CRÉATEUR v2 1.80] collision lissée en courbe C² comme tous les autres
+	# niveaux depuis la 1.71 (SmoothCurve : au plus 1° d'un segment au
+	# suivant, angles vifs > 30° gardés) ; utile maintenant qu'il n'y a plus
+	# de limite de pente. Le dessin garde les points du trait.
+	col.polygon = SmoothCurve.smooth_closed(poly)
 	body.add_child(col)
 	var fill := Polygon2D.new()
 	fill.color = ICE_COLOR

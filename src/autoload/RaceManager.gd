@@ -237,7 +237,10 @@ func _on_node_added(node: Node) -> void:
 func _prepare_level(path: String) -> void:
 	_reset_race()
 	# [MES NIVEAUX 1.46] niveau dessiné : chemin virtuel propre au dessin
-	if path.ends_with(DRAWN_LEVEL + ".tscn") and not NetSession.in_race:
+	# [CRÉATEUR v2 1.80] « Tester d'ici » : on garde le chemin réel
+	# LevelDrawn.tscn, qui n'enregistre rien (ni record, ni fantôme, ni
+	# médaille) : une course commencée au milieu du niveau ne compte pas
+	if path.ends_with(DRAWN_LEVEL + ".tscn") and not NetSession.in_race and not DrawnLevel.testing_from_here():
 		DrawnLevel.load_once()
 		path = DrawnLevel.race_path()
 	level_path = path

@@ -42,7 +42,13 @@ extends RefCounted
 # =============================================================================
 
 ## Version du format (pour pouvoir le faire évoluer plus tard sans tout casser)
-const SAVE_VERSION = 1
+## [CRÉATEUR v2 1.80] format 2 : les prises de grappin ont un angle et une
+## taille, et une liste d'objets typés (`objects`) est prête pour les objets
+## de la 1.81 (œufs, boosts, départ…). Les fichiers et codes du format 1 se
+## lisent toujours (voir _read_file / _apply / decode_code).
+const SAVE_VERSION = 2
+## Plus vieux format encore lu
+const SAVE_VERSION_MIN = 1
 ## Scènes : l'éditeur et le niveau jouable
 const EDITOR_SCENE = "res://src/screens/LevelEditor.tscn"
 const LEVEL_SCENE = "res://src/levels/LevelDrawn.tscn"
@@ -57,7 +63,15 @@ const SMOOTH_PASSES = 3
 const RESAMPLE_STEP = 32.0
 ## Pente maximale du sol (le half-pipe monte plus raide, mais un trait
 ## presque vertical bloquerait le pingouin net)
+## [CRÉATEUR v2 1.80] décision de l'équipe (27/11) : PLUS DE LIMITE DE PENTE
+## sur les traits (le seul garde-fou sera la validation, en 1.81). La
+## constante ne sert plus qu'au raccord de deux traits presque collés (voir
+## islands()), pour ne pas créer une marche verticale par accident.
 const MAX_SLOPE_DEG = 60.0
+## [CRÉATEUR v2 1.80] écart entre deux points du sol le long du trait
+## (ré-échantillonnage à la longueur, plus seulement en x : une pente raide
+## garde autant de points qu'un plat)
+const RESAMPLE_ARC = 32.0
 ## Deux traits séparés de moins que ça sont recollés en un seul îlot
 ## (on peut ainsi « reprendre » un trait sans créer de trou minuscule)
 const MERGE_GAP = 70.0
@@ -81,8 +95,16 @@ const RUNOUT_LENGTH = 1600.0
 
 ## Les traits nettoyés (Array de PackedVector2Array, x croissants)
 static var strokes: Array = []
-## Blocs de grappin posés À LA MAIN (Array de Vector2, position du monde)
+## Blocs de grappin posés À LA MAIN.
+## [CRÉATEUR v2 1.80] chaque bloc est un Dictionary {pos: Vector2 (monde),
+## rot: float (radians), scale: float (1 = taille d'origine)} (avant : un
+## simple Vector2). Voir make_hook().
 static var hooks: Array = []
+## [CRÉATEUR v2 1.80] Objets typés du format 2 : [{type: String, pos: Vector2,
+## rot: float, scale: float, props: Dictionary}]. Vide en 1.80 (les prises de
+## grappin restent dans `hooks` pour que les niveaux existants gardent la
+## même empreinte, donc leurs records) ; les objets de la 1.81 s'y rangeront.
+static var objects: Array = []
 ## Blocs de grappin automatiques au-dessus des trous larges (oui / non)
 static var auto_hooks: bool = true
 ## Le fichier a-t-il déjà été lu depuis le lancement du jeu ?
@@ -94,6 +116,12 @@ static var _loaded: bool = false
 ## Transforme un trait brut (les positions du doigt / de la souris) en un sol
 ## propre. Renvoie un tableau VIDE si le trait est trop court.
 static func process_stroke(raw: PackedVector2Array) -> PackedVector2Array:
+	# [CRÉATEUR v2 1.80] on peut dessiner dans les DEUX sens : un trait tracé
+	# de droite à gauche est simplement retourné (le sol se lit toujours de
+	# gauche à droite, c'est le sens de la course)
+	if raw.size() >= 2 and raw[raw.size() - 1].x < raw[0].x:
+		raw = raw.duplicate()
+		raw.reverse()
 	# a. seulement les points qui avancent vers la droite
 	var pts := PackedVector2Array()
 	for p in raw:
@@ -107,10 +135,12 @@ static func process_stroke(raw: PackedVector2Array) -> PackedVector2Array:
 	#    mélange de deux voisins)
 	for i in SMOOTH_PASSES:
 		pts = _chaikin(pts)
-	# d. un point tous les RESAMPLE_STEP px
-	pts = _resample(pts, RESAMPLE_STEP)
-	# e. pente maximale
-	return _clamp_slope(pts)
+	# d. un point tous les RESAMPLE_ARC px LE LONG du trait [CRÉATEUR v2 1.80]
+	#    (avant : tous les RESAMPLE_STEP px en x, ce qui laissait très peu de
+	#    points dans les pentes raides)
+	# e. [CRÉATEUR v2 1.80] plus de pente maximale (décision de l'équipe) :
+	#    _clamp_slope n'est plus appelé ici
+	return _resample_arc(pts, RESAMPLE_ARC)
 
 
 ## Ramer-Douglas-Peucker : garde les points qui s'écartent de plus de
@@ -169,6 +199,29 @@ static func _resample(pts: PackedVector2Array, step: float) -> PackedVector2Arra
 	return out
 
 
+## [CRÉATEUR v2 1.80] Un point tous les `step` px mesurés LE LONG du trait ;
+## les x restent strictement croissants (un sol se lit de gauche à droite),
+## même dans une pente presque verticale.
+static func _resample_arc(pts: PackedVector2Array, step: float) -> PackedVector2Array:
+	var out := PackedVector2Array([pts[0]])
+	var carry := 0.0   # longueur déjà parcourue depuis le dernier point posé
+	for i in range(1, pts.size()):
+		var a: Vector2 = pts[i - 1]
+		var b: Vector2 = pts[i]
+		var seg := a.distance_to(b)
+		var d := step - carry
+		while d <= seg:
+			var q := a.lerp(b, d / maxf(seg, 0.001))
+			if q.x > out[out.size() - 1].x + 0.5:
+				out.append(q)
+			d += step
+		carry = seg - (d - step)
+	var last: Vector2 = pts[pts.size() - 1]
+	if last.x > out[out.size() - 1].x + 0.5:
+		out.append(last)
+	return out
+
+
 ## Limite la pente entre deux points voisins (de gauche à droite). Si le trait
 ## monte ou descend trop vite, le sol suit à la pente max puis rejoint le trait.
 static func _clamp_slope(pts: PackedVector2Array) -> PackedVector2Array:
@@ -220,7 +273,7 @@ static func _x_is_taken(x: float) -> bool:
 ## `radius` = tolérance en px du monde. Renvoie vrai si quelque chose a été effacé.
 static func erase_at(pos: Vector2, radius: float) -> bool:
 	for i in range(hooks.size() - 1, -1, -1):
-		if (hooks[i] as Vector2).distance_to(pos) < radius:
+		if (hooks[i].pos as Vector2).distance_to(pos) < radius * maxf(1.0, hooks[i].scale):
 			hooks.remove_at(i)
 			return true
 	for i in strokes.size():
@@ -235,10 +288,73 @@ static func erase_at(pos: Vector2, radius: float) -> bool:
 ## Pose un bloc de grappin à la main, ou retire celui qui est déjà là.
 static func toggle_hook(pos: Vector2, radius: float) -> void:
 	for i in hooks.size():
-		if (hooks[i] as Vector2).distance_to(pos) < radius:
+		if (hooks[i].pos as Vector2).distance_to(pos) < radius:
 			hooks.remove_at(i)
 			return
-	hooks.append(pos)
+	hooks.append(make_hook(pos))
+
+
+## [CRÉATEUR v2 1.80] Un bloc de grappin posé à la main
+static func make_hook(pos: Vector2, rot := 0.0, scale := 1.0) -> Dictionary:
+	return {"pos": pos, "rot": rot, "scale": scale}
+
+
+# --- [CRÉATEUR v2 1.80] Sélection, déplacement, copie --------------------------
+# L'outil « Sélection » de l'éditeur touche un bloc de grappin ou un trait
+# de sol, le déplace, le copie ou le supprime. Les règles (un seul sol par
+# abscisse : deux traits ne se superposent pas) restent celles du dessin.
+
+## Ce qui est sous `pos` : {kind: "hook" | "stroke", index: int} ou {} (rien).
+## Les blocs passent avant les traits (ils sont dessinés par-dessus).
+static func pick_at(pos: Vector2, radius: float) -> Dictionary:
+	for i in range(hooks.size() - 1, -1, -1):
+		if (hooks[i].pos as Vector2).distance_to(pos) < radius * maxf(1.0, hooks[i].scale):
+			return {"kind": "hook", "index": i}
+	for i in strokes.size():
+		var st: PackedVector2Array = strokes[i]
+		if pos.x >= st[0].x - radius * 0.5 and pos.x <= st[st.size() - 1].x + radius * 0.5:
+			if absf(surface_y_of(st, pos.x) - pos.y) < radius * 1.5:
+				return {"kind": "stroke", "index": i}
+	return {}
+
+
+## Vrai si la bande d'abscisses [x0, x1] ne touche aucun trait (sauf `except_i`)
+static func x_range_free(x0: float, x1: float, except_i := -1) -> bool:
+	for i in strokes.size():
+		if i == except_i:
+			continue
+		var st: PackedVector2Array = strokes[i]
+		if x1 >= st[0].x and x0 <= st[st.size() - 1].x:
+			return false
+	return true
+
+
+## Décale un trait de `delta`. Refusé (false, rien ne bouge) s'il viendrait
+## au-dessus ou en dessous d'un autre trait.
+static func move_stroke(i: int, delta: Vector2) -> bool:
+	var st: PackedVector2Array = strokes[i]
+	if not x_range_free(st[0].x + delta.x, st[st.size() - 1].x + delta.x, i):
+		return false
+	var moved := PackedVector2Array()
+	for q in st:
+		moved.append(q + delta)
+	strokes[i] = moved
+	strokes.sort_custom(func(a, b): return a[0].x < b[0].x)
+	return true
+
+
+## Copie d'un trait, posée juste après le dernier trait du niveau (à la
+## même hauteur de départ que l'original). Renvoie l'index de la copie.
+static func duplicate_stroke(i: int) -> int:
+	var st: PackedVector2Array = strokes[i]
+	var end_x: float = strokes[strokes.size() - 1][strokes[strokes.size() - 1].size() - 1].x
+	var delta := Vector2(end_x + 400.0 - st[0].x, 0.0)
+	var copy := PackedVector2Array()
+	for q in st:
+		copy.append(q + delta)
+	strokes.append(copy)
+	strokes.sort_custom(func(a, b): return a[0].x < b[0].x)
+	return strokes.find(copy)
 
 
 ## Hauteur du sol d'un trait à l'abscisse x (x hors du trait = son bord le plus proche)
@@ -297,9 +413,10 @@ static func hook_list(isl: Array) -> Array:
 			var top: float = minf(g.y0, g.y1)
 			for k in n:
 				var x: float = g.x0 + g.width * (k + 0.5) / n
-				out.append({"pos": Vector2(x, top - HOOK_HEIGHT), "auto": true})
+				out.append({"pos": Vector2(x, top - HOOK_HEIGHT), "auto": true, "rot": 0.0, "scale": 1.0})
 	for h in hooks:
-		out.append({"pos": h, "auto": false})
+		# [CRÉATEUR v2 1.80] angle et taille du bloc posé à la main
+		out.append({"pos": h.pos, "auto": false, "rot": h.rot, "scale": h.scale})
 	return out
 
 
@@ -335,6 +452,11 @@ static func is_playable() -> bool:
 	return not strokes.is_empty()
 
 
+## [CRÉATEUR v2 1.80] Taille d'un bloc de grappin posé à la main (réglage)
+const HOOK_SCALE_MIN = 0.5
+const HOOK_SCALE_MAX = 2.5
+
+
 # --- 4. Annuler ----------------------------------------------------------------
 
 ## Copie complète de l'état (pour « Annuler »)
@@ -342,7 +464,8 @@ static func snapshot() -> Dictionary:
 	var s: Array = []
 	for st in strokes:
 		s.append(PackedVector2Array(st))
-	return {"strokes": s, "hooks": hooks.duplicate(), "auto": auto_hooks}
+	# [CRÉATEUR v2 1.80] copie PROFONDE : les blocs sont des Dictionary
+	return {"strokes": s, "hooks": hooks.duplicate(true), "auto": auto_hooks, "objects": objects.duplicate(true)}
 
 
 ## Remet un état copié par snapshot()
@@ -350,8 +473,9 @@ static func restore(snap: Dictionary) -> void:
 	strokes = []
 	for st in snap.strokes:
 		strokes.append(PackedVector2Array(st))
-	hooks = (snap.hooks as Array).duplicate()
+	hooks = (snap.hooks as Array).duplicate(true)
 	auto_hooks = snap.auto
+	objects = (snap.get("objects", []) as Array).duplicate(true)
 
 
 # --- 5. [MES NIVEAUX 1.46] Plusieurs niveaux nommés -------------------------------
@@ -402,7 +526,23 @@ static func _drawing_data() -> Dictionary:
 			flat.append(snappedf(p.y, 0.1))
 		data.strokes.append(flat)
 	for h in hooks:
-		data.hooks.append([snappedf(h.x, 0.1), snappedf(h.y, 0.1)])
+		# [CRÉATEUR v2 1.80] un bloc sans angle ni taille s'écrit comme en
+		# format 1 ([x, y]) : les niveaux existants gardent la même empreinte
+		# (donc leurs records et fantômes) ; sinon [x, y, angle, taille]
+		var rot: float = snappedf(h.rot, 0.001)
+		var sc: float = snappedf(h.scale, 0.01)
+		if is_zero_approx(rot) and is_equal_approx(sc, 1.0):
+			data.hooks.append([snappedf(h.pos.x, 0.1), snappedf(h.pos.y, 0.1)])
+		else:
+			data.hooks.append([snappedf(h.pos.x, 0.1), snappedf(h.pos.y, 0.1), rot, sc])
+	# [CRÉATEUR v2 1.80] objets typés : seulement s'il y en a (même empreinte sinon)
+	if not objects.is_empty():
+		var objs: Array = []
+		for o in objects:
+			objs.append({"t": str(o.type), "x": snappedf(o.pos.x, 0.1), "y": snappedf(o.pos.y, 0.1),
+				"r": snappedf(o.get("rot", 0.0), 0.001), "s": snappedf(o.get("scale", 1.0), 0.01),
+				"p": o.get("props", {})})
+		data["objects"] = objs
 	return data
 
 
@@ -423,7 +563,7 @@ static func save() -> void:
 		current_name = next_free_name()
 	if is_official:
 		return   # [PARTAGE 1.47] niveau de la communauté : lecture seule
-	if strokes.is_empty() and hooks.is_empty():
+	if strokes.is_empty() and hooks.is_empty() and objects.is_empty():
 		return   # niveau vide : pas de fichier (il apparaîtra au 1er trait)
 	DirAccess.make_dir_recursive_absolute(LEVELS_DIR)
 	var path := LEVELS_DIR.path_join(current_id + ".json")
@@ -454,7 +594,8 @@ static func _read_file(path: String):
 	if not FileAccess.file_exists(path):
 		return null
 	var data = JSON.parse_string(FileAccess.get_file_as_string(path))
-	if not (data is Dictionary) or int(data.get("version", 0)) != SAVE_VERSION:
+	# [CRÉATEUR v2 1.80] formats 1 et 2 acceptés
+	if not (data is Dictionary) or int(data.get("version", 0)) < SAVE_VERSION_MIN or int(data.get("version", 0)) > SAVE_VERSION:
 		return null
 	return data
 
@@ -470,8 +611,17 @@ static func _apply(data: Dictionary) -> void:
 			strokes.append(s)
 	hooks = []
 	for h in data.get("hooks", []):
-		hooks.append(Vector2(float(h[0]), float(h[1])))
+		# [CRÉATEUR v2 1.80] [x, y] (format 1) ou [x, y, angle, taille]
+		if (h as Array).size() >= 4:
+			hooks.append(make_hook(Vector2(float(h[0]), float(h[1])), float(h[2]), clampf(float(h[3]), HOOK_SCALE_MIN, HOOK_SCALE_MAX)))
+		else:
+			hooks.append(make_hook(Vector2(float(h[0]), float(h[1]))))
 	auto_hooks = bool(data.get("auto_hooks", true))
+	objects = []
+	for o in data.get("objects", []):
+		if o is Dictionary:
+			objects.append({"type": str(o.get("t", "")), "pos": Vector2(float(o.get("x", 0)), float(o.get("y", 0))),
+				"rot": float(o.get("r", 0.0)), "scale": float(o.get("s", 1.0)), "props": o.get("p", {})})
 
 
 ## Au 1er appel : reprise de l'ancien fichier 1.45, puis ouverture du dernier
@@ -530,6 +680,7 @@ static func new_level(level_name: String) -> void:
 	is_official = false
 	strokes = []
 	hooks = []
+	objects = []
 	auto_hooks = true
 
 
@@ -613,6 +764,9 @@ static func next_free_name() -> String:
 
 const CODE_PREFIX = "PINPOUIN-NIVEAU:1:"
 const CODE_VERSION = 1
+## [CRÉATEUR v2 1.80] version de code la plus récente comprise (2 : blocs
+## tournés / agrandis, objets typés)
+const CODE_VERSION_MAX = 2
 ## Niveaux de la communauté livrés avec le jeu
 const OFFICIAL_DIR = "res://src/levels/drawn/officiels"
 ## Écran des niveaux de la communauté
@@ -665,6 +819,15 @@ static func share_code(level_id: String, with_ghost: bool) -> String:
 		"author": str(data.get("author", "")) if str(data.get("author", "")) != "" else author_name(),
 		"auto_hooks": bool(data.get("auto_hooks", true)),
 		"strokes": data.get("strokes", []), "hooks": data.get("hooks", [])}
+	# [CRÉATEUR v2 1.80] un niveau qui utilise le format 2 (blocs tournés ou
+	# agrandis, objets) part en code de version 2 ; sinon le code reste en
+	# version 1 et se lit aussi dans les anciennes versions du jeu
+	var v2: bool = data.has("objects")
+	for h in data.get("hooks", []):
+		v2 = v2 or (h as Array).size() >= 4
+	if v2:
+		payload.v = CODE_VERSION_MAX
+		payload["objects"] = data.get("objects", [])
 	if with_ghost:
 		var g = RaceManager.load_best_ghost(race_path_of({"id": level_id, "hash": str(data.get("hash", ""))}))
 		if g != null:
@@ -707,7 +870,7 @@ static func decode_code(text: String) -> Dictionary:
 	if raw.size() != size:
 		return {"ok": false, "msg": "Code abîmé (texte coupé ?)."}
 	var data = bytes_to_var(raw)   # sans objets : pas de code exécutable
-	if typeof(data) != TYPE_DICTIONARY or int(data.get("v", 0)) != CODE_VERSION:
+	if typeof(data) != TYPE_DICTIONARY or int(data.get("v", 0)) < CODE_VERSION or int(data.get("v", 0)) > CODE_VERSION_MAX:
 		return {"ok": false, "msg": "Code d'une autre version du jeu, ou abîmé."}
 	var err := _validate(data)
 	if err != "":
@@ -733,8 +896,14 @@ static func _validate(data: Dictionary) -> String:
 	if n > MAX_POINTS or (data.hooks as Array).size() > 500:
 		return "Ce niveau est trop grand."
 	for h in data.hooks:
-		if not (h is Array) or (h as Array).size() != 2 or not is_finite(float(h[0])) or not is_finite(float(h[1])):
+		# [CRÉATEUR v2 1.80] [x, y] ou [x, y, angle, taille]
+		if not (h is Array) or not ((h as Array).size() in [2, 4]):
 			return "Code abîmé (bloc de grappin illisible)."
+		for v in h:
+			if not (typeof(v) in [TYPE_FLOAT, TYPE_INT]) or not is_finite(float(v)) or absf(float(v)) > COORD_MAX:
+				return "Code abîmé (bloc de grappin illisible)."
+	if data.has("objects") and (not (data.objects is Array) or (data.objects as Array).size() > 2000):
+		return "Code abîmé (objets illisibles)."
 	return ""
 
 
@@ -746,7 +915,8 @@ static func import_level(data: Dictionary) -> String:
 	# un niveau identique (même dessin) est déjà là ?
 	strokes = []
 	hooks = []
-	_apply({"strokes": data.strokes, "hooks": data.hooks, "auto_hooks": bool(data.get("auto_hooks", true))})
+	_apply({"strokes": data.strokes, "hooks": data.hooks, "auto_hooks": bool(data.get("auto_hooks", true)),
+		"objects": data.get("objects", [])})
 	var h := content_hash()
 	for e in list_levels():
 		if e.hash == h:
@@ -885,3 +1055,65 @@ static func open_official(slug: String) -> bool:
 	is_official = true
 	_apply(data)
 	return true
+
+
+# --- 7. [CRÉATEUR v2 1.80] « Tester d'ici », vue de l'éditeur, préférences ------
+# « Tester d'ici » (demande du plan validé le 27/11) : on lance le test à
+# l'endroit regardé dans l'éditeur, avec une vitesse de départ réglable.
+#  - test_from : point de départ (Vector2.INF = départ normal du niveau) ;
+#  - test_speed : vitesse de départ (px/s, vers la droite) ;
+#  - une course lancée « d'ici » ne compte JAMAIS (ni record, ni fantôme,
+#    ni médaille) : RaceManager garde alors le chemin réel LevelDrawn.tscn,
+#    qui n'enregistre rien (voir RaceManager._prepare_level) ;
+#  - DrawnGenerator lit ces valeurs à la construction du niveau puis remet
+#    test_from à INF (un « Rejouer » repart du vrai départ).
+# editor_view garde la caméra de l'éditeur : en revenant d'un test, on
+# retrouve l'éditeur exactement là où on l'avait laissé.
+
+## Point de départ du test (INF = départ normal)
+static var test_from: Vector2 = Vector2.INF
+## Vitesse de départ du test (px/s)
+static var test_speed: float = 600.0
+## Vue de l'éditeur à retrouver : {pos: Vector2, zoom: float} ({} = cadrer le dessin)
+static var editor_view: Dictionary = {}
+
+
+## Vrai si le prochain lancement du niveau est un « Tester d'ici »
+static func testing_from_here() -> bool:
+	return test_from != Vector2.INF
+
+
+## Préférence de l'éditeur (mode Expert, magnétisme…) gardée dans pinpouin.cfg
+static func pref(key: String, default_value):
+	var cfg := ConfigFile.new()
+	cfg.load(CONFIG_PATH)
+	return cfg.get_value("creator", key, default_value)
+
+
+static func set_pref(key: String, value) -> void:
+	var cfg := ConfigFile.new()
+	cfg.load(CONFIG_PATH)
+	cfg.set_value("creator", key, value)
+	cfg.save(CONFIG_PATH)
+
+
+## Point de départ pour « Tester d'ici » à l'abscisse x : sur le sol du trait
+## qui passe par x (ou du trait le plus proche), 80 px au-dessus.
+## Vector2.INF s'il n'y a aucun sol.
+static func start_point_near(x: float) -> Vector2:
+	var isl := islands()
+	if isl.is_empty():
+		return Vector2.INF
+	var best: PackedVector2Array = isl[0]
+	var best_d := INF
+	for st in isl:
+		var d := 0.0
+		if x < st[0].x:
+			d = st[0].x - x
+		elif x > st[st.size() - 1].x:
+			d = x - st[st.size() - 1].x
+		if d < best_d:
+			best_d = d
+			best = st
+	var sx := clampf(x, best[0].x + 40.0, best[best.size() - 1].x - 40.0)
+	return Vector2(sx, surface_y_of(best, sx) - 80.0)

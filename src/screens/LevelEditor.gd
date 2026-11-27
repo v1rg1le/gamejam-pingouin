@@ -23,12 +23,31 @@ extends Node2D
 #  Barre du haut : Retour, Annuler, Tout effacer, Plafonds auto (blocs de
 #  grappin automatiques au-dessus des trous larges).
 #
+#  [CRÉATEUR v2 1.80] Fondations du créateur complet (plan validé le 27/11) :
+#   - SÉLECTION : toucher un bloc ou un trait le sélectionne ; on le glisse
+#     pour le déplacer ; un bloc a deux poignées (rond du haut = tourner,
+#     carré de droite = agrandir) ; panneau de réglages à droite (taille,
+#     angle ; position exacte en Expert), Dupliquer, Supprimer ;
+#   - OBJETS (ancien outil Grappin) : une palette à onglets (Objets, Terrain,
+#     Décor, Gros blocs) ; en 1.80 on y pose la prise de grappin, les autres
+#     éléments sont annoncés (grisés) pour les versions 1.81 à 1.83 ;
+#   - Annuler / Refaire sur 60 pas (Ctrl+Z, Ctrl+Y ou Ctrl+Maj+Z) ;
+#   - « ▶ D'ici » : tester depuis l'endroit regardé, avec une vitesse de
+#     départ (réglable en Expert) ; la course ne compte pas pour les records ;
+#     au retour, l'éditeur est au même endroit ;
+#   - mode SIMPLE (par défaut : peu de boutons, 1 ou 2 curseurs) / EXPERT
+#     (position exacte, magnétisme sur grille de 32 px et angles de 15°,
+#     raccourcis Suppr, D = dupliquer, Échap) ;
+#   - traits dans les deux sens (de droite à gauche aussi) et sans limite
+#     de pente.
+#
 #  Le monde est dessiné par CE nœud (_draw), dans les coordonnées du jeu :
 #  1 px ici = 1 px en course. L'aperçu utilise les MÊMES fonctions que le
 #  niveau jouable : ce qu'on voit est ce qu'on joue.
 # =============================================================================
 
-enum Tool { DRAW, HOOK, ERASE, MOVE }
+## [CRÉATEUR v2 1.80] HOOK = outil « Objets » (palette), SELECT = Sélection
+enum Tool { DRAW, HOOK, ERASE, MOVE, SELECT }
 
 ## Zoom de la vue (Camera2D.zoom) : petit = on voit plus loin
 const ZOOM_MIN = 0.06
@@ -41,6 +60,16 @@ const AUTO_SCROLL_SPEED = 520.0
 const AUTO_SCROLL_EDGE = 0.86     # à partir de 86 % de la largeur de l'écran
 ## Nombre maximum d'étapes « Annuler »
 const UNDO_MAX = 60
+## [CRÉATEUR v2 1.80] Magnétisme (Expert) : grille des positions et pas des angles
+const SNAP_GRID = 32.0
+const SNAP_ANGLE_DEG = 15.0
+## [CRÉATEUR v2 1.80] Taille d'un bloc de grappin à l'échelle 1 (demi-axes de
+## l'ellipse de l'aperçu, px du monde)
+const HOOK_RX = 110.0
+const HOOK_RY = 42.0
+## [CRÉATEUR v2 1.80] Vitesse de départ de « ▶ D'ici » en mode Simple (px/s)
+const TEST_SPEED_SIMPLE = 600.0
+const SELECT_COLOR = Color(1.0, 0.85, 0.2)                  # sélection (jaune)
 ## Hauteur des barres de l'interface (px, avant mise à l'échelle) : sert à
 ## placer l'aide et à cadrer le dessin dans la zone libre
 const TOP_BAR_H = 70.0
@@ -68,11 +97,32 @@ var _two_finger := false           # geste à deux doigts en cours (dessin suspe
 var _pinch_center := Vector2.ZERO
 var _pinch_dist := 0.0
 var _undo: Array = []              # pile de DrawnLevel.snapshot()
+# --- [CRÉATEUR v2 1.80] refaire, sélection, modes ---
+var _redo: Array = []              # pile « Refaire » (vidée à chaque nouvelle modification)
+var _draw_dir := 0                 # sens du trait en cours : 0 = pas encore décidé, 1 = droite, -1 = gauche
+var expert := false                # mode Expert (sinon Simple)
+var magnet := false                # magnétisme (Expert seulement)
+var _sel: Dictionary = {}          # sélection : {kind: "hook" | "stroke", index} ou {}
+var _drag := ""                    # geste sur la sélection : "", "move", "rotate", "scale"
+var _drag_start := Vector2.ZERO    # point du monde au début du geste
+var _drag_orig := {}               # bloc avant le geste (copie)
+var _drag_delta := Vector2.ZERO    # décalage d'un trait pendant qu'on le glisse (aperçu)
+var _drag_snap := {}               # état avant le geste (pour Annuler)
+var _coalesce_key := ""            # curseurs : une seule étape « Annuler » par réglage continu
+var _coalesce_time := 0
+var palette_item := "hook"         # élément choisi dans la palette de l'outil Objets
+var _palette_tab := 0
 
 # --- interface ---
 var _ui_layer: CanvasLayer
 var _tool_buttons := {}            # Tool -> Button
 var _undo_button: Button
+var _redo_button: Button           # [CRÉATEUR v2 1.80]
+var _mode_button: Button           # [CRÉATEUR v2 1.80] Simple / Expert
+var _magnet_button: Button         # [CRÉATEUR v2 1.80] aimant (Expert)
+var _palette: PanelContainer       # [CRÉATEUR v2 1.80] palette de l'outil Objets
+var _settings: PanelContainer      # [CRÉATEUR v2 1.80] réglages de la sélection
+var _speed_spin: SpinBox           # [CRÉATEUR v2 1.80] vitesse de départ de « D'ici » (Expert)
 var _test_button: Button
 var _auto_check: CheckButton
 var _hint: Label
@@ -80,15 +130,19 @@ var _info: Label
 var _penguin_tex: Texture2D = preload("res://icon.png")
 
 const TOOL_HINTS := {
-	Tool.DRAW: "Dessine le SOL de gauche à droite. Lève le doigt : ça fait un trou. Le jeu crée les blocs tout seul.",
-	Tool.HOOK: "Touche pour poser un bloc de grappin. Touche un bloc posé à la main pour le retirer.",
+	Tool.DRAW: "Dessine le SOL (dans un sens ou dans l'autre, aussi raide que tu veux). Lève le doigt : ça fait un trou.",
+	Tool.HOOK: "Choisis un élément dans la palette, puis touche le niveau pour le poser. Touche un bloc pour le sélectionner.",
 	Tool.ERASE: "Touche ou glisse sur un trait ou un bloc pour l'effacer.",
 	Tool.MOVE: "Glisse pour déplacer la vue. Molette ou − / + pour zoomer (deux doigts sur téléphone).",
+	Tool.SELECT: "Touche un bloc ou un trait pour le choisir, glisse-le pour le déplacer. Bloc : rond = tourner, carré = agrandir.",
 }
 
 
 func _ready() -> void:
 	DrawnLevel.load_once()
+	# [CRÉATEUR v2 1.80] mode et magnétisme retrouvés d'une fois sur l'autre
+	expert = bool(DrawnLevel.pref("expert", false))
+	magnet = bool(DrawnLevel.pref("magnet", false))
 	_build_background()
 	cam = Camera2D.new()
 	cam.position_smoothing_enabled = false
@@ -96,7 +150,14 @@ func _ready() -> void:
 	cam.make_current()
 	_opened_race_path = DrawnLevel.race_path()
 	_build_ui()
-	_frame_content()
+	# [CRÉATEUR v2 1.80] retour d'un test : la vue d'avant, sinon tout le dessin
+	if not DrawnLevel.editor_view.is_empty():
+		cam.position = DrawnLevel.editor_view.pos
+		cam.zoom = Vector2.ONE * float(DrawnLevel.editor_view.zoom)
+		DrawnLevel.editor_view = {}
+		_opened_at = 0   # (pas de recadrage au 1er redimensionnement)
+	else:
+		_frame_content()
 	_refresh_ui()
 	# Taille d'écran changée (fenêtre redimensionnée, téléphone tourné, ou
 	# taille définitive connue après le 1er affichage) : interface recalculée
@@ -130,6 +191,11 @@ func _rebuild_ui() -> void:
 # --- 1. Gestes ---------------------------------------------------------------
 
 func _unhandled_input(event: InputEvent) -> void:
+	# [CRÉATEUR v2 1.80] raccourcis clavier
+	if event is InputEventKey and event.pressed and not event.echo:
+		if _shortcut(event):
+			get_viewport().set_input_as_handled()
+		return
 	# Deux doigts (téléphone) : déplacer + zoomer ; le trait en cours est annulé
 	if event is InputEventScreenTouch:
 		if event.pressed:
@@ -176,6 +242,8 @@ func _unhandled_input(event: InputEvent) -> void:
 		if _panning:
 			cam.position -= mm.relative / cam.zoom.x
 			queue_redraw()
+		elif _drag != "":
+			_drag_update(_to_world(mm.position))   # [CRÉATEUR v2 1.80]
 		elif _drawing:
 			_add_point(_to_world(mm.position))
 		elif _erasing:
@@ -188,11 +256,23 @@ func _press(screen_pos: Vector2) -> void:
 	match tool:
 		Tool.DRAW:
 			_drawing = true
+			_draw_dir = 0
 			_raw = PackedVector2Array([wp])
 		Tool.HOOK:
-			_push_undo()
-			DrawnLevel.toggle_hook(wp, TOUCH_RADIUS_SCREEN * 2.5 / cam.zoom.x)
-			_changed()
+			# [CRÉATEUR v2 1.80] outil Objets : un bloc touché est sélectionné
+			# (on peut le régler tout de suite) ; ailleurs on pose l'élément
+			# choisi dans la palette
+			var hit := DrawnLevel.pick_at(wp, TOUCH_RADIUS_SCREEN * 2.5 / cam.zoom.x)
+			if not hit.is_empty() and hit.kind == "hook":
+				_select(hit)
+				_begin_drag("move", wp)
+			elif palette_item == "hook":
+				_push_undo()
+				DrawnLevel.hooks.append(DrawnLevel.make_hook(_snap_pos(wp)))
+				_changed()
+				_select({"kind": "hook", "index": DrawnLevel.hooks.size() - 1})
+		Tool.SELECT:
+			_select_press(wp)
 		Tool.ERASE:
 			_erasing = true
 			_erase_at(screen_pos)
@@ -205,6 +285,9 @@ func _press(screen_pos: Vector2) -> void:
 func _release() -> void:
 	_panning = false
 	_erasing = false
+	if _drag != "":
+		_end_drag()   # [CRÉATEUR v2 1.80]
+		return
 	if not _drawing:
 		return
 	_drawing = false
@@ -213,16 +296,25 @@ func _release() -> void:
 		_undo.append(before)
 		if _undo.size() > UNDO_MAX:
 			_undo.pop_front()
+		_redo.clear()
+		_sel = {}   # les numéros des traits ont pu changer
 		_changed()
 	elif _raw.size() > 1:
-		_flash("Trait trop court, ou par-dessus un sol déjà dessiné : dessine dans le vide, de gauche à droite.")
+		_flash("Trait trop court, ou par-dessus un sol déjà dessiné : dessine là où il n'y a pas encore de sol.")
 	_raw = PackedVector2Array()
 	queue_redraw()
 
 
 ## Ajoute un point au trait en cours (seulement s'il avance vers la droite)
 func _add_point(wp: Vector2) -> void:
-	if wp.x > _raw[_raw.size() - 1].x + 2.0:
+	# [CRÉATEUR v2 1.80] dans les deux sens : le sens est décidé dès que le
+	# doigt s'est écarté de 24 px en x du point de départ ; ensuite seuls les
+	# points qui continuent dans ce sens comptent
+	if _draw_dir == 0:
+		if absf(wp.x - _raw[0].x) < 24.0:
+			return
+		_draw_dir = 1 if wp.x > _raw[0].x else -1
+	if (wp.x - _raw[_raw.size() - 1].x) * _draw_dir > 2.0:
 		_raw.append(wp)
 		queue_redraw()
 
@@ -231,6 +323,8 @@ func _erase_at(screen_pos: Vector2) -> void:
 	var snap := DrawnLevel.snapshot()
 	if DrawnLevel.erase_at(_to_world(screen_pos), TOUCH_RADIUS_SCREEN * 2.0 / cam.zoom.x):
 		_undo.append(snap)
+		_redo.clear()
+		_sel = {}   # les numéros ont changé
 		_changed()
 
 
@@ -277,8 +371,12 @@ func _process(delta: float) -> void:
 	# un long niveau d'un seul geste
 	if _drawing:
 		var vp: Vector2 = get_viewport().get_visible_rect().size
-		if _last_screen.x > vp.x * AUTO_SCROLL_EDGE:
+		if _last_screen.x > vp.x * AUTO_SCROLL_EDGE and _draw_dir >= 0:
 			cam.position.x += AUTO_SCROLL_SPEED * delta / cam.zoom.x
+			_add_point(_to_world(_last_screen))
+		elif _last_screen.x < vp.x * (1.0 - AUTO_SCROLL_EDGE) and _draw_dir < 0:
+			# [CRÉATEUR v2 1.80] même chose vers la gauche quand on trace à l'envers
+			cam.position.x -= AUTO_SCROLL_SPEED * delta / cam.zoom.x
 			_add_point(_to_world(_last_screen))
 
 
@@ -288,6 +386,7 @@ func _push_undo() -> void:
 	_undo.append(DrawnLevel.snapshot())
 	if _undo.size() > UNDO_MAX:
 		_undo.pop_front()
+	_redo.clear()   # [CRÉATEUR v2 1.80] une nouvelle modification efface « Refaire »
 
 
 ## Après chaque modification : sauvegarde, boutons et aperçu à jour
@@ -307,7 +406,19 @@ func _changed() -> void:
 func _on_undo() -> void:
 	if _undo.is_empty():
 		return
+	_redo.append(DrawnLevel.snapshot())   # [CRÉATEUR v2 1.80]
 	DrawnLevel.restore(_undo.pop_back())
+	_sel = {}
+	_changed()
+
+
+## [CRÉATEUR v2 1.80] Refaire : l'inverse d'Annuler
+func _on_redo() -> void:
+	if _redo.is_empty():
+		return
+	_undo.append(DrawnLevel.snapshot())
+	DrawnLevel.restore(_redo.pop_back())
+	_sel = {}
 	_changed()
 
 
@@ -317,6 +428,8 @@ func _on_clear() -> void:
 	_push_undo()   # « Tout effacer » s'annule aussi
 	DrawnLevel.strokes = []
 	DrawnLevel.hooks = []
+	DrawnLevel.objects = []
+	_sel = {}
 	_changed()
 	_flash("Tout est effacé. « Annuler » pour revenir en arrière.")
 
@@ -335,7 +448,32 @@ func _on_test() -> void:
 		return
 	DrawnLevel.save()
 	DrawnLevel.return_scene = DrawnLevel.EDITOR_SCENE   # après la course : retour ici
+	DrawnLevel.test_from = Vector2.INF                  # [CRÉATEUR v2 1.80] vrai départ
+	_remember_view()
 	get_tree().change_scene_to_file(DrawnLevel.LEVEL_SCENE)
+
+
+## [CRÉATEUR v2 1.80] « ▶ D'ici » : le test part du sol sous le milieu de
+## l'écran, à la vitesse choisie ; il ne compte pas pour les records.
+func _on_test_here() -> void:
+	if not DrawnLevel.is_playable():
+		_flash("Dessine d'abord un sol !")
+		return
+	var vp: Vector2 = get_viewport().get_visible_rect().size
+	var from := DrawnLevel.start_point_near(_to_world(vp * 0.5).x)
+	if from == Vector2.INF:
+		return
+	DrawnLevel.save()
+	DrawnLevel.return_scene = DrawnLevel.EDITOR_SCENE
+	DrawnLevel.test_from = from
+	DrawnLevel.test_speed = _speed_spin.value if expert and _speed_spin != null else TEST_SPEED_SIMPLE
+	_remember_view()
+	get_tree().change_scene_to_file(DrawnLevel.LEVEL_SCENE)
+
+
+## [CRÉATEUR v2 1.80] La vue actuelle sera retrouvée au retour du test
+func _remember_view() -> void:
+	DrawnLevel.editor_view = {"pos": cam.position, "zoom": cam.zoom.x}
 
 
 ## [MES NIVEAUX 1.46] en quittant l'éditeur (Retour, TESTER…), les fantômes des
@@ -481,12 +619,36 @@ func _draw() -> void:
 		draw_string(font, Vector2(g.x0 + 20.0 / z, top + fs * 2.8), "Grappin ou tremplin conseillé", HORIZONTAL_ALIGNMENT_LEFT, -1, int(fs * 0.8), WARN_COLOR)
 
 	# d. blocs de grappin (ronds gris ; plus pâles = automatiques)
+	#    [CRÉATEUR v2 1.80] avec leur angle et leur taille
+	var manual_i := 0
 	for h in DrawnLevel.hook_list(isl):
+		var pos: Vector2 = h.pos
+		var selected: bool = not h.auto and _sel.get("kind", "") == "hook" and _sel.index == manual_i
 		# taille réelle du bloc, mais jamais plus petit que ~22 px à l'écran
-		var pts := _ellipse(h.pos, maxf(110.0, 22.0 / z), maxf(42.0, 9.0 / z))
+		var pts := _ellipse(pos, maxf(HOOK_RX * h.scale, 22.0 / z), maxf(HOOK_RY * h.scale, 9.0 / z), h.rot)
 		draw_colored_polygon(pts, Color(HOOK_COLOR, 0.55 if h.auto else 0.95))
 		pts.append(pts[0])
-		draw_polyline(pts, Color(1, 1, 1, 0.6 if h.auto else 1.0), 3.0 / z, true)
+		draw_polyline(pts, SELECT_COLOR if selected else Color(1, 1, 1, 0.6 if h.auto else 1.0), (6.0 if selected else 3.0) / z, true)
+		if not h.auto:
+			manual_i += 1
+		if selected:
+			# poignées : rond = tourner (au-dessus), carré = agrandir (à droite)
+			var hd := _hook_handles(_sel.index)
+			draw_line(pos, hd.rotate, SELECT_COLOR, 3.0 / z)
+			draw_circle(hd.rotate, 14.0 / z, SELECT_COLOR)
+			draw_circle(hd.rotate, 8.0 / z, Color(0.1, 0.15, 0.3))
+			draw_line(pos, hd.scale, SELECT_COLOR, 3.0 / z)
+			draw_rect(Rect2(hd.scale - Vector2.ONE * 13.0 / z, Vector2.ONE * 26.0 / z), SELECT_COLOR)
+
+	# d2. [CRÉATEUR v2 1.80] trait sélectionné : surligné en jaune (décalé
+	#     pendant qu'on le glisse, pour voir où il va)
+	if _sel.get("kind", "") == "stroke" and _sel.index < DrawnLevel.strokes.size():
+		var st: PackedVector2Array = DrawnLevel.strokes[_sel.index]
+		var moved := PackedVector2Array()
+		for q in st:
+			moved.append(q + _drag_delta)
+		var ok: bool = _drag_delta == Vector2.ZERO or DrawnLevel.x_range_free(moved[0].x, moved[moved.size() - 1].x, _sel.index)
+		draw_polyline(moved, SELECT_COLOR if ok else DANGER_COLOR, maxf(30.0, 9.0 / z), true)
 
 	# e. départ (le pingouin, à sa vraie taille) et arrivée (faisceau jaune)
 	if not isl.is_empty():
@@ -511,12 +673,353 @@ func _draw() -> void:
 
 
 ## Points d'une ellipse (pour dessiner les blocs de grappin)
-func _ellipse(c: Vector2, rx: float, ry: float) -> PackedVector2Array:
+## [CRÉATEUR v2 1.80] + angle `rot` (radians)
+func _ellipse(c: Vector2, rx: float, ry: float, rot := 0.0) -> PackedVector2Array:
 	var pts := PackedVector2Array()
 	for i in 24:
 		var a: float = TAU * i / 24.0
-		pts.append(c + Vector2(cos(a) * rx, sin(a) * ry))
+		pts.append(c + Vector2(cos(a) * rx, sin(a) * ry).rotated(rot))
 	return pts
+
+
+# --- [CRÉATEUR v2 1.80] Sélection, poignées, réglages -----------------------------
+
+## Positions (monde) des deux poignées du bloc n° i : {rotate, scale}
+func _hook_handles(i: int) -> Dictionary:
+	var h: Dictionary = DrawnLevel.hooks[i]
+	var z: float = cam.zoom.x
+	return {"rotate": h.pos + Vector2(0, -(HOOK_RY * h.scale + 70.0 / z)).rotated(h.rot),
+		"scale": h.pos + Vector2(HOOK_RX * h.scale + 45.0 / z, 0).rotated(h.rot)}
+
+
+## Magnétisme : position sur la grille (Expert + aimant), sinon inchangée
+func _snap_pos(p: Vector2) -> Vector2:
+	return p.snapped(Vector2.ONE * SNAP_GRID) if expert and magnet else p
+
+
+func _snap_angle(a: float) -> float:
+	return snappedf(a, deg_to_rad(SNAP_ANGLE_DEG)) if expert and magnet else a
+
+
+## Choisit (ou vide, avec {}) la sélection et met le panneau de réglages à jour
+func _select(sel: Dictionary) -> void:
+	_sel = sel
+	_drag_delta = Vector2.ZERO
+	_rebuild_settings()
+	queue_redraw()
+
+
+## Appui avec l'outil Sélection : une poignée du bloc choisi, sinon un
+## bloc ou un trait (sélectionné et glissé), sinon le vide (on déplace la vue)
+func _select_press(wp: Vector2) -> void:
+	var grab: float = 26.0 / cam.zoom.x
+	if _sel.get("kind", "") == "hook":
+		var hd := _hook_handles(_sel.index)
+		if wp.distance_to(hd.rotate) < grab:
+			_begin_drag("rotate", wp)
+			return
+		if wp.distance_to(hd.scale) < grab:
+			_begin_drag("scale", wp)
+			return
+	var hit := DrawnLevel.pick_at(wp, TOUCH_RADIUS_SCREEN * 2.0 / cam.zoom.x)
+	if hit.is_empty():
+		_select({})
+		_panning = true   # glisser dans le vide = déplacer la vue
+		return
+	_select(hit)
+	_begin_drag("move", wp)
+
+
+func _begin_drag(kind: String, wp: Vector2) -> void:
+	# le panneau de réglages se cache pendant le geste : sinon, en passant
+	# dessous, il « mangeait » les mouvements de la souris / du doigt
+	if _settings != null and is_instance_valid(_settings):
+		_settings.visible = false
+	_drag = kind
+	_drag_start = wp
+	_drag_snap = DrawnLevel.snapshot()
+	_drag_delta = Vector2.ZERO
+	if _sel.kind == "hook":
+		_drag_orig = (DrawnLevel.hooks[_sel.index] as Dictionary).duplicate()
+
+
+func _drag_update(wp: Vector2) -> void:
+	if _sel.is_empty():
+		return
+	if _sel.kind == "stroke":
+		# le trait n'est vraiment déplacé qu'au lâcher (aperçu jaune / rouge)
+		_drag_delta = _snap_pos(wp - _drag_start) if not (expert and magnet) else (wp - _drag_start).snapped(Vector2.ONE * SNAP_GRID)
+		queue_redraw()
+		return
+	var h: Dictionary = DrawnLevel.hooks[_sel.index]
+	match _drag:
+		"move":
+			h.pos = _snap_pos(_drag_orig.pos + (wp - _drag_start))
+		"rotate":
+			h.rot = _snap_angle((wp - h.pos).angle() + PI * 0.5)
+		"scale":
+			var d: float = (wp - h.pos).length() - 45.0 / cam.zoom.x
+			h.scale = clampf(d / HOOK_RX, DrawnLevel.HOOK_SCALE_MIN, DrawnLevel.HOOK_SCALE_MAX)
+			if expert and magnet:
+				h.scale = snappedf(h.scale, 0.25)
+	queue_redraw()
+
+
+func _end_drag() -> void:
+	var kind := _drag
+	_drag = ""
+	if _settings != null and is_instance_valid(_settings):
+		_settings.visible = true
+	if _sel.is_empty():
+		return
+	if _sel.kind == "stroke":
+		var delta := _drag_delta
+		_drag_delta = Vector2.ZERO
+		if delta.length() < 1.0:
+			queue_redraw()
+			return
+		var st: PackedVector2Array = DrawnLevel.strokes[_sel.index]
+		var first := st[0]
+		if DrawnLevel.move_stroke(_sel.index, delta):
+			_undo.append(_drag_snap)
+			_redo.clear()
+			# l'ordre des traits a pu changer : on retrouve le nôtre
+			for i in DrawnLevel.strokes.size():
+				if DrawnLevel.strokes[i][0].is_equal_approx(first + delta):
+					_sel.index = i
+			_changed()
+			_rebuild_settings()
+		else:
+			_flash("Impossible : un trait ne peut pas passer au-dessus ou en dessous d'un autre sol.")
+			queue_redraw()
+		return
+	# bloc : une étape « Annuler » seulement s'il a vraiment bougé
+	var h: Dictionary = DrawnLevel.hooks[_sel.index]
+	if h.pos != _drag_orig.pos or not is_equal_approx(h.rot, _drag_orig.rot) or not is_equal_approx(h.scale, _drag_orig.scale):
+		_undo.append(_drag_snap)
+		if _undo.size() > UNDO_MAX:
+			_undo.pop_front()
+		_redo.clear()
+		_changed()
+		_rebuild_settings()
+	elif kind == "move":
+		queue_redraw()
+
+
+## Copie de la sélection (un bloc : décalé de 160 px ; un trait : après le
+## dernier trait du niveau)
+func _duplicate_sel() -> void:
+	if _sel.is_empty():
+		return
+	_push_undo()
+	if _sel.kind == "hook":
+		var h: Dictionary = (DrawnLevel.hooks[_sel.index] as Dictionary).duplicate()
+		h.pos += Vector2(160, 0)
+		DrawnLevel.hooks.append(h)
+		_changed()
+		_select({"kind": "hook", "index": DrawnLevel.hooks.size() - 1})
+	else:
+		var i := DrawnLevel.duplicate_stroke(_sel.index)
+		_changed()
+		_select({"kind": "stroke", "index": i})
+		_flash("Copie posée après la fin du niveau.")
+
+
+func _delete_sel() -> void:
+	if _sel.is_empty():
+		return
+	_push_undo()
+	if _sel.kind == "hook":
+		DrawnLevel.hooks.remove_at(_sel.index)
+	else:
+		DrawnLevel.strokes.remove_at(_sel.index)
+	_select({})
+	_changed()
+
+
+## Raccourcis clavier. Renvoie vrai si la touche a servi.
+func _shortcut(e: InputEventKey) -> bool:
+	if _rename_panel != null and is_instance_valid(_rename_panel):
+		return false   # on tape le nom du niveau
+	var ctrl: bool = e.ctrl_pressed or e.meta_pressed
+	match e.keycode:
+		KEY_Z:
+			if ctrl and e.shift_pressed:
+				_on_redo()
+				return true
+			if ctrl:
+				_on_undo()
+				return true
+		KEY_Y:
+			if ctrl:
+				_on_redo()
+				return true
+		KEY_DELETE, KEY_BACKSPACE:
+			_delete_sel()
+			return true
+		KEY_D:
+			if ctrl or expert:
+				_duplicate_sel()
+				return true
+		KEY_ESCAPE:
+			_select({})
+			return true
+	return false
+
+
+## Un réglage continu (curseur, case numérique) : une seule étape « Annuler »
+## tant qu'on règle la même chose sans pause d'une seconde
+func _undo_for_setting(key: String) -> void:
+	var now := Time.get_ticks_msec()
+	if key != _coalesce_key or now - _coalesce_time > 1000:
+		_push_undo()
+	_coalesce_key = key
+	_coalesce_time = now
+
+
+## Panneau de réglages de la sélection (à droite). Simple : taille et angle
+## d'un bloc ; Expert : en plus la position exacte (et celle d'un trait).
+func _rebuild_settings() -> void:
+	if _settings != null and is_instance_valid(_settings):
+		_settings.visible = false   # (libéré à la fin de l'image : ne doit plus capter la souris)
+		_settings.queue_free()
+		_settings = null
+	if _sel.is_empty() or _ui_root == null:
+		return
+	_settings = PanelContainer.new()
+	_settings.visible = _drag == ""   # caché pendant un geste (voir _begin_drag)
+	_settings.add_theme_stylebox_override("panel", _panel_style())
+	_settings.set_anchors_preset(Control.PRESET_TOP_RIGHT)
+	_settings.offset_left = -250
+	_settings.offset_right = -6
+	_settings.offset_top = TOP_BAR_H + 6
+	_settings.grow_horizontal = Control.GROW_DIRECTION_BEGIN
+	var col := VBoxContainer.new()
+	col.add_theme_constant_override("separation", 6)
+	_settings.add_child(col)
+	var title := Label.new()
+	title.add_theme_font_size_override("font_size", 19)
+	title.add_theme_color_override("font_color", SELECT_COLOR)
+	col.add_child(title)
+	if _sel.kind == "hook":
+		title.text = "Prise de grappin"
+		var h: Dictionary = DrawnLevel.hooks[_sel.index]
+		_slider_row(col, "Taille", DrawnLevel.HOOK_SCALE_MIN, DrawnLevel.HOOK_SCALE_MAX, 0.05, h.scale, func(v):
+			_undo_for_setting("scale")
+			DrawnLevel.hooks[_sel.index].scale = v
+			_changed())
+		_slider_row(col, "Angle", -180.0, 180.0, 15.0 if magnet and expert else 1.0, wrapf(rad_to_deg(h.rot), -180.0, 180.0), func(v):
+			_undo_for_setting("rot")
+			DrawnLevel.hooks[_sel.index].rot = deg_to_rad(v)
+			_changed())
+		if expert:
+			_spin_row(col, "X", h.pos.x, func(v):
+				_undo_for_setting("x")
+				DrawnLevel.hooks[_sel.index].pos.x = v
+				_changed())
+			_spin_row(col, "Y", h.pos.y, func(v):
+				_undo_for_setting("y")
+				DrawnLevel.hooks[_sel.index].pos.y = v
+				_changed())
+	else:
+		title.text = "Trait de sol"
+		var st: PackedVector2Array = DrawnLevel.strokes[_sel.index]
+		var info := Label.new()
+		info.text = "%d m de long" % int((st[st.size() - 1].x - st[0].x) / 64.0)
+		info.add_theme_color_override("font_color", Color.WHITE)
+		col.add_child(info)
+		if expert:
+			# position du début du trait (tout le trait suit)
+			_spin_row(col, "Début X", st[0].x, func(v): _move_sel_stroke_to(Vector2(v, DrawnLevel.strokes[_sel.index][0].y)))
+			_spin_row(col, "Début Y", st[0].y, func(v): _move_sel_stroke_to(Vector2(DrawnLevel.strokes[_sel.index][0].x, v)))
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 6)
+	col.add_child(row)
+	_button("Dupliquer", row, 108).pressed.connect(_duplicate_sel)
+	_button("Supprimer", row, 108).pressed.connect(_delete_sel)
+	_ui_root.add_child(_settings)
+	_keep_selection_visible()
+
+
+## Si le panneau de réglages (à droite) cache la sélection, la vue glisse
+## pour la ramener dans la partie libre de l'écran (un bloc posé près du
+## bord droit restait sous le panneau, impossible à toucher)
+func _keep_selection_visible() -> void:
+	await get_tree().process_frame   # taille du panneau connue après la mise en page
+	if not is_inside_tree():
+		return
+	if _sel.is_empty() or _settings == null or not is_instance_valid(_settings) or _drag != "":
+		return
+	var wp: Vector2
+	if _sel.kind == "hook":
+		wp = DrawnLevel.hooks[_sel.index].pos
+	else:
+		var st: PackedVector2Array = DrawnLevel.strokes[_sel.index]
+		wp = st[st.size() / 2]
+	var vp: Vector2 = get_viewport().get_visible_rect().size
+	var sp: Vector2 = (wp - cam.position) * cam.zoom.x + vp * 0.5
+	var left_edge: float = _settings.get_global_rect().position.x * _ui_layer.scale.x - 40.0
+	if sp.x > left_edge:
+		cam.position.x += (sp.x - left_edge + 80.0) / cam.zoom.x
+		queue_redraw()
+
+
+## Expert : déplace le trait sélectionné pour que son début soit en `p`
+func _move_sel_stroke_to(p: Vector2) -> void:
+	var st: PackedVector2Array = DrawnLevel.strokes[_sel.index]
+	var first := st[0]
+	var snap := DrawnLevel.snapshot()
+	if DrawnLevel.move_stroke(_sel.index, p - first):
+		_undo.append(snap)
+		_redo.clear()
+		for i in DrawnLevel.strokes.size():
+			if DrawnLevel.strokes[i][0].is_equal_approx(p):
+				_sel.index = i
+		_changed()
+	else:
+		_flash("Impossible : un trait ne peut pas passer au-dessus ou en dessous d'un autre sol.")
+		_rebuild_settings.call_deferred()
+
+
+func _slider_row(parent: Node, label: String, lo: float, hi: float, step: float, value: float, on_change: Callable) -> void:
+	var lab := Label.new()
+	# la valeur s'affiche à côté du nom (×1.5 pour la taille, 45° pour l'angle)
+	var fmt := func(v: float) -> String:
+		return "%s  %s" % [label, ("×%.2f" % v) if hi <= 10.0 else ("%d°" % int(round(v)))]
+	lab.text = fmt.call(value)
+	lab.add_theme_color_override("font_color", Color.WHITE)
+	lab.add_theme_font_size_override("font_size", 16)
+	parent.add_child(lab)
+	var sl := HSlider.new()
+	sl.min_value = lo
+	sl.max_value = hi
+	sl.step = step
+	sl.value = value
+	sl.custom_minimum_size = Vector2(220, 30)
+	sl.focus_mode = Control.FOCUS_NONE
+	sl.value_changed.connect(on_change)
+	sl.value_changed.connect(func(v): lab.text = fmt.call(v))
+	parent.add_child(sl)
+
+
+func _spin_row(parent: Node, label: String, value: float, on_change: Callable) -> void:
+	var row := HBoxContainer.new()
+	var lab := Label.new()
+	lab.text = label
+	lab.custom_minimum_size = Vector2(76, 0)
+	lab.add_theme_color_override("font_color", Color.WHITE)
+	lab.add_theme_font_size_override("font_size", 16)
+	row.add_child(lab)
+	var sp := SpinBox.new()
+	sp.min_value = -DrawnLevel.COORD_MAX
+	sp.max_value = DrawnLevel.COORD_MAX
+	sp.step = SNAP_GRID if magnet else 1.0
+	sp.value = value
+	sp.custom_minimum_size = Vector2(140, 34)
+	sp.get_line_edit().add_theme_color_override("font_color", Color.WHITE)   # lisible sur le fond sombre
+	sp.value_changed.connect(on_change)
+	row.add_child(sp)
+	parent.add_child(row)
 
 
 # --- 4. Interface -------------------------------------------------------------
@@ -617,8 +1120,13 @@ func _build_ui() -> void:
 	_name_button.clip_text = true
 	_name_button.tooltip_text = "Renommer le niveau"
 	_name_button.pressed.connect(_open_rename)
-	_undo_button = _button("Annuler", row, 96)
+	# [CRÉATEUR v2 1.80] Annuler / Refaire en flèches (place gagnée pour les nouveaux boutons)
+	_undo_button = _button("↶", row, 50)
+	_undo_button.tooltip_text = "Annuler (Ctrl+Z)"
 	_undo_button.pressed.connect(_on_undo)
+	_redo_button = _button("↷", row, 50)
+	_redo_button.tooltip_text = "Refaire (Ctrl+Y)"
+	_redo_button.pressed.connect(_on_redo)
 	_button("Tout effacer", row, 110).pressed.connect(_on_clear)
 	_auto_check = CheckButton.new()
 	_auto_check.text = "Grappins auto"
@@ -629,6 +1137,19 @@ func _build_ui() -> void:
 	_auto_check.button_pressed = DrawnLevel.auto_hooks
 	_auto_check.toggled.connect(_on_auto_toggled)
 	row.add_child(_auto_check)
+	# [CRÉATEUR v2 1.80] mode Simple / Expert, et aimant (Expert)
+	_mode_button = _button("Expert" if expert else "Simple", row, 96)
+	_mode_button.tooltip_text = "Mode Simple (peu de réglages) ou Expert (tous les réglages, aimant, raccourcis)"
+	_mode_button.pressed.connect(func(): _set_mode(not expert))
+	if expert:
+		_magnet_button = _button("🧲", row, 50)
+		_magnet_button.toggle_mode = true
+		_magnet_button.button_pressed = magnet
+		_magnet_button.tooltip_text = "Aimant : grille de 32 px et angles de 15°"
+		_magnet_button.toggled.connect(func(on):
+			magnet = on
+			DrawnLevel.set_pref("magnet", on)
+			_rebuild_settings())
 	var spacer := Control.new()
 	spacer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	spacer.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -652,8 +1173,9 @@ func _build_ui() -> void:
 	brow.add_theme_constant_override("separation", 8)
 	bottom.add_child(brow)
 	var group := ButtonGroup.new()
-	for t in [[Tool.DRAW, "Dessiner"], [Tool.HOOK, "Grappin"], [Tool.ERASE, "Gomme"], [Tool.MOVE, "Déplacer"]]:
-		var b := _button(t[1], brow, 100)
+	# [CRÉATEUR v2 1.80] + Sélection ; « Grappin » devient « Objets » (palette)
+	for t in [[Tool.DRAW, "Dessiner"], [Tool.HOOK, "Objets"], [Tool.SELECT, "Sélection"], [Tool.ERASE, "Gomme"], [Tool.MOVE, "Déplacer"]]:
+		var b := _button(t[1], brow, 96)
 		b.toggle_mode = true
 		b.button_group = group
 		b.button_pressed = t[0] == tool
@@ -666,7 +1188,26 @@ func _build_ui() -> void:
 	_info.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	_info.add_theme_font_size_override("font_size", 15)
 	_info.add_theme_color_override("font_color", Color(0.75, 0.85, 1.0))
+	# [CRÉATEUR v2 1.80] largeur mini : sinon, sur un écran étroit, le texte
+	# était écrasé à une lettre par ligne et la barre débordait en hauteur
+	_info.custom_minimum_size = Vector2(170, 0)
 	brow.add_child(_info)
+	# [CRÉATEUR v2 1.80] « ▶ D'ici » (+ vitesse de départ en Expert)
+	if expert:
+		_speed_spin = SpinBox.new()
+		_speed_spin.min_value = 0
+		_speed_spin.max_value = 2500
+		_speed_spin.step = 100
+		_speed_spin.value = float(DrawnLevel.pref("test_speed", TEST_SPEED_SIMPLE))
+		_speed_spin.suffix = "px/s"
+		_speed_spin.tooltip_text = "Vitesse de départ de « D'ici »"
+		_speed_spin.custom_minimum_size = Vector2(118, 40)
+		_speed_spin.get_line_edit().add_theme_color_override("font_color", Color.WHITE)
+		_speed_spin.value_changed.connect(func(v): DrawnLevel.set_pref("test_speed", v))
+		brow.add_child(_speed_spin)
+	var here := _button("▶ D'ici", brow, 104)
+	here.tooltip_text = "Tester depuis le milieu de l'écran (ne compte pas pour les records)"
+	here.pressed.connect(_on_test_here)
 	_test_button = _button("TESTER  ▶", brow, 150)
 	_test_button.add_theme_font_size_override("font_size", 22)
 	_test_button.pressed.connect(_on_test)
@@ -686,8 +1227,27 @@ func _build_ui() -> void:
 	root.add_child(_hint)
 
 	UiScaler.apply(_ui_layer, s)
+	# [CRÉATEUR v2 1.80] les barres ont plus de boutons (Refaire, mode, aimant,
+	# Sélection, D'ici…) : si elles ne tiennent pas dans la largeur de l'écran,
+	# toute l'interface est réduite juste ce qu'il faut (téléphone en paysage)
+	var vp_w: float = get_viewport().get_visible_rect().size.x
+	var need: float = maxf(top.get_combined_minimum_size().x, bottom.get_combined_minimum_size().x) + 14.0
+	if need * s > vp_w:
+		s = maxf(0.45, vp_w / need)
+		UiScaler.apply(_ui_layer, s)
+	# [CRÉATEUR v2 1.80] palette (outil Objets) et réglages de la sélection
+	if tool == Tool.HOOK:
+		_build_palette()
+	_rebuild_settings()
 
 func _set_tool(t: int) -> void:
+	# [CRÉATEUR v2 1.80] la palette n'est affichée qu'avec l'outil Objets
+	if t != tool or (t == Tool.HOOK and (_palette == null or not is_instance_valid(_palette))):
+		if _palette != null and is_instance_valid(_palette):
+			_palette.queue_free()
+			_palette = null
+		if t == Tool.HOOK and _ui_root != null:
+			_build_palette()
 	tool = t
 	if _tool_buttons.has(t) and not _tool_buttons[t].button_pressed:
 		_tool_buttons[t].set_pressed_no_signal(true)
@@ -726,7 +1286,86 @@ func _refresh_ui() -> void:
 		if unsafe > 0:
 			_info.text += "   ·   %d grand%s trou%s sans grappin (en orange)" % [unsafe, "s" if unsafe > 1 else "", "s" if unsafe > 1 else ""]
 	_undo_button.disabled = _undo.is_empty()
+	_redo_button.disabled = _redo.is_empty()   # [CRÉATEUR v2 1.80]
 	_name_button.text = "✏  " + DrawnLevel.current_name
 	_test_button.disabled = isl.is_empty()
 	if _auto_check.button_pressed != DrawnLevel.auto_hooks:
 		_auto_check.set_pressed_no_signal(DrawnLevel.auto_hooks)
+
+
+# --- [CRÉATEUR v2 1.80] Palette de l'outil Objets, mode Simple / Expert ---------
+# Palette à onglets, sur la gauche (comme les onglets des Options). Tout ce
+# qui existe dans les niveaux du jeu y est listé, dans l'ordre du plan ; ce
+# qui arrive dans une prochaine version est grisé avec son numéro de version.
+const PALETTE := [
+	["Objets", [["hook", "Prise de grappin", ""], ["egg", "Œuf à grappiner", "1.81"], ["boost", "Boost", "1.81"],
+		["start", "Départ", "1.81"], ["finish", "Arrivée", "1.81"], ["checkpoint", "Point de passage", "1.81"],
+		["sign", "Panneau flèche", "1.81"], ["camera", "Zone de caméra", "1.81"]]],
+	["Terrain", [["draw", "Sol (outil Dessiner)", ""], ["ramp", "Tremplin", "1.82"], ["halfpipe", "Half-pipe", "1.82"],
+		["bowl", "Bol", "1.82"], ["slope", "Rampe", "1.82"], ["bend", "Virage en pipe", "1.82"], ["upipe", "Virage en U", "1.82"],
+		["ceiling", "Plafond", "1.82"], ["floating", "Plateforme flottante", "1.82"], ["wall", "Mur", "1.82"],
+		["pillar", "Pilier", "1.82"], ["balcony", "Balcon de glace", "1.82"], ["stal", "Plateforme-stalactite", "1.82"],
+		["cliff", "Falaise", "1.82"]]],
+	["Décor", [["arch", "Arche", "1.81"], ["podium", "Podium FIN", "1.81"], ["bush", "Buisson", "1.81"], ["igloo", "Igloo", "1.81"],
+		["colisee", "Colisée", "1.81"], ["ice1", "Bloc de glace 1", "1.81"], ["ice2", "Bloc de glace 2", "1.81"], ["ice3", "Petit bloc de glace", "1.81"]]],
+	["Gros blocs", [["cave", "Caverne", "1.83"], ["void", "Zone de vide", "1.83"], ["pillars", "Motif piliers", "1.83"],
+		["bigegg", "Grand œuf", "1.83"], ["endless", "Tronçon du Sans fin", "1.83"]]],
+]
+
+
+func _build_palette() -> void:
+	if _palette != null and is_instance_valid(_palette):
+		_palette.queue_free()
+	_palette = PanelContainer.new()
+	_palette.add_theme_stylebox_override("panel", _panel_style())
+	_palette.set_anchors_preset(Control.PRESET_LEFT_WIDE)
+	_palette.offset_left = 6
+	_palette.offset_right = 236
+	_palette.offset_top = TOP_BAR_H + 6
+	_palette.offset_bottom = -BOTTOM_BAR_H - 40
+	var col := VBoxContainer.new()
+	col.add_theme_constant_override("separation", 6)
+	_palette.add_child(col)
+	var tabs := TabBar.new()
+	tabs.clip_tabs = false
+	for tab in PALETTE:
+		tabs.add_tab(tab[0])
+	tabs.current_tab = _palette_tab
+	tabs.focus_mode = Control.FOCUS_NONE
+	tabs.add_theme_font_size_override("font_size", 14)
+	tabs.tab_changed.connect(func(i):
+		_palette_tab = i
+		_build_palette.call_deferred())
+	col.add_child(tabs)
+	var scroll := ScrollContainer.new()
+	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	col.add_child(scroll)
+	var list := VBoxContainer.new()
+	list.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	scroll.add_child(list)
+	var group := ButtonGroup.new()
+	for item in PALETTE[_palette_tab][1]:
+		var soon: String = item[2]
+		var b := _button(item[1] + ("  (" + soon + ")" if soon != "" else ""), list)
+		b.add_theme_font_size_override("font_size", 16)
+		b.alignment = HORIZONTAL_ALIGNMENT_LEFT
+		b.disabled = soon != ""
+		b.toggle_mode = true
+		b.button_group = group
+		b.button_pressed = item[0] == palette_item
+		var id: String = item[0]
+		b.pressed.connect(func():
+			if id == "draw":
+				_set_tool(Tool.DRAW)   # le sol se dessine avec l'outil Dessiner
+				return
+			palette_item = id)
+	_ui_root.add_child(_palette)
+
+
+## Mode Simple (par défaut) / Expert ; retenu d'une partie à l'autre
+func _set_mode(on: bool) -> void:
+	expert = on
+	DrawnLevel.set_pref("expert", on)
+	_rebuild_ui()
+	_flash("Mode Expert : position exacte, aimant (🧲), vitesse de « D'ici », raccourcis Suppr, D, Échap." if on else "Mode Simple : l'essentiel, avec de gros boutons.")
