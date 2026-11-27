@@ -150,6 +150,9 @@ func _ready() -> void:
 	cam.make_current()
 	_opened_race_path = DrawnLevel.race_path()
 	_build_ui()
+	# [VALIDATION 1.81] retour d'une course de validation (finie ou non)
+	var was_validating := DrawnLevel.validating
+	DrawnLevel.validating = false
 	# [CRÉATEUR v2 1.80] retour d'un test : la vue d'avant, sinon tout le dessin
 	if not DrawnLevel.editor_view.is_empty():
 		cam.position = DrawnLevel.editor_view.pos
@@ -159,6 +162,12 @@ func _ready() -> void:
 	else:
 		_frame_content()
 	_refresh_ui()
+	if DrawnLevel.last_validation_time > 0.0:
+		_flash("✔ Niveau validé ! Ton temps : %s. Or du niveau : %s. Tu peux le partager." % [
+			RaceManager.format_time(DrawnLevel.last_validation_time), RaceManager.format_time(DrawnLevel.validated_gold())])
+		DrawnLevel.last_validation_time = 0.0
+	elif was_validating:
+		_flash("Validation interrompue : finis le niveau depuis le départ pour le valider.")
 	# Taille d'écran changée (fenêtre redimensionnée, téléphone tourné, ou
 	# taille définitive connue après le 1er affichage) : interface recalculée
 	get_viewport().size_changed.connect(_rebuild_ui)
@@ -263,7 +272,7 @@ func _press(screen_pos: Vector2) -> void:
 			# (on peut le régler tout de suite) ; ailleurs on pose l'élément
 			# choisi dans la palette
 			var hit := DrawnLevel.pick_at(wp, TOUCH_RADIUS_SCREEN * 2.5 / cam.zoom.x)
-			if not hit.is_empty() and hit.kind == "hook":
+			if not hit.is_empty() and hit.kind in ["hook", "obj"]:
 				_select(hit)
 				_begin_drag("move", wp)
 			elif palette_item == "hook":
@@ -271,6 +280,12 @@ func _press(screen_pos: Vector2) -> void:
 				DrawnLevel.hooks.append(DrawnLevel.make_hook(_snap_pos(wp)))
 				_changed()
 				_select({"kind": "hook", "index": DrawnLevel.hooks.size() - 1})
+			elif palette_item in DrawnLevel.VALID_TYPES:
+				# [OBJETS 1.81] pose de l'objet choisi dans la palette
+				_push_undo()
+				var i := DrawnLevel.add_object(DrawnLevel.make_object(palette_item, _snap_pos(wp)))
+				_changed()
+				_select({"kind": "obj", "index": i})
 		Tool.SELECT:
 			_select_press(wp)
 		Tool.ERASE:
@@ -650,16 +665,26 @@ func _draw() -> void:
 		var ok: bool = _drag_delta == Vector2.ZERO or DrawnLevel.x_range_free(moved[0].x, moved[moved.size() - 1].x, _sel.index)
 		draw_polyline(moved, SELECT_COLOR if ok else DANGER_COLOR, maxf(30.0, 9.0 / z), true)
 
+	# d3. [OBJETS 1.81] objets et décors
+	_draw_objects(z, font, fs)
+
 	# e. départ (le pingouin, à sa vraie taille) et arrivée (faisceau jaune)
+	#    [OBJETS 1.81] à l'endroit des objets « Départ » / « Arrivée » s'il y en a
 	if not isl.is_empty():
 		var first: PackedVector2Array = isl[0]
 		var sx: float = minf(first[0].x + 150.0, first[first.size() - 1].x)
 		var sp := Vector2(sx, DrawnLevel.surface_y_of(first, sx))
+		var st_obj := DrawnLevel.first_object("start")
+		if not st_obj.is_empty():
+			sp = st_obj.pos + Vector2(0, 80)
 		var ps: float = maxf(120.0, 40.0 / z)   # pingouin à sa vraie taille, ou 40 px à l'écran mini
 		draw_texture_rect(_penguin_tex, Rect2(sp + Vector2(-ps * 0.5, -ps * 1.05), Vector2(ps, ps)), false)
 		draw_string(font, sp + Vector2(-2.0 * fs, -ps * 1.05 - fs * 0.6), "DÉPART", HORIZONTAL_ALIGNMENT_LEFT, -1, fs, Color.WHITE)
 		var last: PackedVector2Array = isl[isl.size() - 1]
 		var fp: Vector2 = last[last.size() - 1]
+		var fin_obj := DrawnLevel.first_object("finish")
+		if not fin_obj.is_empty():
+			fp = fin_obj.pos
 		var beam := PackedVector2Array([fp + Vector2(-70, 0), fp + Vector2(70, 0), fp + Vector2(42, -1600), fp + Vector2(-42, -1600)])
 		draw_polygon(beam, PackedColorArray([Color(1, 0.95, 0.4, 0.6), Color(1, 0.95, 0.4, 0.6), Color(1, 0.95, 0.4, 0), Color(1, 0.95, 0.4, 0)]))
 		draw_string(font, fp + Vector2(-2.3 * fs, -160.0), "ARRIVÉE", HORIZONTAL_ALIGNMENT_LEFT, -1, fs, Color(1, 0.95, 0.4))
@@ -683,6 +708,33 @@ func _ellipse(c: Vector2, rx: float, ry: float, rot := 0.0) -> PackedVector2Arra
 
 
 # --- [CRÉATEUR v2 1.80] Sélection, poignées, réglages -----------------------------
+
+## [OBJETS 1.81] L'élément sélectionné (bloc ou objet) : Dictionary
+## {pos, rot, scale (, type, props)} — modifié directement par les gestes
+func _item() -> Dictionary:
+	return DrawnLevel.hooks[_sel.index] if _sel.kind == "hook" else DrawnLevel.objects[_sel.index]
+
+
+## [OBJETS 1.81] Demi-taille (monde) de l'élément sélectionné
+func _item_half() -> Vector2:
+	if _sel.kind == "hook":
+		var h: Dictionary = DrawnLevel.hooks[_sel.index]
+		return Vector2(HOOK_RX, HOOK_RY) * h.scale
+	return DrawnLevel.object_half(DrawnLevel.objects[_sel.index])
+
+
+## [OBJETS 1.81] Poignées de la sélection (bloc ou objet) : {rotate, scale}.
+## Une zone de caméra (rectangle droit) n'a pas de poignée « tourner » ; sa
+## poignée « agrandir » est dans son coin et règle largeur et hauteur.
+func _handles() -> Dictionary:
+	var it := _item()
+	var hh := _item_half()
+	var z: float = cam.zoom.x
+	if it.get("type", "") == "camera":
+		return {"rotate": Vector2.INF, "scale": it.pos + hh}
+	return {"rotate": it.pos + Vector2(0, -(hh.y + 70.0 / z)).rotated(it.rot),
+		"scale": it.pos + Vector2(hh.x + 45.0 / z, 0).rotated(it.rot)}
+
 
 ## Positions (monde) des deux poignées du bloc n° i : {rotate, scale}
 func _hook_handles(i: int) -> Dictionary:
@@ -713,9 +765,9 @@ func _select(sel: Dictionary) -> void:
 ## bloc ou un trait (sélectionné et glissé), sinon le vide (on déplace la vue)
 func _select_press(wp: Vector2) -> void:
 	var grab: float = 26.0 / cam.zoom.x
-	if _sel.get("kind", "") == "hook":
-		var hd := _hook_handles(_sel.index)
-		if wp.distance_to(hd.rotate) < grab:
+	if _sel.get("kind", "") in ["hook", "obj"]:
+		var hd := _handles()
+		if hd.rotate != Vector2.INF and wp.distance_to(hd.rotate) < grab:
 			_begin_drag("rotate", wp)
 			return
 		if wp.distance_to(hd.scale) < grab:
@@ -739,8 +791,8 @@ func _begin_drag(kind: String, wp: Vector2) -> void:
 	_drag_start = wp
 	_drag_snap = DrawnLevel.snapshot()
 	_drag_delta = Vector2.ZERO
-	if _sel.kind == "hook":
-		_drag_orig = (DrawnLevel.hooks[_sel.index] as Dictionary).duplicate()
+	if _sel.kind in ["hook", "obj"]:
+		_drag_orig = _item().duplicate(true)
 
 
 func _drag_update(wp: Vector2) -> void:
@@ -751,17 +803,24 @@ func _drag_update(wp: Vector2) -> void:
 		_drag_delta = _snap_pos(wp - _drag_start) if not (expert and magnet) else (wp - _drag_start).snapped(Vector2.ONE * SNAP_GRID)
 		queue_redraw()
 		return
-	var h: Dictionary = DrawnLevel.hooks[_sel.index]
+	var h: Dictionary = _item()   # [OBJETS 1.81] bloc ou objet
 	match _drag:
 		"move":
 			h.pos = _snap_pos(_drag_orig.pos + (wp - _drag_start))
 		"rotate":
 			h.rot = _snap_angle((wp - h.pos).angle() + PI * 0.5)
 		"scale":
-			var d: float = (wp - h.pos).length() - 45.0 / cam.zoom.x
-			h.scale = clampf(d / HOOK_RX, DrawnLevel.HOOK_SCALE_MIN, DrawnLevel.HOOK_SCALE_MAX)
-			if expert and magnet:
-				h.scale = snappedf(h.scale, 0.25)
+			if h.get("type", "") == "camera":
+				# zone de caméra : le coin suit le doigt (largeur et hauteur)
+				var half: Vector2 = _snap_pos(wp - h.pos).abs().max(Vector2(400, 300))
+				h.props.w = half.x * 2.0
+				h.props.h = half.y * 2.0
+			else:
+				var base: float = HOOK_RX if _sel.kind == "hook" else DrawnLevel.OBJECT_HALF.get(h.type, Vector2(100, 100)).x
+				var d: float = (wp - h.pos).length() - 45.0 / cam.zoom.x
+				h.scale = clampf(d / base, DrawnLevel.HOOK_SCALE_MIN, DrawnLevel.HOOK_SCALE_MAX)
+				if expert and magnet:
+					h.scale = snappedf(h.scale, 0.25)
 	queue_redraw()
 
 
@@ -793,9 +852,9 @@ func _end_drag() -> void:
 			_flash("Impossible : un trait ne peut pas passer au-dessus ou en dessous d'un autre sol.")
 			queue_redraw()
 		return
-	# bloc : une étape « Annuler » seulement s'il a vraiment bougé
-	var h: Dictionary = DrawnLevel.hooks[_sel.index]
-	if h.pos != _drag_orig.pos or not is_equal_approx(h.rot, _drag_orig.rot) or not is_equal_approx(h.scale, _drag_orig.scale):
+	# bloc ou objet : une étape « Annuler » seulement s'il a vraiment bougé
+	var h: Dictionary = _item()
+	if JSON.stringify(h) != JSON.stringify(_drag_orig):
 		_undo.append(_drag_snap)
 		if _undo.size() > UNDO_MAX:
 			_undo.pop_front()
@@ -811,6 +870,9 @@ func _end_drag() -> void:
 func _duplicate_sel() -> void:
 	if _sel.is_empty():
 		return
+	if _sel.kind == "obj" and DrawnLevel.objects[_sel.index].type in DrawnLevel.UNIQUE_TYPES:
+		_flash("Il n'y a qu'un seul départ et une seule arrivée par niveau.")
+		return
 	_push_undo()
 	if _sel.kind == "hook":
 		var h: Dictionary = (DrawnLevel.hooks[_sel.index] as Dictionary).duplicate()
@@ -818,6 +880,13 @@ func _duplicate_sel() -> void:
 		DrawnLevel.hooks.append(h)
 		_changed()
 		_select({"kind": "hook", "index": DrawnLevel.hooks.size() - 1})
+	elif _sel.kind == "obj":
+		# [OBJETS 1.81] copie décalée de la largeur de l'objet
+		var o: Dictionary = (DrawnLevel.objects[_sel.index] as Dictionary).duplicate(true)
+		o.pos += Vector2(DrawnLevel.object_half(o).x * 2.0 + 60.0, 0)
+		DrawnLevel.objects.append(o)
+		_changed()
+		_select({"kind": "obj", "index": DrawnLevel.objects.size() - 1})
 	else:
 		var i := DrawnLevel.duplicate_stroke(_sel.index)
 		_changed()
@@ -831,6 +900,8 @@ func _delete_sel() -> void:
 	_push_undo()
 	if _sel.kind == "hook":
 		DrawnLevel.hooks.remove_at(_sel.index)
+	elif _sel.kind == "obj":
+		DrawnLevel.objects.remove_at(_sel.index)
 	else:
 		DrawnLevel.strokes.remove_at(_sel.index)
 	_select({})
@@ -921,6 +992,8 @@ func _rebuild_settings() -> void:
 				_undo_for_setting("y")
 				DrawnLevel.hooks[_sel.index].pos.y = v
 				_changed())
+	elif _sel.kind == "obj":
+		_object_settings(col, title)
 	else:
 		title.text = "Trait de sol"
 		var st: PackedVector2Array = DrawnLevel.strokes[_sel.index]
@@ -951,8 +1024,8 @@ func _keep_selection_visible() -> void:
 	if _sel.is_empty() or _settings == null or not is_instance_valid(_settings) or _drag != "":
 		return
 	var wp: Vector2
-	if _sel.kind == "hook":
-		wp = DrawnLevel.hooks[_sel.index].pos
+	if _sel.kind in ["hook", "obj"]:
+		wp = _item().pos
 	else:
 		var st: PackedVector2Array = DrawnLevel.strokes[_sel.index]
 		wp = st[st.size() / 2]
@@ -981,10 +1054,13 @@ func _move_sel_stroke_to(p: Vector2) -> void:
 		_rebuild_settings.call_deferred()
 
 
-func _slider_row(parent: Node, label: String, lo: float, hi: float, step: float, value: float, on_change: Callable) -> void:
+func _slider_row(parent: Node, label: String, lo: float, hi: float, step: float, value: float, on_change: Callable, shown: Callable = Callable()) -> void:
 	var lab := Label.new()
-	# la valeur s'affiche à côté du nom (×1.5 pour la taille, 45° pour l'angle)
+	# la valeur s'affiche à côté du nom (×1.5 pour la taille, 45° pour l'angle ;
+	# [OBJETS 1.81] ou le texte donné par `shown`, ex. le nom du dessin d'un œuf)
 	var fmt := func(v: float) -> String:
+		if shown.is_valid():
+			return "%s  %s" % [label, shown.call(v)]
 		return "%s  %s" % [label, ("×%.2f" % v) if hi <= 10.0 else ("%d°" % int(round(v)))]
 	lab.text = fmt.call(value)
 	lab.add_theme_color_override("font_color", Color.WHITE)
@@ -1205,6 +1281,10 @@ func _build_ui() -> void:
 		_speed_spin.get_line_edit().add_theme_color_override("font_color", Color.WHITE)
 		_speed_spin.value_changed.connect(func(v): DrawnLevel.set_pref("test_speed", v))
 		brow.add_child(_speed_spin)
+	# [VALIDATION 1.81] « ✔ Valider » : finir le niveau depuis le départ (Score)
+	var val := _button("✔ Valider", brow, 112)
+	val.tooltip_text = "Finis ton niveau depuis le départ : ton temps devient l'or, et tu peux le partager"
+	val.pressed.connect(_on_validate)
 	var here := _button("▶ D'ici", brow, 104)
 	here.tooltip_text = "Tester depuis le milieu de l'écran (ne compte pas pour les records)"
 	here.pressed.connect(_on_test_here)
@@ -1285,6 +1365,9 @@ func _refresh_ui() -> void:
 			_info.text += "  ·  record " + RaceManager.format_time(best)
 		if unsafe > 0:
 			_info.text += "   ·   %d grand%s trou%s sans grappin (en orange)" % [unsafe, "s" if unsafe > 1 else "", "s" if unsafe > 1 else ""]
+		# [VALIDATION 1.81] état de la validation
+		var gold := DrawnLevel.validated_gold()
+		_info.text += ("  ·  ✔ validé, or " + RaceManager.format_time(gold)) if gold > 0.0 else "  ·  pas encore validé"
 	_undo_button.disabled = _undo.is_empty()
 	_redo_button.disabled = _redo.is_empty()   # [CRÉATEUR v2 1.80]
 	_name_button.text = "✏  " + DrawnLevel.current_name
@@ -1298,16 +1381,16 @@ func _refresh_ui() -> void:
 # qui existe dans les niveaux du jeu y est listé, dans l'ordre du plan ; ce
 # qui arrive dans une prochaine version est grisé avec son numéro de version.
 const PALETTE := [
-	["Objets", [["hook", "Prise de grappin", ""], ["egg", "Œuf à grappiner", "1.81"], ["boost", "Boost", "1.81"],
-		["start", "Départ", "1.81"], ["finish", "Arrivée", "1.81"], ["checkpoint", "Point de passage", "1.81"],
-		["sign", "Panneau flèche", "1.81"], ["camera", "Zone de caméra", "1.81"]]],
+	["Objets", [["hook", "Prise de grappin", ""], ["egg", "Œuf à grappiner", ""], ["boost", "Boost", ""],
+		["start", "Départ", ""], ["finish", "Arrivée", ""], ["checkpoint", "Point de passage", ""],
+		["sign", "Panneau flèche", ""], ["camera", "Zone de caméra", ""]]],
 	["Terrain", [["draw", "Sol (outil Dessiner)", ""], ["ramp", "Tremplin", "1.82"], ["halfpipe", "Half-pipe", "1.82"],
 		["bowl", "Bol", "1.82"], ["slope", "Rampe", "1.82"], ["bend", "Virage en pipe", "1.82"], ["upipe", "Virage en U", "1.82"],
 		["ceiling", "Plafond", "1.82"], ["floating", "Plateforme flottante", "1.82"], ["wall", "Mur", "1.82"],
 		["pillar", "Pilier", "1.82"], ["balcony", "Balcon de glace", "1.82"], ["stal", "Plateforme-stalactite", "1.82"],
 		["cliff", "Falaise", "1.82"]]],
-	["Décor", [["arch", "Arche", "1.81"], ["podium", "Podium FIN", "1.81"], ["bush", "Buisson", "1.81"], ["igloo", "Igloo", "1.81"],
-		["colisee", "Colisée", "1.81"], ["ice1", "Bloc de glace 1", "1.81"], ["ice2", "Bloc de glace 2", "1.81"], ["ice3", "Petit bloc de glace", "1.81"]]],
+	["Décor", [["arch", "Arche", ""], ["podium", "Podium FIN", ""], ["bush", "Buisson", ""], ["igloo", "Igloo", ""],
+		["colisee", "Colisée", ""], ["ice1", "Bloc de glace 1", ""], ["ice2", "Bloc de glace 2", ""], ["ice3", "Petit bloc de glace", ""]]],
 	["Gros blocs", [["cave", "Caverne", "1.83"], ["void", "Zone de vide", "1.83"], ["pillars", "Motif piliers", "1.83"],
 		["bigegg", "Grand œuf", "1.83"], ["endless", "Tronçon du Sans fin", "1.83"]]],
 ]
@@ -1369,3 +1452,184 @@ func _set_mode(on: bool) -> void:
 	DrawnLevel.set_pref("expert", on)
 	_rebuild_ui()
 	_flash("Mode Expert : position exacte, aimant (🧲), vitesse de « D'ici », raccourcis Suppr, D, Échap." if on else "Mode Simple : l'essentiel, avec de gros boutons.")
+
+
+# --- [OBJETS 1.81] Réglages, aperçu et validation ---------------------------------
+
+## Nom affiché de chaque type d'objet
+const OBJ_NAMES := {"egg": "Œuf à grappiner", "boost": "Boost", "start": "Départ", "finish": "Arrivée",
+	"checkpoint": "Point de passage", "sign": "Panneau flèche", "camera": "Zone de caméra",
+	"arch": "Arche", "podium": "Podium FIN", "bush": "Buisson", "igloo": "Igloo", "colisee": "Colisée",
+	"ice1": "Bloc de glace 1", "ice2": "Bloc de glace 2", "ice3": "Petit bloc de glace"}
+const EGG_STYLE_NAMES := ["", "glace", "tacheté", "craquelé", "bonnet de neige", "bébé Pinpouin"]
+## Types qu'on peut tourner (les autres restent droits)
+const ROTATABLE := ["egg", "boost", "arch", "podium", "bush", "igloo", "colisee", "ice1", "ice2", "ice3"]
+
+
+## Change une valeur de l'objet sélectionné (props si `prop`) avec une étape « Annuler »
+func _set_obj(key: String, value, prop := false) -> void:
+	_undo_for_setting(key)
+	var o: Dictionary = DrawnLevel.objects[_sel.index]
+	if prop:
+		o.props[key] = value
+	else:
+		o[key] = value
+	_changed()
+
+
+## Réglages d'un objet : Simple = 1 ou 2 curseurs ; Expert = + position, angle
+func _object_settings(col: VBoxContainer, title: Label) -> void:
+	var o: Dictionary = DrawnLevel.objects[_sel.index]
+	var t: String = o.type
+	title.text = OBJ_NAMES.get(t, t)
+	match t:
+		"egg":
+			_slider_row(col, "Dessin", 1, 5, 1, float(o.props.get("style", 1)), func(v): _set_obj("style", int(v), true),
+				func(v): return EGG_STYLE_NAMES[int(v)])
+			_slider_row(col, "Taille", DrawnLevel.HOOK_SCALE_MIN, DrawnLevel.HOOK_SCALE_MAX, 0.05, o.scale, func(v): _set_obj("scale", v))
+		"boost":
+			_slider_row(col, "Force", 0.0, 1.0, 0.05, float(o.props.get("strength", 0.35)), func(v): _set_obj("strength", v, true),
+				func(v): return "%d %%" % int(round(v * 100.0)))
+			_slider_row(col, "Angle", -180.0, 180.0, 15.0 if magnet and expert else 1.0, wrapf(rad_to_deg(o.rot), -180.0, 180.0), func(v): _set_obj("rot", deg_to_rad(v)))
+			var air := CheckButton.new()
+			air.text = "Boost en l'air"
+			air.button_pressed = bool(o.props.get("in_air", false))
+			air.focus_mode = Control.FOCUS_NONE
+			for c in ["font_color", "font_hover_color", "font_pressed_color", "font_hover_pressed_color"]:
+				air.add_theme_color_override(c, Color.WHITE)
+			air.toggled.connect(func(on): _set_obj("in_air", on, true))
+			col.add_child(air)
+		"start":
+			_slider_row(col, "Élan", 0.0, 2000.0, 50.0, float(o.props.get("speed", 0.0)), func(v): _set_obj("speed", v, true),
+				func(v): return "%d px/s" % int(v))
+		"sign":
+			_slider_row(col, "Direction", 0, 7, 1, float(DrawnLevel.SIGN_DIRS.find(str(o.props.get("dir", "droite")))), func(v): _set_obj("dir", DrawnLevel.SIGN_DIRS[int(v)], true),
+				func(v): return DrawnLevel.SIGN_DIRS[int(v)])
+		"camera":
+			_slider_row(col, "Largeur", 800.0, 9000.0, 100.0, float(o.props.get("w", 2400.0)), func(v): _set_obj("w", v, true), func(v): return "%d px" % int(v))
+			_slider_row(col, "Hauteur", 600.0, 6000.0, 100.0, float(o.props.get("h", 1400.0)), func(v): _set_obj("h", v, true), func(v): return "%d px" % int(v))
+			if expert:
+				_slider_row(col, "Dézoom max", 0.1, 1.0, 0.05, float(o.props.get("zoom", 0.25)), func(v): _set_obj("zoom", v, true))
+		"checkpoint", "finish":
+			var info := Label.new()
+			info.text = "Après une chute, on repart du dernier point atteint." if t == "checkpoint" else "La ligne d'arrivée (une seule par niveau)."
+			info.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+			info.custom_minimum_size = Vector2(220, 0)
+			info.add_theme_color_override("font_color", Color.WHITE)
+			col.add_child(info)
+		_:
+			_slider_row(col, "Taille", DrawnLevel.HOOK_SCALE_MIN, DrawnLevel.HOOK_SCALE_MAX, 0.05, o.scale, func(v): _set_obj("scale", v))
+	if expert:
+		if t in ROTATABLE and t != "boost":
+			_slider_row(col, "Angle", -180.0, 180.0, 15.0 if magnet else 1.0, wrapf(rad_to_deg(o.rot), -180.0, 180.0), func(v): _set_obj("rot", deg_to_rad(v)))
+		_spin_row(col, "X", o.pos.x, func(v): _set_obj("pos", Vector2(v, DrawnLevel.objects[_sel.index].pos.y)))
+		_spin_row(col, "Y", o.pos.y, func(v): _set_obj("pos", Vector2(DrawnLevel.objects[_sel.index].pos.x, v)))
+
+
+## Aperçu d'un décor : les images (Sprite2D) de sa scène, gardées en cache
+## [[texture, transform, rect]] (transform depuis la racine de la scène)
+var _decor_cache := {}
+func _decor_sprites(type: String) -> Array:
+	if _decor_cache.has(type):
+		return _decor_cache[type]
+	var out: Array = []
+	var root: Node = load(DrawnLevel.DECOR_SCENES[type]).instantiate()
+	for sp in root.find_children("*", "Sprite2D", true, false):
+		if sp.texture == null or not sp.visible:
+			continue
+		var xf: Transform2D = sp.transform
+		var n: Node = sp.get_parent()
+		while n != null and n != root and n is Node2D:
+			xf = n.transform * xf
+			n = n.get_parent()
+		out.append([sp.texture, xf, sp.get_rect(), sp.region_rect if sp.region_enabled else Rect2(Vector2.ZERO, sp.texture.get_size() / Vector2(sp.hframes, sp.vframes))])
+	root.free()
+	_decor_cache[type] = out
+	return out
+
+
+## Images de l'aperçu, gardées en mémoire : une texture chargée dans une
+## variable locale de _draw() était libérée avant l'affichage de l'image
+## (elle apparaissait toute blanche)
+var _tex_cache := {}
+func _tex(path: String) -> Texture2D:
+	if not _tex_cache.has(path):
+		_tex_cache[path] = load(path)
+	return _tex_cache[path]
+
+
+## Dessine les objets (appelé par _draw) ; `z` = zoom de la vue
+func _draw_objects(z: float, font: Font, fs: int) -> void:
+	for i in DrawnLevel.objects.size():
+		var o: Dictionary = DrawnLevel.objects[i]
+		var sel: bool = _sel.get("kind", "") == "obj" and _sel.index == i
+		var hh := DrawnLevel.object_half(o)
+		var xf := Transform2D(o.rot, o.pos)
+		match str(o.type):
+			"egg":
+				var tex: Texture2D = _tex("res://sprites/levels/gruyere/oeuf_%s.png" % Settings.EGG_STYLES[clampi(int(o.props.get("style", 1)), 1, 5)])
+				draw_set_transform_matrix(xf.scaled_local(Vector2.ONE * 4.0 * o.scale))
+				draw_texture_rect_region(tex, Rect2(-tex.get_size() * 0.5, tex.get_size()), Rect2(Vector2.ZERO, tex.get_size()))
+			"sign":
+				var tex: Texture2D = _tex("res://sprites/levels/egg/panneau_%s.png" % str(o.props.get("dir", "droite")))
+				draw_set_transform_matrix(xf.scaled_local(Vector2.ONE * 5.0 * o.scale))
+				draw_texture_rect_region(tex, Rect2(-tex.get_size() * 0.5, tex.get_size()), Rect2(Vector2.ZERO, tex.get_size()))
+			"boost":
+				# chevrons colorés selon la force (blanc -> jaune -> rouge)
+				var k: float = float(o.props.get("strength", 0.35))
+				var c: Color = Color.WHITE.lerp(Color(1, 0.85, 0.1), minf(1.0, k * 2.0)).lerp(Color(1, 0.2, 0.15), maxf(0.0, k * 2.0 - 1.0))
+				draw_set_transform_matrix(xf)
+				for j in 3:
+					var x0: float = -hh.x + j * hh.x * 0.66
+					draw_colored_polygon(PackedVector2Array([Vector2(x0, -hh.y), Vector2(x0 + hh.x * 0.5, 0), Vector2(x0, hh.y),
+						Vector2(x0 + hh.x * 0.25, hh.y), Vector2(x0 + hh.x * 0.75, 0), Vector2(x0 + hh.x * 0.25, -hh.y)]), c)
+				if bool(o.props.get("in_air", false)):
+					draw_string(font, Vector2(-hh.x, -hh.y - 10.0), "EN L'AIR", HORIZONTAL_ALIGNMENT_LEFT, -1, int(fs * 0.8), c)
+			"checkpoint":
+				draw_set_transform_matrix(xf)
+				draw_line(Vector2.ZERO, Vector2(0, -220), Color(0.17, 0.23, 0.35), maxf(10.0, 3.0 / z))
+				draw_colored_polygon(PackedVector2Array([Vector2(4, -220), Vector2(110, -185), Vector2(4, -150)]), Color(1, 0.82, 0.25))
+			"camera":
+				draw_set_transform_matrix(Transform2D(0.0, o.pos))
+				var r := Rect2(-hh, hh * 2.0)
+				draw_rect(r, Color(0.6, 0.4, 1.0, 0.10))
+				draw_rect(r, Color(0.6, 0.4, 1.0, 0.85), false, 4.0 / z)
+				draw_string(font, r.position + Vector2(12.0 / z, fs * 1.2), "Zone de caméra (dézoom %.2f)" % float(o.props.get("zoom", 0.25)), HORIZONTAL_ALIGNMENT_LEFT, -1, int(fs * 0.85), Color(0.85, 0.75, 1.0))
+			"start", "finish":
+				pass   # dessinés avec le départ et l'arrivée (voir _draw)
+			_:
+				if DrawnLevel.DECOR_SCENES.has(o.type):
+					for spr in _decor_sprites(o.type):
+						draw_set_transform_matrix(xf.scaled_local(Vector2.ONE * o.scale) * spr[1])
+						draw_texture_rect_region(spr[0], spr[2], spr[3])
+		draw_set_transform_matrix(Transform2D.IDENTITY)
+		if sel:
+			# cadre jaune et poignées
+			draw_set_transform_matrix(Transform2D(0.0 if o.type == "camera" else o.rot, o.pos))
+			draw_rect(Rect2(-hh, hh * 2.0), SELECT_COLOR, false, 5.0 / z)
+			draw_set_transform_matrix(Transform2D.IDENTITY)
+			var hd := _handles()
+			if hd.rotate != Vector2.INF and o.type in ROTATABLE:
+				draw_line(o.pos, hd.rotate, SELECT_COLOR, 3.0 / z)
+				draw_circle(hd.rotate, 14.0 / z, SELECT_COLOR)
+				draw_circle(hd.rotate, 8.0 / z, Color(0.1, 0.15, 0.3))
+			if not (o.type in ["start", "finish", "checkpoint"]):
+				draw_rect(Rect2(hd.scale - Vector2.ONE * 13.0 / z, Vector2.ONE * 26.0 / z), SELECT_COLOR)
+
+
+## « ✔ Valider » : course en mode Score depuis le vrai départ ; à l'arrivée,
+## le temps devient l'or du niveau (DrawnLevel.record_validation)
+func _on_validate() -> void:
+	if not DrawnLevel.is_playable():
+		_flash("Dessine d'abord un sol !")
+		return
+	DrawnLevel.save()
+	DrawnLevel.validating = true
+	DrawnLevel.last_validation_time = 0.0
+	if DrawnLevel.validation_prev_mode < 0:
+		DrawnLevel.validation_prev_mode = Settings.game_mode
+	Settings.game_mode = Settings.MODE_SCORE   # la validation se court en mode Score
+	DrawnLevel.return_scene = DrawnLevel.EDITOR_SCENE
+	DrawnLevel.test_from = Vector2.INF
+	_remember_view()
+	get_tree().change_scene_to_file(DrawnLevel.LEVEL_SCENE)

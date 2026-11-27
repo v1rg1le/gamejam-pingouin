@@ -232,6 +232,11 @@ func _on_node_added(node: Node) -> void:
 	else:
 		_reset_race()
 		level_path = ""   # menus : pas de course
+		# [VALIDATION 1.81] après une course « ✔ Valider » (courue en mode
+		# Score), on remet le mode de jeu du joueur
+		if DrawnLevel.validation_prev_mode >= 0:
+			Settings.game_mode = DrawnLevel.validation_prev_mode
+			DrawnLevel.validation_prev_mode = -1
 
 
 func _prepare_level(path: String) -> void:
@@ -463,6 +468,11 @@ func finish_race() -> bool:
 		return _finish_chill()   # [MODES 1.25]
 	racing = false
 	_record_sample()  # dernière position exacte
+	# [VALIDATION 1.81] course « ✔ Valider » du créateur : le temps devient
+	# l'or du niveau (seulement depuis le vrai départ, jamais « D'ici »)
+	if _is_any_drawn_level() and DrawnLevel.validating and not _is_drawn_level():
+		DrawnLevel.record_validation(race_time)
+		gold_time = DrawnLevel.current_gold
 	var previous_best := get_best_time(level_path)
 	var is_record := previous_best < 0.0 or race_time < previous_best
 	if _is_drawn_level():   # [CRÉATEUR 1.45] rien d'enregistré (voir DRAWN_LEVEL)

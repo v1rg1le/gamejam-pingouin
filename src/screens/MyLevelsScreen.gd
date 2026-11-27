@@ -380,6 +380,12 @@ func _open_share(entry: Dictionary) -> void:
 	var save_author := func():
 		if own and author_edit.text.strip_edges() != "":
 			DrawnLevel.set_author_name(author_edit.text)
+	# [VALIDATION 1.81] un niveau à toi se partage une fois VALIDÉ (fini du
+	# départ à l'arrivée avec « ✔ Valider » dans l'éditeur) : décision de l'équipe
+	if own and not DrawnLevel.entry_validated(entry):
+		_label(col, "Pour partager ce niveau, finis-le d'abord avec « ✔ Valider » dans l'éditeur : ton temps deviendra l'or du niveau.")
+		_button("Fermer", col, 0).pressed.connect(_close_popup)
+		return
 	var b1 := _button("Copier le code du niveau", col, 0)
 	b1.pressed.connect(func():
 		save_author.call()

@@ -272,6 +272,11 @@ static func _x_is_taken(x: float) -> bool:
 ## Retire le trait ou le bloc de grappin manuel touché en `pos` (gomme).
 ## `radius` = tolérance en px du monde. Renvoie vrai si quelque chose a été effacé.
 static func erase_at(pos: Vector2, radius: float) -> bool:
+	# [OBJETS 1.81] les objets d'abord (dessinés par-dessus le reste)
+	for i in range(objects.size() - 1, -1, -1):
+		if object_hit(objects[i], pos, radius):
+			objects.remove_at(i)
+			return true
 	for i in range(hooks.size() - 1, -1, -1):
 		if (hooks[i].pos as Vector2).distance_to(pos) < radius * maxf(1.0, hooks[i].scale):
 			hooks.remove_at(i)
@@ -307,6 +312,10 @@ static func make_hook(pos: Vector2, rot := 0.0, scale := 1.0) -> Dictionary:
 ## Ce qui est sous `pos` : {kind: "hook" | "stroke", index: int} ou {} (rien).
 ## Les blocs passent avant les traits (ils sont dessinés par-dessus).
 static func pick_at(pos: Vector2, radius: float) -> Dictionary:
+	# [OBJETS 1.81] {kind: "obj", index} pour un objet de la liste `objects`
+	for i in range(objects.size() - 1, -1, -1):
+		if object_hit(objects[i], pos, radius):
+			return {"kind": "obj", "index": i}
 	for i in range(hooks.size() - 1, -1, -1):
 		if (hooks[i].pos as Vector2).distance_to(pos) < radius * maxf(1.0, hooks[i].scale):
 			return {"kind": "hook", "index": i}
@@ -574,6 +583,10 @@ static func save() -> void:
 	data["author"] = current_author   # [PARTAGE 1.47] "" = toi ; sinon l'auteur d'un niveau reçu
 	var old = _read_file(path)
 	data["created"] = old.get("created", Time.get_unix_time_from_system()) if old != null else Time.get_unix_time_from_system()
+	# [VALIDATION 1.81] la validation est gardée (elle ne vaut que pour son empreinte)
+	if old != null and old.has("validated_hash"):
+		data["validated_hash"] = old.validated_hash
+		data["gold_time"] = old.get("gold_time", 0.0)
 	data["modified"] = Time.get_unix_time_from_system()
 	var f := FileAccess.open(path, FileAccess.WRITE)
 	if f != null:
@@ -696,6 +709,9 @@ static func open_level(id: String) -> bool:
 	current_gold = 0.0
 	is_official = false
 	_apply(data)
+	# [VALIDATION 1.81] niveau validé tel quel : son or est le temps du créateur
+	if str(data.get("validated_hash", "")) == content_hash():
+		current_gold = float(data.get("gold_time", 0.0))
 	return true
 
 
@@ -828,6 +844,10 @@ static func share_code(level_id: String, with_ghost: bool) -> String:
 	if v2:
 		payload.v = CODE_VERSION_MAX
 		payload["objects"] = data.get("objects", [])
+	# [VALIDATION 1.81] le temps du créateur voyage avec le niveau validé :
+	# ceux qui le reçoivent ont les mêmes médailles
+	if str(data.get("validated_hash", "")) == str(data.get("hash", "")) and float(data.get("gold_time", 0.0)) > 0.0:
+		payload["gold"] = float(data.gold_time)
 	if with_ghost:
 		var g = RaceManager.load_best_ghost(race_path_of({"id": level_id, "hash": str(data.get("hash", ""))}))
 		if g != null:
@@ -904,6 +924,16 @@ static func _validate(data: Dictionary) -> String:
 				return "Code abîmé (bloc de grappin illisible)."
 	if data.has("objects") and (not (data.objects is Array) or (data.objects as Array).size() > 2000):
 		return "Code abîmé (objets illisibles)."
+	# [OBJETS 1.81] chaque objet : type connu, nombres finis
+	for o in data.get("objects", []):
+		if not (o is Dictionary) or not (str(o.get("t", "")) in VALID_TYPES):
+			return "Code abîmé (objet inconnu)."
+		for k in ["x", "y", "r", "s"]:
+			var v = o.get(k, 0.0)
+			if not (typeof(v) in [TYPE_FLOAT, TYPE_INT]) or not is_finite(float(v)) or absf(float(v)) > COORD_MAX:
+				return "Code abîmé (objet illisible)."
+		if not (o.get("p", {}) is Dictionary):
+			return "Code abîmé (objet illisible)."
 	return ""
 
 
@@ -941,6 +971,18 @@ static func import_level(data: Dictionary) -> String:
 	restore(snap)
 	current_author = str(data.get("author", "")).strip_edges().left(NAME_MAX)
 	save()
+	# [VALIDATION 1.81] niveau reçu validé : on garde son or
+	var gold := float(data.get("gold", 0.0)) if (typeof(data.get("gold", 0.0)) in [TYPE_FLOAT, TYPE_INT]) else 0.0
+	if gold > 0.0 and gold < 36000.0:
+		var path := LEVELS_DIR.path_join(current_id + ".json")
+		var fd = _read_file(path)
+		if fd != null:
+			fd["validated_hash"] = content_hash()
+			fd["gold_time"] = gold
+			var f := FileAccess.open(path, FileAccess.WRITE)
+			if f != null:
+				f.store_string(JSON.stringify(fd))
+				f.close()
 	var msg := "Niveau ajouté : « %s »%s." % [final_name, (" par " + current_author) if current_author != "" else ""]
 	if data.has("ghost") and _store_ghost(data.ghost, race_path()):
 		msg += "\nAvec son fantôme : à toi de le battre (mode Score) !"
@@ -1117,3 +1159,167 @@ static func start_point_near(x: float) -> Vector2:
 			best = st
 	var sx := clampf(x, best[0].x + 40.0, best[best.size() - 1].x - 40.0)
 	return Vector2(sx, surface_y_of(best, sx) - 80.0)
+
+
+# --- 8. [OBJETS 1.81] Objets de jeu et décors ---------------------------------------
+# Étape 2 du plan du créateur (27/11) : tout ce que les niveaux du jeu savent
+# poser devient un objet du créateur. Chaque objet est un Dictionary de la
+# liste `objects` : {type, pos, rot, scale, props}. Types et réglages (props) :
+#   egg        œuf à grappiner (même collision que le Gruyère : ellipse
+#              130 x 170 à l'échelle 1) ; props.style 1 à 5 = les 5 dessins
+#              de la 1.79 (glace, tacheté, craquelé, bonnet de neige, bébé) ;
+#   boost      flèches « Trackmania » (BoostArea) ; props.strength 0..1
+#              (blanc -> jaune -> rouge), props.in_air (boost en l'air) ;
+#   start      départ (un seul) ; props.speed = élan de départ (px/s) ;
+#   finish     arrivée (une seule ; sinon au bout du dernier trait) ;
+#   checkpoint point de passage : après une chute, on repart du dernier atteint ;
+#   sign       panneau flèche ; props.dir parmi SIGN_DIRS ;
+#   camera     zone de caméra : rectangle props.w x props.h autour de pos ;
+#              tant que Pinpouin est dedans, la caméra garde toute la zone
+#              à l'écran (dézoom jusqu'à props.zoom) ;
+#   arch, podium, bush, igloo, colisee, ice1, ice2, ice3 : décors (scènes
+#              du jeu, plantés dans la neige par IceStyle comme partout).
+
+## Scène de chaque décor
+const DECOR_SCENES := {
+	"arch": "res://src/levels/Arche.tscn",
+	"podium": "res://src/levels/decoration/FinishPodium.tscn",
+	"bush": "res://src/levels/decoration/Buisson.tscn",
+	"igloo": "res://src/levels/decoration/Igloo.tscn",
+	"colisee": "res://src/levels/decoration/Colisee.tscn",
+	"ice1": "res://src/levels/decoration/IceMedium1.tscn",
+	"ice2": "res://src/levels/decoration/IceMedium2.tscn",
+	"ice3": "res://src/levels/decoration/IceSmall.tscn",
+}
+## Directions des panneaux (images sprites/levels/egg/panneau_<dir>.png)
+const SIGN_DIRS := ["droite", "haut-droite", "haut", "haut-gauche", "gauche", "bas-gauche", "bas", "bas-droite"]
+## Demi-taille (px du monde, échelle 1) de chaque type : sert à toucher l'objet
+## dans l'éditeur et à placer les poignées
+const OBJECT_HALF := {
+	"egg": Vector2(130, 170), "boost": Vector2(130, 70), "start": Vector2(60, 90), "finish": Vector2(80, 220),
+	"checkpoint": Vector2(50, 130), "sign": Vector2(110, 110), "arch": Vector2(220, 260), "podium": Vector2(200, 160),
+	"bush": Vector2(110, 80), "igloo": Vector2(200, 140), "colisee": Vector2(300, 220), "ice1": Vector2(120, 120),
+	"ice2": Vector2(120, 120), "ice3": Vector2(80, 80),
+}
+## Tous les types connus (vérification des codes reçus)
+const VALID_TYPES := ["egg", "boost", "start", "finish", "checkpoint", "sign", "camera",
+	"arch", "podium", "bush", "igloo", "colisee", "ice1", "ice2", "ice3"]
+## Types dont il ne peut y avoir qu'un seul exemplaire
+const UNIQUE_TYPES := ["start", "finish"]
+
+## Rang du prochain œuf posé (dessin du mélange, comme dans le Gruyère)
+static var _egg_cycle := 0
+
+
+## Nouvel objet avec ses réglages par défaut
+static func make_object(type: String, pos: Vector2) -> Dictionary:
+	var props := {}
+	match type:
+		"egg":
+			props = {"style": 1 + _egg_cycle % 5}
+			_egg_cycle += 1
+		"boost":
+			props = {"strength": 0.35, "in_air": false}
+		"start":
+			props = {"speed": 0.0}
+		"sign":
+			props = {"dir": "droite"}
+		"camera":
+			props = {"w": 2400.0, "h": 1400.0, "zoom": 0.25}
+	return {"type": type, "pos": pos, "rot": 0.0, "scale": 1.0, "props": props}
+
+
+## Demi-taille d'un objet (zone de caméra : son rectangle ; sinon OBJECT_HALF x taille)
+static func object_half(o: Dictionary) -> Vector2:
+	if o.type == "camera":
+		return Vector2(float(o.props.get("w", 2400.0)), float(o.props.get("h", 1400.0))) * 0.5
+	return OBJECT_HALF.get(o.type, Vector2(100, 100)) * float(o.get("scale", 1.0))
+
+
+## Le point `pos` touche-t-il l'objet ? (rectangle tourné, + tolérance ;
+## une zone de caméra ne se touche que par son bord ou son centre, pour ne
+## pas empêcher de toucher ce qu'elle contient)
+static func object_hit(o: Dictionary, pos: Vector2, radius: float) -> bool:
+	var local: Vector2 = (pos - o.pos).rotated(-float(o.get("rot", 0.0)))
+	var h := object_half(o)
+	if o.type == "camera":
+		var inside := absf(local.x) < h.x + radius * 0.5 and absf(local.y) < h.y + radius * 0.5
+		var near_edge := absf(local.x) > h.x - radius * 0.5 or absf(local.y) > h.y - radius * 0.5
+		return inside and (near_edge or local.length() < radius)
+	return absf(local.x) < h.x + radius * 0.3 and absf(local.y) < h.y + radius * 0.3
+
+
+## Pose un objet (un départ / une arrivée remplace l'ancien). Renvoie son index.
+static func add_object(o: Dictionary) -> int:
+	if o.type in UNIQUE_TYPES:
+		for i in range(objects.size() - 1, -1, -1):
+			if objects[i].type == o.type:
+				objects.remove_at(i)
+	objects.append(o)
+	return objects.size() - 1
+
+
+## Le premier objet d'un type ({} s'il n'y en a pas)
+static func first_object(type: String) -> Dictionary:
+	for o in objects:
+		if o.type == type:
+			return o
+	return {}
+
+
+# --- 9. [VALIDATION 1.81] Finir son niveau pour le partager --------------------------
+# Décision de l'équipe (27/11) : pas de limite de pente, mais il faut FINIR
+# son niveau pour le partager, et l'or est le temps du créateur (comme dans
+# Trackmania). Bouton « ✔ Valider » de l'éditeur : une course en mode Score
+# depuis le vrai départ ; à l'arrivée, le temps est gardé avec l'empreinte du
+# niveau. Toute modification change l'empreinte : il faut revalider. Un
+# meilleur temps de validation améliore l'or. Argent = or + 25 %, bronze =
+# or + 60 % (RaceManager, comme les autres niveaux).
+
+## Course de validation en cours (lancée par « ✔ Valider »)
+static var validating := false
+## Mode de jeu à remettre après la validation (elle se court en mode Score)
+static var validation_prev_mode := -1
+## Résultat de la dernière validation, pour le message de l'éditeur (0 = aucune)
+static var last_validation_time := 0.0
+
+
+## Vrai si le niveau ouvert est validé tel qu'il est maintenant
+static func is_validated() -> bool:
+	var data = _read_file(LEVELS_DIR.path_join(current_id + ".json")) if current_id != "" else null
+	return data != null and str(data.get("validated_hash", "")) == content_hash() and float(data.get("gold_time", 0.0)) > 0.0
+
+
+## Or du niveau ouvert s'il est validé (0 sinon)
+static func validated_gold() -> float:
+	if not is_validated():
+		return 0.0
+	return float(_read_file(LEVELS_DIR.path_join(current_id + ".json")).get("gold_time", 0.0))
+
+
+## Vrai si le niveau `entry` de la liste est validé (bouton Partager)
+static func entry_validated(entry: Dictionary) -> bool:
+	var data = _read_file(LEVELS_DIR.path_join(str(entry.id) + ".json"))
+	return data != null and str(data.get("validated_hash", "")) == str(data.get("hash", "")) and float(data.get("gold_time", 0.0)) > 0.0
+
+
+## Appelé par RaceManager à l'arrivée d'une course de validation
+static func record_validation(time: float) -> void:
+	validating = false
+	last_validation_time = time
+	if current_id == "" or is_official:
+		return
+	save()
+	var path := LEVELS_DIR.path_join(current_id + ".json")
+	var data = _read_file(path)
+	if data == null:
+		return
+	var h := content_hash()
+	var old: float = float(data.get("gold_time", 0.0)) if str(data.get("validated_hash", "")) == h else 0.0
+	data["validated_hash"] = h
+	data["gold_time"] = time if old <= 0.0 else minf(old, time)
+	current_gold = data.gold_time
+	var f := FileAccess.open(path, FileAccess.WRITE)
+	if f != null:
+		f.store_string(JSON.stringify(data))
+		f.close()
