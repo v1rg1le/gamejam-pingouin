@@ -124,7 +124,7 @@ var _palette: PanelContainer       # [CRÉATEUR v2 1.80] palette de l'outil Obje
 var _settings: PanelContainer      # [CRÉATEUR v2 1.80] réglages de la sélection
 var _speed_spin: SpinBox           # [CRÉATEUR v2 1.80] vitesse de départ de « D'ici » (Expert)
 var _test_button: Button
-var _auto_check: CheckButton
+var _auto_check: Button           # [ICÔNES 1.82] bouton-icône à bascule (était une CheckButton)
 var _hint: Label
 var _info: Label
 var _penguin_tex: Texture2D = preload("res://icon.png")
@@ -143,6 +143,8 @@ func _ready() -> void:
 	# [CRÉATEUR v2 1.80] mode et magnétisme retrouvés d'une fois sur l'autre
 	expert = bool(DrawnLevel.pref("expert", false))
 	magnet = bool(DrawnLevel.pref("magnet", false))
+	# [SURVOL 1.82] infos au survol : par défaut en Expert seulement
+	hover_info = bool(DrawnLevel.pref(_hover_pref_key(), expert))
 	_build_background()
 	cam = Camera2D.new()
 	cam.position_smoothing_enabled = false
@@ -382,6 +384,10 @@ func _to_world(screen_pos: Vector2) -> Vector2:
 
 
 func _process(delta: float) -> void:
+	# [ICÔNES 1.82] bulles d'aide ; [SURVOL 1.82] le halo pulse
+	_tip_tick()
+	if not _hover.is_empty():
+		queue_redraw()
 	# Défilement automatique en dessinant près du bord droit : on peut tracer
 	# un long niveau d'un seul geste
 	if _drawing:
@@ -406,6 +412,7 @@ func _push_undo() -> void:
 
 ## Après chaque modification : sauvegarde, boutons et aperçu à jour
 func _changed() -> void:
+	_set_hover({})   # [SURVOL 1.82] les numéros des éléments ont pu changer
 	# [MES NIVEAUX 1.46] un record existait pour le dessin d'avant : il ne compte
 	# plus (sinon on raccourcirait le niveau en gardant le record) ; on prévient
 	# une fois. (Annuler qui revient au dessin d'origine le fait revenir.)
@@ -576,7 +583,7 @@ func _frame_content() -> void:
 	# Zone libre de l'écran (hors barre du haut, colonne d'outils et bas),
 	# en px d'écran ; l'interface est agrandie par UiScaler sur téléphone
 	var s: float = _ui_layer.scale.x
-	var free := Rect2(Vector2(10, TOP_BAR_H) * s, vp - Vector2(20, TOP_BAR_H + BOTTOM_BAR_H + 30) * s)
+	var free := Rect2(Vector2(10, _top_bar_h) * s, vp - Vector2(20, _top_bar_h + _bottom_bar_h + 30) * s)
 	var z: float = clampf(minf(free.size.x / r.size.x, free.size.y / r.size.y), ZOOM_MIN, ZOOM_DEFAULT)
 	cam.zoom = Vector2(z, z)
 	# le centre du dessin tombe au centre de la zone libre
@@ -689,6 +696,9 @@ func _draw() -> void:
 		draw_polygon(beam, PackedColorArray([Color(1, 0.95, 0.4, 0.6), Color(1, 0.95, 0.4, 0.6), Color(1, 0.95, 0.4, 0), Color(1, 0.95, 0.4, 0)]))
 		draw_string(font, fp + Vector2(-2.3 * fs, -160.0), "ARRIVÉE", HORIZONTAL_ALIGNMENT_LEFT, -1, fs, Color(1, 0.95, 0.4))
 
+	# e2. [SURVOL 1.82] halo de l'élément survolé (par-dessus le reste)
+	_draw_hover(z)
+
 	# f. trait en cours (en rouge là où il passe au-dessus d'un sol existant)
 	if _drawing and _raw.size() > 1:
 		for i in _raw.size() - 1:
@@ -756,6 +766,8 @@ func _snap_angle(a: float) -> float:
 ## Choisit (ou vide, avec {}) la sélection et met le panneau de réglages à jour
 func _select(sel: Dictionary) -> void:
 	_sel = sel
+	if _hover == sel:
+		_set_hover({})   # [SURVOL 1.82] sélectionné : le halo de survol s'efface
 	_drag_delta = Vector2.ZERO
 	_rebuild_settings()
 	queue_redraw()
@@ -963,7 +975,7 @@ func _rebuild_settings() -> void:
 	_settings.set_anchors_preset(Control.PRESET_TOP_RIGHT)
 	_settings.offset_left = -250
 	_settings.offset_right = -6
-	_settings.offset_top = TOP_BAR_H + 6
+	_settings.offset_top = _top_bar_h + 6
 	_settings.grow_horizontal = Control.GROW_DIRECTION_BEGIN
 	var col := VBoxContainer.new()
 	col.add_theme_constant_override("separation", 6)
@@ -1011,6 +1023,8 @@ func _rebuild_settings() -> void:
 	_button("Dupliquer", row, 108).pressed.connect(_duplicate_sel)
 	_button("Supprimer", row, 108).pressed.connect(_delete_sel)
 	_ui_root.add_child(_settings)
+	if _tip != null and is_instance_valid(_tip):
+		_ui_root.move_child(_tip, -1)   # [ICÔNES 1.82] la bulle reste au-dessus
 	_keep_selection_visible()
 
 
@@ -1144,6 +1158,407 @@ func _button(text: String, parent: Node, min_w: float = 0.0) -> Button:
 	return b
 
 
+# --- [ICÔNES 1.82] Boutons en icônes et bulles d'aide ------------------------------
+# Demande de l'équipe (27/11) : « que chaque bouton de cet éditeur soit une
+# image ou une icône, avec au survol un rappel de ce qu'il fait si on reste
+# dessus ». Choix de l'équipe : pixel art du jeu ; un petit mot sous l'icône
+# en mode Simple, l'icône seule en mode Expert.
+# Les icônes (32 x 32) et les vignettes de la palette (48 x 48) sont générées
+# par tools/art/icones_editeur.py dans sprites/ui/editor/.
+
+const ICON_DIR := "res://sprites/ui/editor/"
+
+## Bulle de chaque bouton : id -> [nom, ce qu'il fait, raccourci ("" si aucun),
+## mot écrit sous l'icône en mode Simple]. L'id est aussi le nom de l'icône.
+const TIPS := {
+	"retour": ["Retour", "Revenir à « Mes niveaux ». Ton niveau est enregistré à chaque modification.", "", "Retour"],
+	"nom": ["Nom du niveau", "Toucher pour renommer le niveau.", "", ""],
+	"annuler": ["Annuler", "Défait la dernière modification (jusqu'à 60 fois).", "Ctrl+Z", "Annuler"],
+	"refaire": ["Refaire", "Refait ce qui vient d'être annulé.", "Ctrl+Y", "Refaire"],
+	"effacer": ["Tout effacer", "Vide tout le niveau (Annuler le fait revenir).", "", "Effacer"],
+	"grappins": ["Grappins auto", "Pose tout seul des prises de grappin au-dessus des trous trop larges pour un saut. Icône pâle = coupé.", "", "Grappins"],
+	"simple": ["Mode Simple", "L'essentiel, avec de gros boutons. Toucher pour passer en mode Expert (tous les réglages).", "", "Simple"],
+	"expert": ["Mode Expert", "Tous les réglages, l'aimant et les raccourcis. Toucher pour revenir en mode Simple.", "", "Expert"],
+	"aimant": ["Aimant", "Grille de 32 px et angles de 15° pour poser, glisser et tourner. Icône pâle = coupé.", "", "Aimant"],
+	"survol": ["Infos au survol", "Passe la souris sur un élément du niveau : il s'éclaire en bleu et ses infos s'affichent. Icône pâle = coupé.", "", "Infos"],
+	"zoom_moins": ["Dézoomer", "Voir le niveau de plus loin.", "Molette · deux doigts", "Moins"],
+	"zoom_plus": ["Zoomer", "Voir le niveau de plus près.", "Molette · deux doigts", "Plus"],
+	"tout_voir": ["Tout voir", "Cadre la vue sur tout le niveau.", "", "Tout voir"],
+	"dessiner": ["Dessiner", "Trace le dessus du sol, dans un sens ou dans l'autre, aussi raide que tu veux. Lever le doigt fait un trou.", "", "Dessiner"],
+	"objets": ["Objets", "Ouvre la palette (grappins, œufs, boosts, départ, arrivée, panneaux, décors…), puis touche le niveau pour poser.", "", "Objets"],
+	"selection": ["Sélection", "Touche un élément pour le régler, glisse-le pour le déplacer. Rond = tourner, carré = agrandir.", "Suppr · D (Expert)", "Choisir"],
+	"gomme": ["Gomme", "Touche ou glisse sur un trait, un bloc ou un objet pour l'effacer.", "", "Gomme"],
+	"deplacer": ["Déplacer la vue", "Glisse pour te promener dans le niveau.", "Clic droit · deux doigts", "Bouger"],
+	"valider": ["Valider", "Finis ton niveau depuis le départ : ton temps devient l'or et tu peux le partager.", "", "Valider"],
+	"dici": ["Tester d'ici", "Lance Pinpouin depuis le milieu de l'écran. Ne compte pas pour les records.", "", "D'ici"],
+	"tester": ["Tester", "Joue ton niveau depuis le départ.", "", ""],
+}
+
+var _top_bar_h: float = TOP_BAR_H        # hauteur réelle de la barre du haut (unités de l'interface)
+var _bottom_bar_h: float = BOTTOM_BAR_H  # hauteur réelle de la barre du bas
+var _top_panel: PanelContainer           # barres (pour savoir si la souris est sur l'interface)
+var _bottom_panel: PanelContainer
+
+
+## Bouton-icône des barres. `toggle` : bouton à bascule (outil, aimant…).
+## Simple : icône + mot dessous ; Expert : icône seule (plus compact).
+func _ibutton(id: String, parent: Node, toggle := false) -> Button:
+	var b := Button.new()
+	b.icon = _tex(ICON_DIR + id + ".png")
+	b.focus_mode = Control.FOCUS_NONE
+	b.toggle_mode = toggle
+	b.icon_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	var tip: Array = TIPS.get(id, [id, "", "", id])
+	if expert:
+		b.custom_minimum_size = Vector2(50, 46)
+	else:
+		b.text = tip[3]
+		b.vertical_icon_alignment = VERTICAL_ALIGNMENT_TOP
+		b.add_theme_font_size_override("font_size", 13)
+		b.custom_minimum_size = Vector2(62, 58)
+	b.set_meta("tip", id)
+	_register_tip(b)
+	parent.add_child(b)
+	return b
+
+
+## Bouton à bascule éteint (aimant coupé, grappins auto coupés…) : icône pâle
+func _dim_if_off(b: Button) -> void:
+	if b == null or not is_instance_valid(b):
+		return
+	var a := 1.0 if b.button_pressed else 0.4
+	for c in ["icon_normal_color", "icon_hover_color", "icon_focus_color", "font_color", "font_hover_color"]:
+		b.add_theme_color_override(c, Color(1, 1, 1, a))
+
+
+# Bulles d'aide. Souris : la bulle s'ouvre après TIP_DELAY_MS sur le bouton
+# et se ferme quand on le quitte ou qu'on clique. Doigt (pas de survol) :
+# un appui long de TIP_DELAY_MS ouvre la bulle SANS déclencher le bouton
+# (il est désactivé le temps de lever le doigt), elle reste 2 s.
+const TIP_DELAY_MS := 550
+var _tip: PanelContainer
+var _tip_title: Label
+var _tip_body: Label
+var _tip_keys: Label
+var _tip_button: Button = null    # bouton visé (bulle en attente ou affichée)
+var _tip_due := 0                 # heure (ms) d'ouverture de la bulle
+var _tip_by_press := false        # true = appui long au doigt
+var _tip_hide_at := 0             # fermeture automatique (ms), 0 = non
+var _mouse_is_touch := false      # dernier évènement souris = souris émulée par un doigt
+var _suppressed: Array = []       # boutons désactivés le temps d'un appui long
+
+
+func _build_tip(root: Control) -> void:
+	_tip = PanelContainer.new()
+	var st := _panel_style()
+	st.bg_color = Color(0.06, 0.09, 0.18, 0.95)
+	st.border_color = Color(1.0, 0.85, 0.3, 0.9)
+	_tip.add_theme_stylebox_override("panel", st)
+	_tip.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_tip.visible = false
+	var col := VBoxContainer.new()
+	col.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_tip.add_child(col)
+	_tip_title = _tip_label(col, 17, Color(1.0, 0.9, 0.4))
+	_tip_body = _tip_label(col, 14, Color.WHITE)
+	_tip_keys = _tip_label(col, 13, Color(0.6, 0.85, 1.0))
+	root.add_child(_tip)
+
+
+func _tip_label(parent: Node, size: int, color: Color) -> Label:
+	var l := Label.new()
+	l.add_theme_font_size_override("font_size", size)
+	l.add_theme_color_override("font_color", color)
+	l.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	l.custom_minimum_size = Vector2(250, 0)
+	l.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	parent.add_child(l)
+	return l
+
+
+## Branche la bulle sur un bouton. La bulle vient de la méta « tip » : un id
+## de TIPS, ou directement [nom, rôle, raccourci] (cases de la palette).
+func _register_tip(b: Button) -> void:
+	b.tooltip_text = ""   # pas de bulle Godot en double
+	b.mouse_entered.connect(func():
+		if not _mouse_is_touch:
+			_tip_arm(b, false))
+	b.mouse_exited.connect(func():
+		if _tip_button == b and not _tip_by_press:
+			_tip_hide())
+	b.button_down.connect(func():
+		if _mouse_is_touch:
+			_tip_arm(b, true)    # doigt : on attend l'appui long
+		else:
+			_tip_hide())         # souris : un clic ferme la bulle
+	b.button_up.connect(func():
+		if _tip_button == b and _tip_by_press and not _tip.visible:
+			_tip_button = null)  # appui court : rien à montrer
+
+
+func _tip_arm(b: Button, by_press: bool) -> void:
+	_tip_hide()
+	_tip_button = b
+	_tip_by_press = by_press
+	_tip_due = Time.get_ticks_msec() + TIP_DELAY_MS
+
+
+func _tip_hide() -> void:
+	_tip_button = null
+	_tip_hide_at = 0
+	if _tip != null and is_instance_valid(_tip):
+		_tip.visible = false
+
+
+## Ouvre la bulle du bouton visé, sous lui (barre du haut) ou au-dessus
+func _tip_show() -> void:
+	var b := _tip_button
+	if b == null or not is_instance_valid(b) or not b.is_visible_in_tree() or _tip == null:
+		_tip_button = null
+		return
+	var meta = b.get_meta("tip", "")
+	var t: Array = meta if meta is Array else TIPS.get(str(meta), [str(meta), "", ""])
+	_tip_title.text = t[0]
+	_tip_body.text = t[1]
+	_tip_body.visible = t[1] != ""
+	_tip_keys.text = ("Raccourci : " + t[2]) if t[2] != "" else ""
+	_tip_keys.visible = t[2] != ""
+	_tip.visible = true
+	_tip.reset_size()
+	var r: Rect2 = b.get_global_rect()
+	var area: Vector2 = _ui_root.size
+	var sz: Vector2 = _tip.get_combined_minimum_size()
+	var y: float = r.end.y + 8.0 if r.get_center().y < area.y * 0.5 else r.position.y - sz.y - 8.0
+	var x: float = clampf(r.get_center().x - sz.x * 0.5, 6.0, maxf(6.0, area.x - sz.x - 6.0))
+	_tip.position = Vector2(x, clampf(y, 6.0, maxf(6.0, area.y - sz.y - 6.0)))
+	if _tip_by_press:
+		# appui long : le bouton ne se déclenchera pas au lever du doigt
+		if not b.disabled:
+			b.disabled = true
+			_suppressed.append(b)
+
+
+## Bulles et survol : à chaque évènement, AVANT l'interface (pour savoir si
+## la « souris » vient d'un doigt, et rendre la main aux boutons suspendus)
+func _input(event: InputEvent) -> void:
+	if event is InputEventMouse:
+		_mouse_is_touch = event.device == InputEvent.DEVICE_ID_EMULATION
+	elif event is InputEventScreenTouch or event is InputEventScreenDrag:
+		_mouse_is_touch = true
+	var released: bool = (event is InputEventMouseButton and not event.pressed and event.button_index == MOUSE_BUTTON_LEFT) \
+		or (event is InputEventScreenTouch and not event.pressed)
+	if released:
+		for b in _suppressed:
+			if is_instance_valid(b):
+				b.disabled = false
+		_suppressed.clear()
+		if _tip != null and is_instance_valid(_tip) and _tip.visible and _tip_by_press:
+			_tip_hide_at = Time.get_ticks_msec() + 2000
+	if event is InputEventMouseButton and event.pressed and not _mouse_is_touch and _tip != null and is_instance_valid(_tip) and _tip.visible:
+		_tip_hide()
+	# [SURVOL 1.82] la vraie souris se déplace : élément survolé mis à jour
+	if event is InputEventMouseMotion and not _mouse_is_touch:
+		_update_hover(event.position)
+
+
+## Horloge des bulles (appelée par _process)
+func _tip_tick() -> void:
+	var now := Time.get_ticks_msec()
+	if _tip_button != null and _tip != null and is_instance_valid(_tip) and not _tip.visible and now >= _tip_due:
+		_tip_show()
+	if _tip_hide_at > 0 and now >= _tip_hide_at:
+		_tip_hide()
+
+
+# --- [SURVOL 1.82] Survol des éléments du niveau -----------------------------------
+# Demande de l'équipe : « si le curseur survole un élément du niveau, il est
+# en surbrillance et on donne ses infos avec ses stats ; ça doit différer
+# visiblement de la sélection ; survol désactivable ». Donc :
+#  - SURVOL : halo bleu glacier qui pulse doucement + petite fiche (lecture
+#    seule) à côté du curseur, sans poignées ;
+#  - SÉLECTION (inchangée) : cadre jaune plein, poignées, panneau de réglages.
+# Bouton 👁 (« Infos au survol ») dans la barre du haut ; activé par défaut
+# en Expert seulement (choix de l'équipe), retenu séparément pour chaque mode.
+# Souris seulement : un doigt ne « survole » pas.
+
+const HOVER_COLOR := Color(0.55, 0.95, 1.0)
+var hover_info := false            # infos au survol actives ?
+var _hover: Dictionary = {}        # élément survolé {kind, index} ou {}
+var _hover_button: Button
+var _hover_card: PanelContainer
+var _hover_title: Label
+var _hover_body: Label
+
+
+func _hover_pref_key() -> String:
+	return "hover_expert" if expert else "hover_simple"
+
+
+func _build_hover_card(root: Control) -> void:
+	_hover_card = PanelContainer.new()
+	var st := _panel_style()
+	st.bg_color = Color(0.05, 0.12, 0.2, 0.9)
+	st.border_color = Color(HOVER_COLOR, 0.9)
+	st.set_corner_radius_all(8)
+	_hover_card.add_theme_stylebox_override("panel", st)
+	_hover_card.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_hover_card.visible = false
+	var col := VBoxContainer.new()
+	col.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	col.add_theme_constant_override("separation", 2)
+	_hover_card.add_child(col)
+	_hover_title = Label.new()
+	_hover_title.add_theme_font_size_override("font_size", 16)
+	_hover_title.add_theme_color_override("font_color", HOVER_COLOR)
+	_hover_title.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	col.add_child(_hover_title)
+	_hover_body = Label.new()
+	_hover_body.add_theme_font_size_override("font_size", 14)
+	_hover_body.add_theme_color_override("font_color", Color.WHITE)
+	_hover_body.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	col.add_child(_hover_body)
+	root.add_child(_hover_card)
+
+
+## Le point d'écran est-il sur l'interface (barres, palette, réglages) ?
+func _over_ui(screen_pos: Vector2) -> bool:
+	if _ui_layer == null:
+		return false
+	var s: float = _ui_layer.scale.x
+	for p in [_top_panel, _bottom_panel, _palette, _settings]:
+		if p != null and is_instance_valid(p) and p.visible:
+			var r: Rect2 = p.get_global_rect()
+			if Rect2(r.position * s, r.size * s).has_point(screen_pos):
+				return true
+	return false
+
+
+## Cherche l'élément sous la souris et place la fiche à côté du curseur
+func _update_hover(screen_pos: Vector2) -> void:
+	if not hover_info or _drawing or _drag != "" or _panning or _two_finger or _over_ui(screen_pos):
+		_set_hover({})
+		return
+	var hit := DrawnLevel.pick_at(_to_world(screen_pos), TOUCH_RADIUS_SCREEN * 1.3 / cam.zoom.x)
+	if not hit.is_empty() and not _sel.is_empty() and hit.kind == _sel.kind and hit.index == _sel.index:
+		hit = {}   # déjà sélectionné : le cadre jaune et le panneau suffisent
+	_set_hover(hit)
+	if _hover_card != null and is_instance_valid(_hover_card) and _hover_card.visible:
+		var s: float = _ui_layer.scale.x
+		var p: Vector2 = screen_pos / s + Vector2(22, 22)
+		var sz: Vector2 = _hover_card.get_combined_minimum_size()
+		var area: Vector2 = _ui_root.size
+		if p.x + sz.x > area.x - 6.0:
+			p.x = screen_pos.x / s - sz.x - 16.0   # trop à droite : à gauche du curseur
+		if p.y + sz.y > area.y - _bottom_bar_h:
+			p.y = screen_pos.y / s - sz.y - 16.0  # trop bas : au-dessus
+		_hover_card.position = p
+
+
+func _set_hover(h: Dictionary) -> void:
+	if h == _hover:
+		return
+	_hover = h
+	queue_redraw()
+	if _hover_card == null or not is_instance_valid(_hover_card):
+		return
+	if h.is_empty():
+		_hover_card.visible = false
+		return
+	var info := _hover_info(h)
+	_hover_title.text = info[0]
+	_hover_body.text = info[1]
+	_hover_card.visible = true
+	_hover_card.reset_size()
+
+
+## Titre et lignes de stats de l'élément h ({kind, index})
+func _hover_info(h: Dictionary) -> Array:
+	var lines: Array = []
+	var title := ""
+	match str(h.kind):
+		"hook":
+			var k: Dictionary = DrawnLevel.hooks[h.index]
+			title = "Prise de grappin"
+			lines.append("Taille ×%.2f   ·   angle %d°" % [k.scale, int(round(rad_to_deg(k.rot)))])
+			lines.append("Position %d, %d" % [int(k.pos.x), int(k.pos.y)])
+		"stroke":
+			var st: PackedVector2Array = DrawnLevel.strokes[h.index]
+			title = "Trait de sol"
+			var steep := 0.0
+			for i in st.size() - 1:
+				var d: Vector2 = st[i + 1] - st[i]
+				if d.length() > 1.0:
+					steep = maxf(steep, rad_to_deg(atan2(absf(d.y), absf(d.x))))
+			var w: float = st[st.size() - 1].x - st[0].x
+			lines.append("Longueur %d m (%d px)" % [int(w / 64.0), int(w)])
+			lines.append("Dénivelé %+d px   ·   pente max %d°" % [int(-(st[st.size() - 1].y - st[0].y)), int(round(steep))])
+			lines.append("De x %d à x %d" % [int(st[0].x), int(st[st.size() - 1].x)])
+		"obj":
+			var o: Dictionary = DrawnLevel.objects[h.index]
+			var t: String = o.type
+			title = OBJ_NAMES.get(t, t)
+			var size_angle := "Taille ×%.2f   ·   angle %d°" % [float(o.scale), int(round(rad_to_deg(o.rot)))]
+			match t:
+				"egg":
+					lines.append("Dessin : " + EGG_STYLE_NAMES[clampi(int(o.props.get("style", 1)), 1, 5)])
+					lines.append(size_angle)
+				"boost":
+					lines.append("Force %d %%   ·   %s" % [int(round(float(o.props.get("strength", 0.35)) * 100.0)),
+						"en l'air" if bool(o.props.get("in_air", false)) else "au sol"])
+					lines.append(size_angle)
+				"start":
+					lines.append("Élan de départ %d px/s" % int(o.props.get("speed", 0.0)))
+				"finish":
+					lines.append("Ligne d'arrivée (une seule par niveau)")
+				"checkpoint":
+					lines.append("Après une chute, on repart d'ici")
+				"sign":
+					lines.append("Direction : %s   ·   taille ×%.2f" % [str(o.props.get("dir", "droite")), float(o.scale)])
+				"camera":
+					lines.append("%d × %d px   ·   dézoom jusqu'à %.2f" % [int(o.props.get("w", 2400.0)), int(o.props.get("h", 1400.0)), float(o.props.get("zoom", 0.25))])
+				_:
+					lines.append(size_angle)
+			lines.append("Position %d, %d" % [int(o.pos.x), int(o.pos.y)])
+	if tool != Tool.SELECT:
+		lines.append("(outil Sélection pour le régler)")
+	return [title, "\n".join(lines)]
+
+
+## Halo du survol (appelé à la fin de _draw) : bleu glacier qui pulse, sans
+## poignées — bien différent du cadre jaune de la sélection
+func _draw_hover(z: float) -> void:
+	if _hover.is_empty():
+		return
+	var a: float = 0.5 + 0.25 * sin(Time.get_ticks_msec() * 0.006)
+	var glow := Color(HOVER_COLOR, a * 0.45)
+	var line := Color(HOVER_COLOR, a + 0.2)
+	match str(_hover.kind):
+		"hook":
+			if _hover.index >= DrawnLevel.hooks.size():
+				return
+			var k: Dictionary = DrawnLevel.hooks[_hover.index]
+			var pts := _ellipse(k.pos, maxf(HOOK_RX * k.scale, 22.0 / z) + 16.0 / z, maxf(HOOK_RY * k.scale, 9.0 / z) + 16.0 / z, k.rot)
+			pts.append(pts[0])
+			draw_polyline(pts, glow, 16.0 / z, true)
+			draw_polyline(pts, line, 3.0 / z, true)
+		"stroke":
+			if _hover.index >= DrawnLevel.strokes.size():
+				return
+			var st: PackedVector2Array = DrawnLevel.strokes[_hover.index]
+			draw_polyline(st, glow, maxf(60.0, 26.0 / z), true)
+			draw_polyline(st, line, maxf(10.0, 3.0 / z), true)
+		"obj":
+			if _hover.index >= DrawnLevel.objects.size():
+				return
+			var o: Dictionary = DrawnLevel.objects[_hover.index]
+			var hh: Vector2 = DrawnLevel.object_half(o) + Vector2.ONE * 14.0 / z
+			draw_set_transform_matrix(Transform2D(0.0 if o.type == "camera" else float(o.rot), o.pos))
+			draw_rect(Rect2(-hh, hh * 2.0), Color(HOVER_COLOR, 0.10))
+			draw_rect(Rect2(-hh, hh * 2.0), glow, false, 14.0 / z)
+			draw_rect(Rect2(-hh, hh * 2.0), line, false, 3.0 / z)
+			draw_set_transform_matrix(Transform2D.IDENTITY)
+
+
 ## [CRÉATEUR 1.45] Échelle de l'interface de l'éditeur : celle du jeu
 ## (option + bonus téléphone), mais réduite si l'écran est trop petit pour
 ## la barre du haut (~960 px avec le nom du niveau) et les deux barres + un peu de dessin (~330 px).
@@ -1180,10 +1595,16 @@ func _build_ui() -> void:
 	top.offset_right = -6
 	top.offset_top = 6
 	root.add_child(top)
+	_top_panel = top   # [SURVOL 1.82]
 	var row := HBoxContainer.new()
 	row.add_theme_constant_override("separation", 8)
 	top.add_child(row)
-	_button("◀  Retour", row, 100).pressed.connect(_on_back)
+	# [ICÔNES 1.82] tous les boutons des barres sont des icônes pixel art
+	# (sprites/ui/editor/, générées par tools/art/icones_editeur.py) ; en mode
+	# Simple un petit mot est écrit sous l'icône, en Expert l'icône est seule.
+	# Au survol (souris, ~0,5 s) ou par appui long (doigt), une bulle rappelle
+	# le nom, le rôle et le raccourci du bouton (voir « Bulles d'aide » plus bas).
+	_ibutton("retour", row).pressed.connect(_on_back)
 	if wide:
 		var title := Label.new()
 		title.text = " CRÉER "
@@ -1191,48 +1612,56 @@ func _build_ui() -> void:
 		title.add_theme_color_override("font_color", Color(1, 0.95, 0.4))
 		row.add_child(title)
 	# [MES NIVEAUX 1.46] nom du niveau : toucher pour le renommer
+	# (le nom du niveau reste écrit : c'est une information, avec l'icône crayon)
 	_name_button = _button(DrawnLevel.current_name, row, 150)
+	_name_button.icon = _tex(ICON_DIR + "nom.png")
 	_name_button.add_theme_color_override("font_color", Color(0.10, 0.15, 0.30))
 	_name_button.clip_text = true
-	_name_button.tooltip_text = "Renommer le niveau"
+	_name_button.set_meta("tip", "nom")
+	_register_tip(_name_button)
 	_name_button.pressed.connect(_open_rename)
-	# [CRÉATEUR v2 1.80] Annuler / Refaire en flèches (place gagnée pour les nouveaux boutons)
-	_undo_button = _button("↶", row, 50)
-	_undo_button.tooltip_text = "Annuler (Ctrl+Z)"
+	# [CRÉATEUR v2 1.80] Annuler / Refaire
+	_undo_button = _ibutton("annuler", row)
 	_undo_button.pressed.connect(_on_undo)
-	_redo_button = _button("↷", row, 50)
-	_redo_button.tooltip_text = "Refaire (Ctrl+Y)"
+	_redo_button = _ibutton("refaire", row)
 	_redo_button.pressed.connect(_on_redo)
-	_button("Tout effacer", row, 110).pressed.connect(_on_clear)
-	_auto_check = CheckButton.new()
-	_auto_check.text = "Grappins auto"
-	_auto_check.add_theme_font_size_override("font_size", 19)
-	for c in ["font_color", "font_hover_color", "font_pressed_color", "font_hover_pressed_color"]:
-		_auto_check.add_theme_color_override(c, Color.WHITE)
-	_auto_check.focus_mode = Control.FOCUS_NONE
+	_ibutton("effacer", row).pressed.connect(_on_clear)
+	# [ICÔNES 1.82] « Grappins auto » devient un bouton-icône à bascule (même
+	# nom de variable `_auto_check` qu'avant ; éteint = icône pâle)
+	_auto_check = _ibutton("grappins", row, true)
 	_auto_check.button_pressed = DrawnLevel.auto_hooks
 	_auto_check.toggled.connect(_on_auto_toggled)
-	row.add_child(_auto_check)
+	_auto_check.toggled.connect(func(_on): _dim_if_off(_auto_check))
+	_dim_if_off(_auto_check)
 	# [CRÉATEUR v2 1.80] mode Simple / Expert, et aimant (Expert)
-	_mode_button = _button("Expert" if expert else "Simple", row, 96)
-	_mode_button.tooltip_text = "Mode Simple (peu de réglages) ou Expert (tous les réglages, aimant, raccourcis)"
+	_mode_button = _ibutton("expert" if expert else "simple", row)
 	_mode_button.pressed.connect(func(): _set_mode(not expert))
 	if expert:
-		_magnet_button = _button("🧲", row, 50)
-		_magnet_button.toggle_mode = true
+		_magnet_button = _ibutton("aimant", row, true)
 		_magnet_button.button_pressed = magnet
-		_magnet_button.tooltip_text = "Aimant : grille de 32 px et angles de 15°"
 		_magnet_button.toggled.connect(func(on):
 			magnet = on
 			DrawnLevel.set_pref("magnet", on)
+			_dim_if_off(_magnet_button)
 			_rebuild_settings())
+		_dim_if_off(_magnet_button)
+	# [SURVOL 1.82] œil : infos au survol des éléments du niveau (on / off)
+	_hover_button = _ibutton("survol", row, true)
+	_hover_button.button_pressed = hover_info
+	_hover_button.toggled.connect(func(on):
+		hover_info = on
+		DrawnLevel.set_pref(_hover_pref_key(), on)
+		_dim_if_off(_hover_button)
+		_set_hover({})
+		_flash("Infos au survol : activées." if on else "Infos au survol : coupées."))
+	_dim_if_off(_hover_button)
 	var spacer := Control.new()
 	spacer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	spacer.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	row.add_child(spacer)
-	_button("−", row, 46).pressed.connect(func(): _zoom_at(get_viewport().get_visible_rect().size * 0.5, 1.0 / 1.3))
-	_button("+", row, 46).pressed.connect(func(): _zoom_at(get_viewport().get_visible_rect().size * 0.5, 1.3))
-	_button("Tout voir", row, 96).pressed.connect(func():
+	_ibutton("zoom_moins", row).pressed.connect(func(): _zoom_at(get_viewport().get_visible_rect().size * 0.5, 1.0 / 1.3))
+	_ibutton("zoom_plus", row).pressed.connect(func(): _zoom_at(get_viewport().get_visible_rect().size * 0.5, 1.3))
+	_ibutton("tout_voir", row).pressed.connect(func():
 		_frame_content()
 		queue_redraw())
 
@@ -1245,14 +1674,15 @@ func _build_ui() -> void:
 	bottom.offset_bottom = -6
 	bottom.grow_vertical = Control.GROW_DIRECTION_BEGIN
 	root.add_child(bottom)
+	_bottom_panel = bottom   # [SURVOL 1.82]
 	var brow := HBoxContainer.new()
 	brow.add_theme_constant_override("separation", 8)
 	bottom.add_child(brow)
 	var group := ButtonGroup.new()
 	# [CRÉATEUR v2 1.80] + Sélection ; « Grappin » devient « Objets » (palette)
-	for t in [[Tool.DRAW, "Dessiner"], [Tool.HOOK, "Objets"], [Tool.SELECT, "Sélection"], [Tool.ERASE, "Gomme"], [Tool.MOVE, "Déplacer"]]:
-		var b := _button(t[1], brow, 96)
-		b.toggle_mode = true
+	# [ICÔNES 1.82] outils en icônes (le 2e élément = nom de l'icône et de la bulle)
+	for t in [[Tool.DRAW, "dessiner"], [Tool.HOOK, "objets"], [Tool.SELECT, "selection"], [Tool.ERASE, "gomme"], [Tool.MOVE, "deplacer"]]:
+		var b := _ibutton(t[1], brow, true)
 		b.button_group = group
 		b.button_pressed = t[0] == tool
 		var which: int = t[0]
@@ -1276,28 +1706,35 @@ func _build_ui() -> void:
 		_speed_spin.step = 100
 		_speed_spin.value = float(DrawnLevel.pref("test_speed", TEST_SPEED_SIMPLE))
 		_speed_spin.suffix = "px/s"
-		_speed_spin.tooltip_text = "Vitesse de départ de « D'ici »"
+		_speed_spin.tooltip_text = "Vitesse de départ de « D'ici »"   # (bulle Godot : ce n'est pas un bouton)
 		_speed_spin.custom_minimum_size = Vector2(118, 40)
 		_speed_spin.get_line_edit().add_theme_color_override("font_color", Color.WHITE)
 		_speed_spin.value_changed.connect(func(v): DrawnLevel.set_pref("test_speed", v))
 		brow.add_child(_speed_spin)
 	# [VALIDATION 1.81] « ✔ Valider » : finir le niveau depuis le départ (Score)
-	var val := _button("✔ Valider", brow, 112)
-	val.tooltip_text = "Finis ton niveau depuis le départ : ton temps devient l'or, et tu peux le partager"
-	val.pressed.connect(_on_validate)
-	var here := _button("▶ D'ici", brow, 104)
-	here.tooltip_text = "Tester depuis le milieu de l'écran (ne compte pas pour les records)"
-	here.pressed.connect(_on_test_here)
-	_test_button = _button("TESTER  ▶", brow, 150)
+	_ibutton("valider", brow).pressed.connect(_on_validate)
+	_ibutton("dici", brow).pressed.connect(_on_test_here)
+	# [ICÔNES 1.82] TESTER, le bouton principal, garde son mot dans les deux
+	# modes (icône à gauche du texte) : c'est lui qu'on cherche des yeux
+	_test_button = _button("TESTER", brow, 150)
+	_test_button.icon = _tex(ICON_DIR + "tester.png")
 	_test_button.add_theme_font_size_override("font_size", 22)
+	_test_button.set_meta("tip", "tester")
+	_register_tip(_test_button)
 	_test_button.pressed.connect(_on_test)
+
+	# [ICÔNES 1.82] hauteur réelle des barres (plus hautes en mode Simple, à
+	# cause du mot sous chaque icône) : la palette, le panneau de réglages,
+	# l'aide et le cadrage se placent dessous / dessus
+	_top_bar_h = maxf(TOP_BAR_H, top.get_combined_minimum_size().y + 6.0)
+	_bottom_bar_h = maxf(BOTTOM_BAR_H, bottom.get_combined_minimum_size().y + 6.0)
 
 	# Aide de l'outil : texte seul (contour sombre), juste au-dessus de la barre du bas
 	_hint = Label.new()
 	_hint.set_anchors_preset(Control.PRESET_BOTTOM_WIDE)
 	_hint.offset_left = 14
 	_hint.offset_right = -14
-	_hint.offset_bottom = -BOTTOM_BAR_H - 8
+	_hint.offset_bottom = -_bottom_bar_h - 8
 	_hint.grow_vertical = Control.GROW_DIRECTION_BEGIN
 	_hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	_hint.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -1305,6 +1742,11 @@ func _build_ui() -> void:
 	_hint.add_theme_color_override("font_outline_color", Color(0.08, 0.12, 0.25))
 	_hint.add_theme_constant_override("outline_size", 7)
 	root.add_child(_hint)
+
+	# [SURVOL 1.82] fiche d'infos de l'élément survolé, et [ICÔNES 1.82] bulle
+	# d'aide des boutons : créées une fois, cachées, au-dessus de tout
+	_build_hover_card(root)
+	_build_tip(root)
 
 	UiScaler.apply(_ui_layer, s)
 	# [CRÉATEUR v2 1.80] les barres ont plus de boutons (Refaire, mode, aimant,
@@ -1370,7 +1812,7 @@ func _refresh_ui() -> void:
 		_info.text += ("  ·  ✔ validé, or " + RaceManager.format_time(gold)) if gold > 0.0 else "  ·  pas encore validé"
 	_undo_button.disabled = _undo.is_empty()
 	_redo_button.disabled = _redo.is_empty()   # [CRÉATEUR v2 1.80]
-	_name_button.text = "✏  " + DrawnLevel.current_name
+	_name_button.text = DrawnLevel.current_name   # [ICÔNES 1.82] le crayon est maintenant l'icône du bouton
 	_test_button.disabled = isl.is_empty()
 	if _auto_check.button_pressed != DrawnLevel.auto_hooks:
 		_auto_check.set_pressed_no_signal(DrawnLevel.auto_hooks)
@@ -1384,28 +1826,125 @@ const PALETTE := [
 	["Objets", [["hook", "Prise de grappin", ""], ["egg", "Œuf à grappiner", ""], ["boost", "Boost", ""],
 		["start", "Départ", ""], ["finish", "Arrivée", ""], ["checkpoint", "Point de passage", ""],
 		["sign", "Panneau flèche", ""], ["camera", "Zone de caméra", ""]]],
-	["Terrain", [["draw", "Sol (outil Dessiner)", ""], ["ramp", "Tremplin", "1.82"], ["halfpipe", "Half-pipe", "1.82"],
-		["bowl", "Bol", "1.82"], ["slope", "Rampe", "1.82"], ["bend", "Virage en pipe", "1.82"], ["upipe", "Virage en U", "1.82"],
-		["ceiling", "Plafond", "1.82"], ["floating", "Plateforme flottante", "1.82"], ["wall", "Mur", "1.82"],
-		["pillar", "Pilier", "1.82"], ["balcony", "Balcon de glace", "1.82"], ["stal", "Plateforme-stalactite", "1.82"],
-		["cliff", "Falaise", "1.82"]]],
+	# [ICÔNES 1.82] plan décalé d'une version (choix de l'équipe : la 1.82 est
+	# consacrée à l'ergonomie) : formes de terrain en 1.83, gros blocs en 1.84
+	["Terrain", [["draw", "Sol (outil Dessiner)", ""], ["ramp", "Tremplin", "1.83"], ["halfpipe", "Half-pipe", "1.83"],
+		["bowl", "Bol", "1.83"], ["slope", "Rampe", "1.83"], ["bend", "Virage en pipe", "1.83"], ["upipe", "Virage en U", "1.83"],
+		["ceiling", "Plafond", "1.83"], ["floating", "Plateforme flottante", "1.83"], ["wall", "Mur", "1.83"],
+		["pillar", "Pilier", "1.83"], ["balcony", "Balcon de glace", "1.83"], ["stal", "Plateforme-stalactite", "1.83"],
+		["cliff", "Falaise", "1.83"]]],
 	["Décor", [["arch", "Arche", ""], ["podium", "Podium FIN", ""], ["bush", "Buisson", ""], ["igloo", "Igloo", ""],
 		["colisee", "Colisée", ""], ["ice1", "Bloc de glace 1", ""], ["ice2", "Bloc de glace 2", ""], ["ice3", "Petit bloc de glace", ""]]],
-	["Gros blocs", [["cave", "Caverne", "1.83"], ["void", "Zone de vide", "1.83"], ["pillars", "Motif piliers", "1.83"],
-		["bigegg", "Grand œuf", "1.83"], ["endless", "Tronçon du Sans fin", "1.83"]]],
+	["Gros blocs", [["cave", "Caverne", "1.84"], ["void", "Zone de vide", "1.84"], ["pillars", "Motif piliers", "1.84"],
+		["bigegg", "Grand œuf", "1.84"], ["endless", "Tronçon du Sans fin", "1.84"]]],
 ]
 
+## [ICÔNES 1.82] Bulle de chaque case de la palette (ce que fait l'élément)
+const PALETTE_TIPS := {
+	"hook": "Une prise où accrocher le grappin. Tourne-la et agrandis-la avec les poignées.",
+	"egg": "Un œuf de glace solide où le grappin s'accroche (5 dessins).",
+	"boost": "Flèches qui accélèrent Pinpouin, au sol ou en l'air. Blanc = doux, rouge = très fort.",
+	"start": "Où Pinpouin part, avec un élan réglable (un seul par niveau).",
+	"finish": "La ligne d'arrivée (une seule par niveau).",
+	"checkpoint": "Après une chute, Pinpouin repart du dernier point de passage atteint.",
+	"sign": "Un panneau pour montrer le chemin (8 directions).",
+	"camera": "Tant que Pinpouin est dans cette zone, la caméra recule pour montrer la suite.",
+	"draw": "Le sol se trace avec l'outil Dessiner.",
+	"ramp": "Un tremplin tout fait, étirable.", "halfpipe": "Un half-pipe pour les figures.",
+	"bowl": "Un bol (creux arrondi).", "slope": "Une rampe à boosts pour monter.",
+	"bend": "Un virage en morceau de tuyau.", "upipe": "Un virage en U.",
+	"ceiling": "Un plafond, accrochable ou non.", "floating": "Une plateforme qui flotte.",
+	"wall": "Un mur (plus de 75°).", "pillar": "Un pilier comme dans le Gruyère.",
+	"balcony": "Un balcon de glace à stalactites.", "stal": "Une plateforme-stalactite comme dans L'Œuf.",
+	"cliff": "Une falaise en forme de montagne.",
+	"arch": "L'arche de glace.", "podium": "Le podium FIN.", "bush": "Un buisson enneigé.", "igloo": "Un igloo.",
+	"colisee": "Le Colisée de glace.", "ice1": "Un bloc de glace.", "ice2": "Un autre bloc de glace.", "ice3": "Un petit bloc de glace.",
+	"cave": "Une caverne générée (graine, entrées, sorties).", "void": "Une zone de vide avec échelle d'œufs.",
+	"pillars": "Le motif piliers du Gruyère.", "bigegg": "Le grand œuf de L'Œuf.", "endless": "Un tronçon du Sans fin.",
+}
 
+
+## [ICÔNES 1.82] Vignette d'une case de la palette, sous forme de morceaux
+## [texture, transform, rect, région] (comme _decor_sprites) : la vraie image
+## de l'objet quand elle existe (œuf, boost, panneau, Pinpouin pour le
+## départ, décor ENTIER avec tous ses morceaux), sinon une vignette pixel art
+## de sprites/ui/editor/palette_*.png
+var _thumb_cache := {}
+func _palette_thumb(id: String) -> Array:
+	if _thumb_cache.has(id):
+		return _thumb_cache[id]
+	var parts: Array = []
+	var single: Texture2D = null
+	match id:
+		"egg":
+			single = _tex("res://sprites/levels/gruyere/oeuf_glace.png")
+		"boost":
+			single = _tex("res://sprites/actors/boost/Speed_arrow1.png")
+		"sign":
+			single = _tex("res://sprites/levels/egg/panneau_droite.png")
+		"start":
+			single = _penguin_tex
+		"finish":
+			parts = _decor_sprites("arch")
+		_:
+			if DrawnLevel.DECOR_SCENES.has(id):
+				parts = _decor_sprites(id)
+			elif ResourceLoader.exists(ICON_DIR + "palette_" + id + ".png"):
+				single = _tex(ICON_DIR + "palette_" + id + ".png")
+	if single != null:
+		var sz: Vector2 = single.get_size()
+		parts = [[single, Transform2D.IDENTITY, Rect2(-sz * 0.5, sz), Rect2(Vector2.ZERO, sz)]]
+	_thumb_cache[id] = parts
+	return parts
+
+
+## [ICÔNES 1.82] Petite zone qui dessine une vignette (morceaux ci-dessus)
+## centrée et ajustée à sa taille ; agrandissement en nombre entier pour
+## garder le pixel art net
+class PaletteThumb extends Control:
+	var parts: Array = []
+
+	func _draw() -> void:
+		if parts.is_empty():
+			return
+		var box := Rect2()
+		var first := true
+		for p in parts:
+			var r: Rect2 = p[2]
+			for c in [r.position, Vector2(r.end.x, r.position.y), r.end, Vector2(r.position.x, r.end.y)]:
+				var q: Vector2 = (p[1] as Transform2D) * c
+				if first:
+					box = Rect2(q, Vector2.ZERO)
+					first = false
+				else:
+					box = box.expand(q)
+		if box.size.x <= 0.0 or box.size.y <= 0.0:
+			return
+		var k: float = minf(size.x / box.size.x, size.y / box.size.y)
+		if k > 1.0:
+			k = floorf(k)   # petites images : x1, x2… (net)
+		var fit := Transform2D(0.0, Vector2(k, k), 0.0, size * 0.5 - box.get_center() * k)
+		for p in parts:
+			draw_set_transform_matrix(fit * (p[1] as Transform2D))
+			draw_texture_rect_region(p[0], p[2], p[3])
+		draw_set_transform_matrix(Transform2D.IDENTITY)
+
+
+## [ICÔNES 1.82] Palette en grille de vignettes (2 colonnes) : image de
+## l'objet + son nom dessous ; bulle d'aide au survol / appui long ; les
+## éléments à venir sont grisés avec leur version
 func _build_palette() -> void:
 	if _palette != null and is_instance_valid(_palette):
 		_palette.queue_free()
 	_palette = PanelContainer.new()
-	_palette.add_theme_stylebox_override("panel", _panel_style())
+	var pst := _panel_style()
+	pst.bg_color.a = 1.0   # [ICÔNES 1.82] opaque : le niveau ne se voit plus à travers les cases grisées
+	_palette.add_theme_stylebox_override("panel", pst)
 	_palette.set_anchors_preset(Control.PRESET_LEFT_WIDE)
 	_palette.offset_left = 6
 	_palette.offset_right = 236
-	_palette.offset_top = TOP_BAR_H + 6
-	_palette.offset_bottom = -BOTTOM_BAR_H - 40
+	_palette.offset_top = _top_bar_h + 6
+	_palette.offset_bottom = -_bottom_bar_h - 40
 	var col := VBoxContainer.new()
 	col.add_theme_constant_override("separation", 6)
 	_palette.add_child(col)
@@ -1424,32 +1963,77 @@ func _build_palette() -> void:
 	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
 	col.add_child(scroll)
-	var list := VBoxContainer.new()
-	list.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	scroll.add_child(list)
+	var grid := GridContainer.new()
+	grid.columns = 2
+	grid.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	grid.add_theme_constant_override("h_separation", 6)
+	grid.add_theme_constant_override("v_separation", 6)
+	scroll.add_child(grid)
 	var group := ButtonGroup.new()
 	for item in PALETTE[_palette_tab][1]:
 		var soon: String = item[2]
-		var b := _button(item[1] + ("  (" + soon + ")" if soon != "" else ""), list)
-		b.add_theme_font_size_override("font_size", 16)
-		b.alignment = HORIZONTAL_ALIGNMENT_LEFT
+		var b := Button.new()
+		b.focus_mode = Control.FOCUS_NONE
+		b.custom_minimum_size = Vector2(98, 100)
+		b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		b.disabled = soon != ""
+		# vignette (en haut) et nom (en bas), posés sur le bouton ; ils
+		# laissent passer les clics au bouton
+		var inner := VBoxContainer.new()
+		inner.set_anchors_preset(Control.PRESET_FULL_RECT)
+		inner.offset_left = 4
+		inner.offset_right = -4
+		inner.offset_top = 6
+		inner.offset_bottom = -4
+		inner.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		inner.add_theme_constant_override("separation", 2)
+		b.add_child(inner)
+		var thumb := PaletteThumb.new()
+		thumb.name = "Vignette"
+		thumb.parts = _palette_thumb(item[0])
+		thumb.custom_minimum_size = Vector2(86, 54)
+		thumb.size_flags_vertical = Control.SIZE_EXPAND_FILL
+		thumb.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		inner.add_child(thumb)
+		var lbl := Label.new()
+		lbl.text = item[1] + ("  (" + soon + ")" if soon != "" else "")
+		lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		lbl.add_theme_font_size_override("font_size", 12)
+		lbl.add_theme_color_override("font_color", Color.WHITE)
+		lbl.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		inner.add_child(lbl)
+		if soon != "":
+			inner.modulate = Color(1, 1, 1, 0.45)   # à venir : grisé
 		b.toggle_mode = true
 		b.button_group = group
 		b.button_pressed = item[0] == palette_item
+		var desc: String = PALETTE_TIPS.get(item[0], "")
+		if soon != "":
+			desc += " Arrive en " + soon + "."
+		b.set_meta("tip", [item[1], desc, ""])
+		_register_tip(b)
 		var id: String = item[0]
 		b.pressed.connect(func():
 			if id == "draw":
 				_set_tool(Tool.DRAW)   # le sol se dessine avec l'outil Dessiner
 				return
 			palette_item = id)
+		grid.add_child(b)
 	_ui_root.add_child(_palette)
+	# (la bulle d'aide reste au-dessus de la palette)
+	if _tip != null and is_instance_valid(_tip):
+		_ui_root.move_child(_tip, -1)
+	if _hover_card != null and is_instance_valid(_hover_card):
+		_ui_root.move_child(_hover_card, -1)
 
 
 ## Mode Simple (par défaut) / Expert ; retenu d'une partie à l'autre
 func _set_mode(on: bool) -> void:
 	expert = on
 	DrawnLevel.set_pref("expert", on)
+	hover_info = bool(DrawnLevel.pref(_hover_pref_key(), on))   # [SURVOL 1.82] réglage propre à chaque mode
+	_set_hover({})
 	_rebuild_ui()
 	_flash("Mode Expert : position exacte, aimant (🧲), vitesse de « D'ici », raccourcis Suppr, D, Échap." if on else "Mode Simple : l'essentiel, avec de gros boutons.")
 
