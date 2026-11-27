@@ -418,6 +418,8 @@ static func hook_list(isl: Array) -> Array:
 		for g in gaps(isl):
 			if g.width < HOOK_GAP_MIN:
 				continue
+			if gap_bridged(g.x0, g.x1):
+				continue   # [FORMES 1.83] trou enjambé par un tremplin, un half-pipe…
 			var n: int = maxi(1, int(round(g.width / HOOK_SPACING)))
 			var top: float = minf(g.y0, g.y1)
 			for k in n:
@@ -437,6 +439,8 @@ static func unsafe_gaps(isl: Array) -> Array:
 	for g in gaps(isl):
 		if g.width <= JUMP_GAP_MAX:
 			continue
+		if gap_bridged(g.x0, g.x1):
+			continue   # [FORMES 1.83] enjambé par des formes
 		var covered := false
 		for h in all_hooks:
 			var p: Vector2 = h.pos
@@ -1203,7 +1207,9 @@ const OBJECT_HALF := {
 }
 ## Tous les types connus (vérification des codes reçus)
 const VALID_TYPES := ["egg", "boost", "start", "finish", "checkpoint", "sign", "camera",
-	"arch", "podium", "bush", "igloo", "colisee", "ice1", "ice2", "ice3"]
+	"arch", "podium", "bush", "igloo", "colisee", "ice1", "ice2", "ice3",
+	# [FORMES 1.83] formes du terrain (voir la partie 10)
+	"ramp", "halfpipe", "bowl", "slope", "bend", "upipe", "ceiling", "floating", "wall", "pillar"]
 ## Types dont il ne peut y avoir qu'un seul exemplaire
 const UNIQUE_TYPES := ["start", "finish"]
 
@@ -1226,11 +1232,16 @@ static func make_object(type: String, pos: Vector2) -> Dictionary:
 			props = {"dir": "droite"}
 		"camera":
 			props = {"w": 2400.0, "h": 1400.0, "zoom": 0.25}
+		_:
+			if SHAPE_DEFAULTS.has(type):
+				props = (SHAPE_DEFAULTS[type] as Dictionary).duplicate()   # [FORMES 1.83] taille « Moyen »
 	return {"type": type, "pos": pos, "rot": 0.0, "scale": 1.0, "props": props}
 
 
 ## Demi-taille d'un objet (zone de caméra : son rectangle ; sinon OBJECT_HALF x taille)
 static func object_half(o: Dictionary) -> Vector2:
+	if is_shape(o):
+		return (shape_geometry(o).frame as Rect2).size * 0.5   # [FORMES 1.83]
 	if o.type == "camera":
 		return Vector2(float(o.props.get("w", 2400.0)), float(o.props.get("h", 1400.0))) * 0.5
 	return OBJECT_HALF.get(o.type, Vector2(100, 100)) * float(o.get("scale", 1.0))
@@ -1240,6 +1251,8 @@ static func object_half(o: Dictionary) -> Vector2:
 ## une zone de caméra ne se touche que par son bord ou son centre, pour ne
 ## pas empêcher de toucher ce qu'elle contient)
 static func object_hit(o: Dictionary, pos: Vector2, radius: float) -> bool:
+	if is_shape(o):
+		return shape_hit(o, pos, radius)   # [FORMES 1.83] la vraie forme, pas un rectangle
 	var local: Vector2 = (pos - o.pos).rotated(-float(o.get("rot", 0.0)))
 	var h := object_half(o)
 	if o.type == "camera":
@@ -1323,3 +1336,362 @@ static func record_validation(time: float) -> void:
 	if f != null:
 		f.store_string(JSON.stringify(data))
 		f.close()
+
+
+# --- 10. [FORMES 1.83] Formes du terrain ------------------------------------------
+# Étape 1.83 du plan du créateur (claude/plan-createur-niveau.md) : les
+# pièces de glisse et les structures des niveaux du jeu, posées d'un toucher
+# et étirées avec des poignées. Choix de l'équipe (28/11) :
+#  - une forme posée près du sol S'Y COLLE (son entrée s'aimante au bout
+#    d'un trait ou à la sortie d'une autre forme ; sinon, posée juste au-dessus
+#    d'un sol, elle se pose dessus) ; posée dans le vide, elle flotte ;
+#  - superposition LIBRE : une forme peut passer au-dessus ou en dessous du
+#    sol et des autres formes (tunnels, plafonds, étages) ;
+#  - en mode Simple : tailles toutes faites (Petit / Moyen / Grand) + poignées.
+# Une forme est un objet de la liste `objects` (même format, mêmes gestes,
+# même Annuler / Refaire) ; ses dimensions sont dans ses `props`. Toute la
+# géométrie est calculée ICI (shape_geometry), pour que l'éditeur dessine
+# exactement ce que le jeu construit (DrawnGenerator._add_shape).
+#
+# Repère local de chaque forme (avant rotation) : x vers la droite, y vers le
+# bas, origine = point d'ENTRÉE (là où Pinpouin arrive, au niveau du sol).
+#   ramp     tremplin : courbe qui monte de (0,0) à la lèvre (w, -h), angle de
+#            sortie `lip` (degrés) ;
+#   halfpipe half-pipe creusé : deux murs arrondis et un fond plat, profondeur
+#            h, largeur w, petit rebord de chaque côté ;
+#   bowl     bol creusé : creux arrondi (cosinus), profondeur h ;
+#   slope    rampe à boosts : pente arrondie aux deux bouts, palier en haut,
+#            boosts le long de la pente (`strength`) ;
+#   bend     virage en pipe : quart de tuyau qui relève Pinpouin, rayon w,
+#            angle `angle` (30° à 150°) ;
+#   upipe    virage en U : demi-tuyau qui renvoie Pinpouin vers la gauche,
+#            diamètre h ;
+#   ceiling  plafond : dalle (épaisseur h), accrochable (`hook`, avec
+#            stalactites comme les plafonds des cavernes) ou non (lisse) ;
+#   floating plateforme flottante : dessus plat, dessous en biseau ;
+#   wall     mur : bloc qui monte du sol, hauteur h, épaisseur w ;
+#   pillar   pilier : colonne qui descend dans le vide depuis son dessus (Gruyère).
+
+const SHAPE_TYPES := ["ramp", "halfpipe", "bowl", "slope", "bend", "upipe", "ceiling", "floating", "wall", "pillar"]
+## Réglages par défaut (taille « Moyen »)
+const SHAPE_DEFAULTS := {
+	"ramp": {"w": 640.0, "h": 240.0, "lip": 32.0},
+	"halfpipe": {"w": 1400.0, "h": 520.0},
+	"bowl": {"w": 1200.0, "h": 320.0},
+	"slope": {"w": 900.0, "h": 450.0, "strength": 0.6},
+	"bend": {"w": 520.0, "angle": 90.0},
+	"upipe": {"h": 700.0},
+	"ceiling": {"w": 900.0, "h": 130.0, "hook": true},
+	"floating": {"w": 640.0, "h": 150.0},
+	"wall": {"w": 130.0, "h": 700.0},
+	"pillar": {"w": 240.0, "h": 1400.0},
+}
+## Tailles toutes faites du mode Simple : facteur sur la largeur et la hauteur
+const SHAPE_PRESETS := {"Petit": 0.6, "Moyen": 1.0, "Grand": 1.6}
+## Bornes des dimensions (px du monde)
+const SHAPE_MIN := 60.0
+const SHAPE_MAX := 4000.0
+## Formes qui s'aimantent au sol (entrée au bout d'un trait / posées dessus)
+const SHAPE_GROUNDED := ["ramp", "halfpipe", "bowl", "slope", "bend", "upipe", "wall"]
+## Formes creusées (sous le niveau du sol) : seulement aimantées par les
+## bouts (posées au milieu d'un sol, le sol les remplirait)
+const SHAPE_DUG := ["halfpipe", "bowl"]
+## Distance d'aimantation (px du monde)
+const SHAPE_SNAP := 240.0
+## Glace sous le niveau du sol des formes posées au sol (pour se fondre dans le sol)
+const SHAPE_DEPTH := 260.0
+## Rebord plat de chaque côté des formes creusées / avant un virage
+const SHAPE_LIP := 70.0
+## Épaisseur de glace des tuyaux (virages)
+const SHAPE_BAND := 140.0
+## Palier en haut de la rampe à boosts
+const SLOPE_DECK := 240.0
+
+
+static func is_shape(o: Dictionary) -> bool:
+	return str(o.get("type", "")) in SHAPE_TYPES
+
+
+## Valeur bornée d'un réglage de forme (les codes reçus ne peuvent pas
+## fabriquer de formes géantes)
+static func shape_prop(o: Dictionary, key: String) -> float:
+	var d = SHAPE_DEFAULTS.get(o.type, {}).get(key, 0.0)
+	var v = o.props.get(key, d)
+	if typeof(v) == TYPE_BOOL:
+		return 1.0 if v else 0.0
+	var f := float(v) if typeof(v) in [TYPE_FLOAT, TYPE_INT] else float(d)
+	if not is_finite(f):
+		f = float(d)
+	match key:
+		"lip":
+			return clampf(f, 5.0, 70.0)
+		"angle":
+			return clampf(f, 30.0, 150.0)
+		"strength":
+			return clampf(f, 0.0, 1.0)
+	return clampf(f, SHAPE_MIN, SHAPE_MAX)
+
+
+## Géométrie d'une forme, en coordonnées du monde :
+##  poly  : contour fermé de la glace (collision et remplissage)
+##  top   : la ligne où l'on glisse (bordure de glace du rendu « d'origine »)
+##  entry / exit : points d'entrée et de sortie (Vector2.INF si aucun)
+##  frame : rectangle utile en repère LOCAL (poignées, sélection)
+##  boosts : [{pos, rot}] (rampe à boosts)
+## `bottom` (y du monde, facultatif) : fond commun des îlots ; une forme posée
+## au sol (et non tournée) descend alors jusque-là, comme les îlots, au lieu
+## de s'arrêter SHAPE_DEPTH px sous le sol (sinon : bloc suspendu dans le vide)
+static func shape_geometry(o: Dictionary, bottom: float = INF) -> Dictionary:
+	var t: String = o.type
+	var w := shape_prop(o, "w")
+	var h := shape_prop(o, "h")
+	var SHAPE_DEPTH: float = DrawnLevel.SHAPE_DEPTH
+	if is_finite(bottom) and absf(float(o.get("rot", 0.0))) < 0.01 and t in SHAPE_GROUNDED:
+		SHAPE_DEPTH = maxf(SHAPE_DEPTH, bottom - o.pos.y - (h if t in SHAPE_DUG else 0.0))
+	var top := PackedVector2Array()
+	var poly := PackedVector2Array()
+	var entry := Vector2.ZERO
+	var exit := Vector2.INF
+	var frame := Rect2()
+	var boosts: Array = []
+	match t:
+		"ramp":
+			# courbe y = -h * x^p : pente nulle au départ, angle `lip` à la lèvre
+			var lip := deg_to_rad(shape_prop(o, "lip"))
+			var p: float = maxf(1.0, tan(lip) * w / h)
+			for i in 25:
+				var k := i / 24.0
+				top.append(Vector2(w * k, -h * pow(k, p)))
+			poly = PackedVector2Array(top)
+			poly.append(Vector2(w, SHAPE_DEPTH))
+			poly.append(Vector2(0, SHAPE_DEPTH))
+			exit = Vector2(w, -h)
+			frame = Rect2(0, -h, w, h)
+		"halfpipe":
+			# rayon des courbes : la profondeur, sans dépasser 45 % de la largeur
+			# (au-delà, les murs ont une partie verticale au-dessus de la courbe)
+			var r: float = minf(h, w * 0.45)
+			top = PackedVector2Array([Vector2(-SHAPE_LIP, 0), Vector2(0, 0)])
+			if h - r > 1.0:
+				top.append(Vector2(0, h - r))
+			for i in range(1, 13):
+				var a := PI * 0.5 * i / 12.0   # 0 -> 90° : du mur gauche vers le fond
+				top.append(Vector2(r - r * cos(a), h - r + r * sin(a)))
+			for i in range(0, 13):
+				var a := PI * 0.5 * i / 12.0   # 0 -> 90° : du fond vers le mur droit
+				top.append(Vector2(w - r + r * sin(a), h - r + r * cos(a)))
+			if h - r > 1.0:
+				top.append(Vector2(w, 0))
+			top.append(Vector2(w + SHAPE_LIP, 0))
+			poly = PackedVector2Array(top)
+			poly.append(Vector2(w + SHAPE_LIP, h + SHAPE_DEPTH))
+			poly.append(Vector2(-SHAPE_LIP, h + SHAPE_DEPTH))
+			entry = Vector2(-SHAPE_LIP, 0)
+			exit = Vector2(w + SHAPE_LIP, 0)
+			frame = Rect2(0, 0, w, h)
+		"bowl":
+			top.append(Vector2(-SHAPE_LIP, 0))
+			for i in 33:
+				var k := i / 32.0
+				top.append(Vector2(w * k, h * (1.0 - cos(TAU * k)) * 0.5))
+			top.append(Vector2(w + SHAPE_LIP, 0))
+			poly = PackedVector2Array(top)
+			poly.append(Vector2(w + SHAPE_LIP, h + SHAPE_DEPTH))
+			poly.append(Vector2(-SHAPE_LIP, h + SHAPE_DEPTH))
+			entry = Vector2(-SHAPE_LIP, 0)
+			exit = Vector2(w + SHAPE_LIP, 0)
+			frame = Rect2(0, 0, w, h)
+		"slope":
+			# f(k) = k - sin(2 pi k) / (2 pi) : départ et arrivée à plat, pente au milieu
+			for i in 33:
+				var k := i / 32.0
+				top.append(Vector2(w * k, -h * (k - sin(TAU * k) / TAU)))
+			top.append(Vector2(w + SLOPE_DECK, -h))
+			poly = PackedVector2Array(top)
+			poly.append(Vector2(w + SLOPE_DECK, SHAPE_DEPTH))
+			poly.append(Vector2(0, SHAPE_DEPTH))
+			exit = Vector2(w + SLOPE_DECK, -h)
+			frame = Rect2(0, -h, w + SLOPE_DECK, h)
+			var n: int = maxi(1, int(round(w / 320.0)))
+			for j in n:
+				var k: float = 0.25 + 0.5 * (j + 0.5) / n
+				var p0 := Vector2(w * k, -h * (k - sin(TAU * k) / TAU))
+				var slope := -h / w * (1.0 - cos(TAU * k))   # dy/dx
+				var ang := atan(slope)
+				boosts.append({"pos": p0 + Vector2(0, -70).rotated(ang), "rot": ang})
+		"bend":
+			# quart de tuyau : centre (0, -r) ; on part vers la droite et la
+			# piste se relève jusqu'à l'angle choisi
+			var r := w
+			var amax := deg_to_rad(shape_prop(o, "angle"))
+			top.append(Vector2(-SHAPE_LIP, 0))
+			for i in 25:
+				var a := amax * i / 24.0
+				top.append(Vector2(r * sin(a), -r + r * cos(a)))
+			poly = PackedVector2Array(top)
+			for i in range(24, -1, -1):
+				var a := amax * i / 24.0
+				poly.append(Vector2((r + SHAPE_BAND) * sin(a), -r + (r + SHAPE_BAND) * cos(a)))
+			poly.append(Vector2(-SHAPE_LIP, SHAPE_BAND))
+			exit = top[top.size() - 1]
+			frame = Rect2(0, -r, r, r)
+		"upipe":
+			# demi-tuyau : on entre en bas vers la droite, on ressort en haut
+			# vers la gauche (la tête en bas, comme dans le Gruyère)
+			var rr := h * 0.5
+			top.append(Vector2(-SHAPE_LIP, 0))
+			for i in 33:
+				var a := -PI * 0.5 + PI * i / 32.0
+				top.append(Vector2(rr * cos(a), -rr - rr * sin(a)))
+			top.append(Vector2(-SHAPE_LIP, -h))
+			poly = PackedVector2Array(top)
+			poly.append(Vector2(-SHAPE_LIP, -h - SHAPE_BAND))
+			for i in range(32, -1, -1):
+				var a := -PI * 0.5 + PI * i / 32.0
+				poly.append(Vector2((rr + SHAPE_BAND) * cos(a), -rr - (rr + SHAPE_BAND) * sin(a)))
+			poly.append(Vector2(-SHAPE_LIP, SHAPE_BAND))
+			exit = Vector2(-SHAPE_LIP, -h)
+			frame = Rect2(0, -h, rr, h)
+		"ceiling":
+			# dalle ; accrochable : stalactites rondes dessous (comme les
+			# plafonds accrochables des cavernes), sinon dessous lisse
+			top = PackedVector2Array([Vector2(0, 0), Vector2(w, 0)])
+			poly = PackedVector2Array([Vector2(0, 0), Vector2(w, 0), Vector2(w, h)])
+			if shape_prop(o, "hook") > 0.5:
+				var n: int = maxi(1, int(w / 110.0))
+				var step := w / n
+				for j in range(n - 1, -1, -1):
+					var cx := step * (j + 0.5)
+					var dep := 34.0 + 22.0 * float((j * 7) % 3)   # longueurs variées (sans hasard : même forme à chaque fois)
+					for q in 7:
+						var a := PI * q / 6.0
+						poly.append(Vector2(cx + step * 0.45 * cos(a), h + dep * sin(a)))
+			poly.append(Vector2(0, h))
+			entry = Vector2.INF
+			frame = Rect2(0, 0, w, h)
+		"floating":
+			top = PackedVector2Array([Vector2(0, 0), Vector2(w, 0)])
+			var b: float = minf(h * 0.8, w * 0.25)
+			poly = PackedVector2Array([Vector2(0, 0), Vector2(w, 0), Vector2(w, h * 0.35), Vector2(w - b, h), Vector2(b, h), Vector2(0, h * 0.35)])
+			entry = Vector2.INF
+			frame = Rect2(0, 0, w, h)
+		"wall":
+			top = PackedVector2Array([Vector2(0, 0), Vector2(0, -h), Vector2(w, -h), Vector2(w, 0)])
+			poly = PackedVector2Array([Vector2(0, SHAPE_DEPTH), Vector2(0, -h), Vector2(w, -h), Vector2(w, SHAPE_DEPTH)])
+			frame = Rect2(0, -h, w, h)
+		"pillar":
+			top = PackedVector2Array([Vector2(0, 0), Vector2(w, 0)])
+			poly = PackedVector2Array([Vector2(0, 0), Vector2(w, 0), Vector2(w, h), Vector2(0, h)])
+			entry = Vector2.INF
+			frame = Rect2(0, 0, w, h)
+	var xf := Transform2D(float(o.get("rot", 0.0)), o.pos)
+	var out := {"poly": xf * poly, "top": xf * top, "frame": frame, "boosts": [],
+		"entry": xf * entry if entry != Vector2.INF else Vector2.INF,
+		"exit": xf * exit if exit != Vector2.INF else Vector2.INF}
+	for b in boosts:
+		out.boosts.append({"pos": xf * b.pos, "rot": b.rot + float(o.get("rot", 0.0))})
+	return out
+
+
+## Le point touche-t-il la forme ? (dedans, ou à moins de `radius` / 2 du bord)
+static func shape_hit(o: Dictionary, pos: Vector2, radius: float) -> bool:
+	var poly: PackedVector2Array = shape_geometry(o).poly
+	if Geometry2D.is_point_in_polygon(pos, poly):
+		return true
+	for i in poly.size():
+		var a: Vector2 = poly[i]
+		var b: Vector2 = poly[(i + 1) % poly.size()]
+		if Geometry2D.get_closest_point_to_segment(pos, a, b).distance_to(pos) < radius * 0.5:
+			return true
+	return false
+
+
+## Aimante la forme n° i au sol (choix de l'équipe : « se colle au sol ») :
+##  1. son entrée au bout d'un trait, ou à la sortie d'une autre forme ;
+##  2. sinon sa sortie au début d'un trait, ou à l'entrée d'une autre forme ;
+##  3. sinon (formes qui montent du sol) posée sur le sol juste en dessous.
+## Renvoie "bout", "sol" ou "" (rien à moins de SHAPE_SNAP : elle flotte).
+static func snap_shape(i: int) -> String:
+	var o: Dictionary = objects[i]
+	if not (o.type in SHAPE_GROUNDED):
+		return ""
+	var g := shape_geometry(o)
+	var ends: Array = []     # où une forme peut COMMENCER
+	var starts: Array = []   # où une forme peut FINIR
+	for s in strokes:
+		ends.append(s[s.size() - 1])
+		starts.append(s[0])
+	for j in objects.size():
+		if j != i and is_shape(objects[j]):
+			var gj := shape_geometry(objects[j])
+			if gj.exit != Vector2.INF:
+				ends.append(gj.exit)
+			if gj.entry != Vector2.INF:
+				starts.append(gj.entry)
+	var best := SHAPE_SNAP
+	var move := Vector2.INF
+	if g.entry != Vector2.INF:
+		for p in ends:
+			var d: float = (p as Vector2).distance_to(g.entry)
+			if d < best:
+				best = d
+				move = p - g.entry
+	if move == Vector2.INF and g.exit != Vector2.INF:
+		for p in starts:
+			var d: float = (p as Vector2).distance_to(g.exit)
+			if d < best:
+				best = d
+				move = p - g.exit
+	if move != Vector2.INF:
+		o.pos += move
+		return "bout"
+	if o.type in SHAPE_DUG or g.entry == Vector2.INF:
+		return ""
+	for s in strokes:
+		if g.entry.x >= s[0].x and g.entry.x <= s[s.size() - 1].x:
+			var dy: float = surface_y_of(s, g.entry.x) - g.entry.y
+			if absf(dy) < SHAPE_SNAP * 1.4:
+				o.pos.y += dy
+				return "sol"
+	return ""
+
+
+## Le trou [x0, x1] est-il enjambé par des formes posées au sol (tremplin,
+## half-pipe…) ? Alors pas de grappin automatique ni d'alerte « Grand trou ».
+static func gap_bridged(x0: float, x1: float) -> bool:
+	var spans: Array = []
+	for o in objects:
+		if is_shape(o) and o.type in SHAPE_GROUNDED:
+			var poly: PackedVector2Array = shape_geometry(o).poly
+			var lo := INF
+			var hi := -INF
+			for p in poly:
+				lo = minf(lo, p.x)
+				hi = maxf(hi, p.x)
+			spans.append(Vector2(lo, hi))
+	spans.sort_custom(func(a, b): return a.x < b.x)
+	var reach := x0 + 40.0   # (un petit jour de 40 px à chaque bout est toléré)
+	for sp in spans:
+		if sp.x <= reach:
+			reach = maxf(reach, sp.y)
+	return reach >= x1 - 40.0
+
+
+## Bout de la chaîne de formes collées à partir du point `p` (le bout du
+## dernier sol, en général) : tant qu'une forme posée au sol a son entrée en
+## `p`, on passe à sa sortie. Sert à placer l'arrivée automatique à la fin
+## d'un half-pipe ou à la lèvre d'un tremplin collé au bout du niveau (sinon
+## la course s'arrêtait à l'entrée de la forme).
+static func chain_end(p: Vector2) -> Vector2:
+	for _guard in 64:
+		var moved := false
+		for o in objects:
+			if is_shape(o) and o.type in SHAPE_GROUNDED:
+				var g := shape_geometry(o)
+				if g.entry != Vector2.INF and g.exit != Vector2.INF and g.entry.distance_to(p) < 2.0 and g.exit.x > p.x:
+					p = g.exit
+					moved = true
+					break
+		if not moved:
+			break
+	return p

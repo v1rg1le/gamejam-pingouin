@@ -35,6 +35,7 @@ const ICE_COLOR = Color(0.694118, 0.862745, 0.956863, 1)
 const RUNOUT_SLOPE = 0.03
 
 var _islands: Array = []   # les îlots (PackedVector2Array), copiés depuis DrawnLevel
+var _bottom: float = INF   # [FORMES 1.83] fond commun des îlots (y du monde)
 
 
 func _ready() -> void:
@@ -60,6 +61,7 @@ func _ready() -> void:
 
 	# 2. Un bloc de glace par îlot, jusqu'au fond commun
 	var bottom: float = DrawnLevel.floor_y(_islands)
+	_bottom = bottom   # [FORMES 1.83] les formes posées au sol descendent jusqu'au même fond
 	for top in _islands:
 		_add_island(top, bottom)
 
@@ -90,7 +92,8 @@ func _ready() -> void:
 	var gate = finish_gate_res.instantiate()
 	gate.next_scene_path = DrawnLevel.return_scene
 	var fin_obj := DrawnLevel.first_object("finish")
-	gate.position = fin_obj.pos if not fin_obj.is_empty() else finish_pos
+	# [FORMES 1.83] sans objet Arrivée : au bout des formes collées au dernier sol
+	gate.position = fin_obj.pos if not fin_obj.is_empty() else DrawnLevel.chain_end(finish_pos)
 	add_child(gate)
 
 	# 6. Départ : un peu après le début du premier trait
@@ -165,7 +168,9 @@ func _build_objects() -> void:
 				var h := DrawnLevel.object_half(o)
 				_cameras.append({"rect": Rect2(o.pos - h, h * 2.0), "zoom": clampf(float(o.props.get("zoom", 0.25)), 0.1, 1.0)})
 			_:
-				if DrawnLevel.DECOR_SCENES.has(o.type):
+				if DrawnLevel.is_shape(o):
+					_add_shape(o)   # [FORMES 1.83]
+				elif DrawnLevel.DECOR_SCENES.has(o.type):
 					var d = load(DrawnLevel.DECOR_SCENES[o.type]).instantiate()
 					d.position = o.pos
 					d.rotation = o.rot
@@ -199,6 +204,47 @@ func _add_egg(o: Dictionary) -> void:
 	spr.scale = Vector2.ONE * 4.0 * sc
 	body.add_child(spr)
 	add_child(body)
+
+
+## [FORMES 1.83] Forme du terrain (tremplin, half-pipe, plafond…) : construite
+## EXACTEMENT comme un îlot dessiné (_add_island) — corps du calque 2,
+## collision en segments lissée par SmoothCurve, remplissage de glace et
+## bordure — à partir de la géométrie commune DrawnLevel.shape_geometry (ce
+## que l'éditeur a dessiné). IceStyle l'habille ensuite (glace, neige sur les
+## dessus) et fond son contour avec le sol qu'elle touche.
+func _add_shape(o: Dictionary) -> void:
+	var g := DrawnLevel.shape_geometry(o, _bottom)
+	var body := StaticBody2D.new()
+	body.collision_layer = 2
+	var col := CollisionPolygon2D.new()
+	col.build_mode = CollisionPolygon2D.BUILD_SEGMENTS   # [FIX VITESSE -> 0] contour seul
+	col.polygon = SmoothCurve.smooth_closed(g.poly)
+	body.add_child(col)
+	var fill := Polygon2D.new()
+	fill.color = ICE_COLOR
+	fill.polygon = g.poly
+	body.add_child(fill)
+	var edge := Line2D.new()
+	edge.texture = edge_texture
+	edge.texture_mode = Line2D.LINE_TEXTURE_TILE
+	edge.texture_repeat = CanvasItem.TEXTURE_REPEAT_ENABLED
+	edge.width = 64.0
+	edge.position = Vector2(0, 28)
+	edge.points = g.top
+	body.add_child(edge)
+	# plafond lisse = non accrochable (comme la roche des cavernes)
+	if o.type == "ceiling" and DrawnLevel.shape_prop(o, "hook") < 0.5:
+		body.add_to_group("no_hook")
+	add_child(body)
+	# rampe : boosts le long de la pente (mêmes boosts que les rampes des cavernes)
+	for b in g.boosts:
+		var ba = boost_res.instantiate()
+		ba.position = b.pos
+		ba.rotation = b.rot
+		ba.boost_strength = DrawnLevel.shape_prop(o, "strength")
+		ba.in_air = false
+		ba.arrow_scale = 2.0
+		add_child(ba)
 
 
 ## Petit drapeau de point de passage (décor : poteau + fanion jaune)

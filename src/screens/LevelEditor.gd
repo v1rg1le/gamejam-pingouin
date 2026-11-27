@@ -134,7 +134,7 @@ const TOOL_HINTS := {
 	Tool.HOOK: "Choisis un élément dans la palette, puis touche le niveau pour le poser. Touche un bloc pour le sélectionner.",
 	Tool.ERASE: "Touche ou glisse sur un trait ou un bloc pour l'effacer.",
 	Tool.MOVE: "Glisse pour déplacer la vue. Molette ou − / + pour zoomer (deux doigts sur téléphone).",
-	Tool.SELECT: "Touche un bloc ou un trait pour le choisir, glisse-le pour le déplacer. Bloc : rond = tourner, carré = agrandir.",
+	Tool.SELECT: "Touche un élément pour le choisir, glisse-le pour le déplacer. Rond = tourner, carré = agrandir, losanges = étirer une forme.",
 }
 
 
@@ -273,6 +273,9 @@ func _press(screen_pos: Vector2) -> void:
 			# [CRÉATEUR v2 1.80] outil Objets : un bloc touché est sélectionné
 			# (on peut le régler tout de suite) ; ailleurs on pose l'élément
 			# choisi dans la palette
+			if _press_handles(wp):   # [FORMES 1.83] étirer la forme qu'on vient de poser
+				queue_redraw()
+				return
 			var hit := DrawnLevel.pick_at(wp, TOUCH_RADIUS_SCREEN * 2.5 / cam.zoom.x)
 			if not hit.is_empty() and hit.kind in ["hook", "obj"]:
 				_select(hit)
@@ -286,6 +289,8 @@ func _press(screen_pos: Vector2) -> void:
 				# [OBJETS 1.81] pose de l'objet choisi dans la palette
 				_push_undo()
 				var i := DrawnLevel.add_object(DrawnLevel.make_object(palette_item, _snap_pos(wp)))
+				if DrawnLevel.is_shape(DrawnLevel.objects[i]):
+					_snap_flash(DrawnLevel.snap_shape(i))   # [FORMES 1.83] se colle au sol
 				_changed()
 				_select({"kind": "obj", "index": i})
 		Tool.SELECT:
@@ -672,7 +677,8 @@ func _draw() -> void:
 		var ok: bool = _drag_delta == Vector2.ZERO or DrawnLevel.x_range_free(moved[0].x, moved[moved.size() - 1].x, _sel.index)
 		draw_polyline(moved, SELECT_COLOR if ok else DANGER_COLOR, maxf(30.0, 9.0 / z), true)
 
-	# d3. [OBJETS 1.81] objets et décors
+	# d3. [OBJETS 1.81] objets et décors ([FORMES 1.83] formes : jusqu'au fond commun)
+	_draw_bottom = bottom if not isl.is_empty() else INF
 	_draw_objects(z, font, fs)
 
 	# e. départ (le pingouin, à sa vraie taille) et arrivée (faisceau jaune)
@@ -688,7 +694,7 @@ func _draw() -> void:
 		draw_texture_rect(_penguin_tex, Rect2(sp + Vector2(-ps * 0.5, -ps * 1.05), Vector2(ps, ps)), false)
 		draw_string(font, sp + Vector2(-2.0 * fs, -ps * 1.05 - fs * 0.6), "DÉPART", HORIZONTAL_ALIGNMENT_LEFT, -1, fs, Color.WHITE)
 		var last: PackedVector2Array = isl[isl.size() - 1]
-		var fp: Vector2 = last[last.size() - 1]
+		var fp: Vector2 = DrawnLevel.chain_end(last[last.size() - 1])   # [FORMES 1.83] au bout des formes collées
 		var fin_obj := DrawnLevel.first_object("finish")
 		if not fin_obj.is_empty():
 			fp = fin_obj.pos
@@ -738,8 +744,10 @@ func _item_half() -> Vector2:
 ## poignée « agrandir » est dans son coin et règle largeur et hauteur.
 func _handles() -> Dictionary:
 	var it := _item()
-	var hh := _item_half()
 	var z: float = cam.zoom.x
+	if _sel.kind == "obj" and DrawnLevel.is_shape(it):
+		return _shape_handles(it, z)
+	var hh := _item_half()
 	if it.get("type", "") == "camera":
 		return {"rotate": Vector2.INF, "scale": it.pos + hh}
 	return {"rotate": it.pos + Vector2(0, -(hh.y + 70.0 / z)).rotated(it.rot),
@@ -776,15 +784,8 @@ func _select(sel: Dictionary) -> void:
 ## Appui avec l'outil Sélection : une poignée du bloc choisi, sinon un
 ## bloc ou un trait (sélectionné et glissé), sinon le vide (on déplace la vue)
 func _select_press(wp: Vector2) -> void:
-	var grab: float = 26.0 / cam.zoom.x
-	if _sel.get("kind", "") in ["hook", "obj"]:
-		var hd := _handles()
-		if hd.rotate != Vector2.INF and wp.distance_to(hd.rotate) < grab:
-			_begin_drag("rotate", wp)
-			return
-		if wp.distance_to(hd.scale) < grab:
-			_begin_drag("scale", wp)
-			return
+	if _press_handles(wp):
+		return
 	var hit := DrawnLevel.pick_at(wp, TOUCH_RADIUS_SCREEN * 2.0 / cam.zoom.x)
 	if hit.is_empty():
 		_select({})
@@ -792,6 +793,21 @@ func _select_press(wp: Vector2) -> void:
 		return
 	_select(hit)
 	_begin_drag("move", wp)
+
+
+## Appui sur une poignée de la sélection (rond = tourner, carré = agrandir ;
+## [FORMES 1.83] losanges = étirer en largeur / en hauteur). Vrai si oui.
+func _press_handles(wp: Vector2) -> bool:
+	var grab: float = 26.0 / cam.zoom.x
+	if not (_sel.get("kind", "") in ["hook", "obj"]):
+		return false
+	var hd := _handles()
+	for k in ["rotate", "scale", "w", "h"]:
+		var p: Vector2 = hd.get(k, Vector2.INF)
+		if p != Vector2.INF and wp.distance_to(p) < grab:
+			_begin_drag(k, wp)
+			return true
+	return false
 
 
 func _begin_drag(kind: String, wp: Vector2) -> void:
@@ -805,6 +821,12 @@ func _begin_drag(kind: String, wp: Vector2) -> void:
 	_drag_delta = Vector2.ZERO
 	if _sel.kind in ["hook", "obj"]:
 		_drag_orig = _item().duplicate(true)
+		# [FORMES 1.83] étirement : écart entre la dimension et la position de
+		# la poignée (la poignée reste sous le doigt pendant le geste)
+		if kind in ["w", "h"]:
+			var lp: Vector2 = (wp - _item().pos).rotated(-float(_item().rot))
+			var cur: float = DrawnLevel.shape_prop(_item(), kind)
+			_stretch_offset = cur - (lp.x if kind == "w" else (lp.y if _item().type in SHAPE_H_DOWN else -lp.y))
 
 
 func _drag_update(wp: Vector2) -> void:
@@ -821,6 +843,13 @@ func _drag_update(wp: Vector2) -> void:
 			h.pos = _snap_pos(_drag_orig.pos + (wp - _drag_start))
 		"rotate":
 			h.rot = _snap_angle((wp - h.pos).angle() + PI * 0.5)
+		"w", "h":
+			# [FORMES 1.83] étirer une forme (largeur / hauteur ou profondeur)
+			var lp: Vector2 = (wp - h.pos).rotated(-float(h.rot))
+			var v: float = (lp.x if _drag == "w" else (lp.y if h.type in SHAPE_H_DOWN else -lp.y)) + _stretch_offset
+			if expert and magnet:
+				v = snappedf(v, SNAP_GRID)
+			h.props[_drag] = clampf(v, DrawnLevel.SHAPE_MIN, DrawnLevel.SHAPE_MAX)
 		"scale":
 			if h.get("type", "") == "camera":
 				# zone de caméra : le coin suit le doigt (largeur et hauteur)
@@ -864,6 +893,9 @@ func _end_drag() -> void:
 			_flash("Impossible : un trait ne peut pas passer au-dessus ou en dessous d'un autre sol.")
 			queue_redraw()
 		return
+	# [FORMES 1.83] une forme lâchée près du sol s'y colle (choix de l'équipe)
+	if _sel.kind == "obj" and DrawnLevel.is_shape(_item()) and kind in ["move", "w", "h", "rotate"]:
+		_snap_flash(DrawnLevel.snap_shape(_sel.index))
 	# bloc ou objet : une étape « Annuler » seulement s'il a vraiment bougé
 	var h: Dictionary = _item()
 	if JSON.stringify(h) != JSON.stringify(_drag_orig):
@@ -897,6 +929,13 @@ func _duplicate_sel() -> void:
 		var o: Dictionary = (DrawnLevel.objects[_sel.index] as Dictionary).duplicate(true)
 		o.pos += Vector2(DrawnLevel.object_half(o).x * 2.0 + 60.0, 0)
 		DrawnLevel.objects.append(o)
+		if DrawnLevel.is_shape(o):
+			# [FORMES 1.83] la copie se pose à la sortie de l'original (on enchaîne
+			# tremplin + tremplin, half-pipe + half-pipe…)
+			var g := DrawnLevel.shape_geometry(DrawnLevel.objects[_sel.index])
+			if g.exit != Vector2.INF:
+				o.pos += g.exit - DrawnLevel.shape_geometry(o).entry if DrawnLevel.shape_geometry(o).entry != Vector2.INF else Vector2.ZERO
+			_snap_flash(DrawnLevel.snap_shape(DrawnLevel.objects.size() - 1))
 		_changed()
 		_select({"kind": "obj", "index": DrawnLevel.objects.size() - 1})
 	else:
@@ -1186,7 +1225,7 @@ const TIPS := {
 	"tout_voir": ["Tout voir", "Cadre la vue sur tout le niveau.", "", "Tout voir"],
 	"dessiner": ["Dessiner", "Trace le dessus du sol, dans un sens ou dans l'autre, aussi raide que tu veux. Lever le doigt fait un trou.", "", "Dessiner"],
 	"objets": ["Objets", "Ouvre la palette (grappins, œufs, boosts, départ, arrivée, panneaux, décors…), puis touche le niveau pour poser.", "", "Objets"],
-	"selection": ["Sélection", "Touche un élément pour le régler, glisse-le pour le déplacer. Rond = tourner, carré = agrandir.", "Suppr · D (Expert)", "Choisir"],
+	"selection": ["Sélection", "Touche un élément pour le régler, glisse-le pour le déplacer. Rond = tourner, carré = agrandir, losanges = étirer une forme.", "Suppr · D (Expert)", "Choisir"],
 	"gomme": ["Gomme", "Touche ou glisse sur un trait, un bloc ou un objet pour l'effacer.", "", "Gomme"],
 	"deplacer": ["Déplacer la vue", "Glisse pour te promener dans le niveau.", "Clic droit · deux doigts", "Bouger"],
 	"valider": ["Valider", "Finis ton niveau depuis le départ : ton temps devient l'or et tu peux le partager.", "", "Valider"],
@@ -1517,7 +1556,10 @@ func _hover_info(h: Dictionary) -> Array:
 				"camera":
 					lines.append("%d × %d px   ·   dézoom jusqu'à %.2f" % [int(o.props.get("w", 2400.0)), int(o.props.get("h", 1400.0)), float(o.props.get("zoom", 0.25))])
 				_:
-					lines.append(size_angle)
+					if DrawnLevel.is_shape(o):
+						lines.append_array(_shape_stats(o))   # [FORMES 1.83]
+					else:
+						lines.append(size_angle)
 			lines.append("Position %d, %d" % [int(o.pos.x), int(o.pos.y)])
 	if tool != Tool.SELECT:
 		lines.append("(outil Sélection pour le régler)")
@@ -1551,6 +1593,13 @@ func _draw_hover(z: float) -> void:
 			if _hover.index >= DrawnLevel.objects.size():
 				return
 			var o: Dictionary = DrawnLevel.objects[_hover.index]
+			if DrawnLevel.is_shape(o):
+				# [FORMES 1.83] halo le long du contour de la forme
+				var pts: PackedVector2Array = DrawnLevel.shape_geometry(o, _draw_bottom).poly
+				pts.append(pts[0])
+				draw_polyline(pts, glow, 16.0 / z, true)
+				draw_polyline(pts, line, 3.0 / z, true)
+				return
 			var hh: Vector2 = DrawnLevel.object_half(o) + Vector2.ONE * 14.0 / z
 			draw_set_transform_matrix(Transform2D(0.0 if o.type == "camera" else float(o.rot), o.pos))
 			draw_rect(Rect2(-hh, hh * 2.0), Color(HOVER_COLOR, 0.10))
@@ -1826,17 +1875,19 @@ const PALETTE := [
 	["Objets", [["hook", "Prise de grappin", ""], ["egg", "Œuf à grappiner", ""], ["boost", "Boost", ""],
 		["start", "Départ", ""], ["finish", "Arrivée", ""], ["checkpoint", "Point de passage", ""],
 		["sign", "Panneau flèche", ""], ["camera", "Zone de caméra", ""]]],
-	# [ICÔNES 1.82] plan décalé d'une version (choix de l'équipe : la 1.82 est
-	# consacrée à l'ergonomie) : formes de terrain en 1.83, gros blocs en 1.84
-	["Terrain", [["draw", "Sol (outil Dessiner)", ""], ["ramp", "Tremplin", "1.83"], ["halfpipe", "Half-pipe", "1.83"],
-		["bowl", "Bol", "1.83"], ["slope", "Rampe", "1.83"], ["bend", "Virage en pipe", "1.83"], ["upipe", "Virage en U", "1.83"],
-		["ceiling", "Plafond", "1.83"], ["floating", "Plateforme flottante", "1.83"], ["wall", "Mur", "1.83"],
-		["pillar", "Pilier", "1.83"], ["balcony", "Balcon de glace", "1.83"], ["stal", "Plateforme-stalactite", "1.83"],
-		["cliff", "Falaise", "1.83"]]],
+	# [ICÔNES 1.82] plan décalé d'une version (la 1.82 est consacrée à
+	# l'ergonomie) ; [FORMES 1.83] les formes du terrain arrivent en deux fois
+	# (choix de l'équipe) : 10 formes en 1.83, balcon / plateforme-stalactite /
+	# falaise en 1.84 ; gros blocs en 1.85
+	["Terrain", [["draw", "Sol (outil Dessiner)", ""], ["ramp", "Tremplin", ""], ["halfpipe", "Half-pipe", ""],
+		["bowl", "Bol", ""], ["slope", "Rampe", ""], ["bend", "Virage en pipe", ""], ["upipe", "Virage en U", ""],
+		["ceiling", "Plafond", ""], ["floating", "Plateforme flottante", ""], ["wall", "Mur", ""],
+		["pillar", "Pilier", ""], ["balcony", "Balcon de glace", "1.84"], ["stal", "Plateforme-stalactite", "1.84"],
+		["cliff", "Falaise", "1.84"]]],
 	["Décor", [["arch", "Arche", ""], ["podium", "Podium FIN", ""], ["bush", "Buisson", ""], ["igloo", "Igloo", ""],
 		["colisee", "Colisée", ""], ["ice1", "Bloc de glace 1", ""], ["ice2", "Bloc de glace 2", ""], ["ice3", "Petit bloc de glace", ""]]],
-	["Gros blocs", [["cave", "Caverne", "1.84"], ["void", "Zone de vide", "1.84"], ["pillars", "Motif piliers", "1.84"],
-		["bigegg", "Grand œuf", "1.84"], ["endless", "Tronçon du Sans fin", "1.84"]]],
+	["Gros blocs", [["cave", "Caverne", "1.85"], ["void", "Zone de vide", "1.85"], ["pillars", "Motif piliers", "1.85"],
+		["bigegg", "Grand œuf", "1.85"], ["endless", "Tronçon du Sans fin", "1.85"]]],
 ]
 
 ## [ICÔNES 1.82] Bulle de chaque case de la palette (ce que fait l'élément)
@@ -1850,11 +1901,12 @@ const PALETTE_TIPS := {
 	"sign": "Un panneau pour montrer le chemin (8 directions).",
 	"camera": "Tant que Pinpouin est dans cette zone, la caméra recule pour montrer la suite.",
 	"draw": "Le sol se trace avec l'outil Dessiner.",
-	"ramp": "Un tremplin tout fait, étirable.", "halfpipe": "Un half-pipe pour les figures.",
-	"bowl": "Un bol (creux arrondi).", "slope": "Une rampe à boosts pour monter.",
-	"bend": "Un virage en morceau de tuyau.", "upipe": "Un virage en U.",
-	"ceiling": "Un plafond, accrochable ou non.", "floating": "Une plateforme qui flotte.",
-	"wall": "Un mur (plus de 75°).", "pillar": "Un pilier comme dans le Gruyère.",
+	"ramp": "Un tremplin : pose-le au bout d'un sol, il s'y colle. Étire-le avec les losanges.",
+	"halfpipe": "Un half-pipe creusé pour les figures : pose-le entre deux sols (il se colle aux bouts).",
+	"bowl": "Un bol (creux arrondi) : pose-le entre deux sols.", "slope": "Une rampe à boosts pour monter, avec un palier en haut.",
+	"bend": "Un virage en morceau de tuyau qui relève Pinpouin (angle réglable en Expert).", "upipe": "Un demi-tuyau qui renvoie Pinpouin vers la gauche, la tête en bas.",
+	"ceiling": "Un plafond. Avec stalactites : le grappin s'y accroche ; lisse : non (réglage Expert).", "floating": "Une plateforme qui flotte en l'air.",
+	"wall": "Un mur (plus de 75° : ni PUMP ni saut pour le grimper).", "pillar": "Un pilier qui sort du vide, comme dans le Gruyère.",
 	"balcony": "Un balcon de glace à stalactites.", "stal": "Une plateforme-stalactite comme dans L'Œuf.",
 	"cliff": "Une falaise en forme de montagne.",
 	"arch": "L'arche de glace.", "podium": "Le podium FIN.", "bush": "Un buisson enneigé.", "igloo": "Un igloo.",
@@ -2044,10 +2096,14 @@ func _set_mode(on: bool) -> void:
 const OBJ_NAMES := {"egg": "Œuf à grappiner", "boost": "Boost", "start": "Départ", "finish": "Arrivée",
 	"checkpoint": "Point de passage", "sign": "Panneau flèche", "camera": "Zone de caméra",
 	"arch": "Arche", "podium": "Podium FIN", "bush": "Buisson", "igloo": "Igloo", "colisee": "Colisée",
-	"ice1": "Bloc de glace 1", "ice2": "Bloc de glace 2", "ice3": "Petit bloc de glace"}
+	"ice1": "Bloc de glace 1", "ice2": "Bloc de glace 2", "ice3": "Petit bloc de glace",
+	# [FORMES 1.83]
+	"ramp": "Tremplin", "halfpipe": "Half-pipe", "bowl": "Bol", "slope": "Rampe à boosts", "bend": "Virage en pipe",
+	"upipe": "Virage en U", "ceiling": "Plafond", "floating": "Plateforme flottante", "wall": "Mur", "pillar": "Pilier"}
 const EGG_STYLE_NAMES := ["", "glace", "tacheté", "craquelé", "bonnet de neige", "bébé Pinpouin"]
 ## Types qu'on peut tourner (les autres restent droits)
-const ROTATABLE := ["egg", "boost", "arch", "podium", "bush", "igloo", "colisee", "ice1", "ice2", "ice3"]
+const ROTATABLE := ["egg", "boost", "arch", "podium", "bush", "igloo", "colisee", "ice1", "ice2", "ice3",
+	"ramp", "halfpipe", "bowl", "slope", "bend", "upipe", "ceiling", "floating", "wall", "pillar"]   # [FORMES 1.83]
 
 
 ## Change une valeur de l'objet sélectionné (props si `prop`) avec une étape « Annuler »
@@ -2066,6 +2122,9 @@ func _object_settings(col: VBoxContainer, title: Label) -> void:
 	var o: Dictionary = DrawnLevel.objects[_sel.index]
 	var t: String = o.type
 	title.text = OBJ_NAMES.get(t, t)
+	if DrawnLevel.is_shape(o):
+		_shape_settings(col, o)   # [FORMES 1.83]
+		return
 	match t:
 		"egg":
 			_slider_row(col, "Dessin", 1, 5, 1, float(o.props.get("style", 1)), func(v): _set_obj("style", int(v), true),
@@ -2182,12 +2241,16 @@ func _draw_objects(z: float, font: Font, fs: int) -> void:
 			"start", "finish":
 				pass   # dessinés avec le départ et l'arrivée (voir _draw)
 			_:
-				if DrawnLevel.DECOR_SCENES.has(o.type):
+				if DrawnLevel.is_shape(o):
+					_draw_shape(o, z)   # [FORMES 1.83]
+				elif DrawnLevel.DECOR_SCENES.has(o.type):
 					for spr in _decor_sprites(o.type):
 						draw_set_transform_matrix(xf.scaled_local(Vector2.ONE * o.scale) * spr[1])
 						draw_texture_rect_region(spr[0], spr[2], spr[3])
 		draw_set_transform_matrix(Transform2D.IDENTITY)
-		if sel:
+		if sel and DrawnLevel.is_shape(o):
+			_draw_shape_selection(o, z)   # [FORMES 1.83] contour jaune + poignées d'étirement
+		elif sel:
 			# cadre jaune et poignées
 			draw_set_transform_matrix(Transform2D(0.0 if o.type == "camera" else o.rot, o.pos))
 			draw_rect(Rect2(-hh, hh * 2.0), SELECT_COLOR, false, 5.0 / z)
@@ -2199,6 +2262,181 @@ func _draw_objects(z: float, font: Font, fs: int) -> void:
 				draw_circle(hd.rotate, 8.0 / z, Color(0.1, 0.15, 0.3))
 			if not (o.type in ["start", "finish", "checkpoint"]):
 				draw_rect(Rect2(hd.scale - Vector2.ONE * 13.0 / z, Vector2.ONE * 26.0 / z), SELECT_COLOR)
+
+
+# --- [FORMES 1.83] Formes du terrain dans l'éditeur ---------------------------------
+# Géométrie commune : DrawnLevel.shape_geometry (le jeu construit la même).
+# Poignées : rond = tourner ; losanges = étirer en largeur (à droite) et en
+# hauteur / profondeur (en haut, ou en bas pour les formes creusées et celles
+# qui pendent). Mode Simple : tailles toutes faites (Petit / Moyen / Grand).
+
+## Formes dont la hauteur `h` se compte vers le BAS (creusées, ou qui pendent)
+const SHAPE_H_DOWN := ["halfpipe", "bowl", "ceiling", "floating", "pillar"]
+## Dimensions étirables de chaque forme
+const SHAPE_STRETCH := {"ramp": ["w", "h"], "halfpipe": ["w", "h"], "bowl": ["w", "h"], "slope": ["w", "h"],
+	"bend": ["w"], "upipe": ["h"], "ceiling": ["w", "h"], "floating": ["w", "h"], "wall": ["w", "h"], "pillar": ["w", "h"]}
+## Nom du réglage `h` selon la forme
+const SHAPE_H_NAME := {"halfpipe": "Profondeur", "bowl": "Profondeur", "ceiling": "Épaisseur", "floating": "Épaisseur",
+	"upipe": "Diamètre", "pillar": "Hauteur"}
+var _stretch_offset := 0.0      # écart doigt / dimension pendant un étirement
+var _draw_bottom := INF         # fond commun des îlots pendant _draw
+
+
+## Message après l'aimantation d'une forme
+func _snap_flash(how: String) -> void:
+	match how:
+		"bout":
+			_flash("Forme collée au bout du sol.")
+		"sol":
+			_flash("Forme posée sur le sol.")
+
+
+## Poignées d'une forme (monde) : {rotate, scale (aucune), w, h}
+func _shape_handles(o: Dictionary, z: float) -> Dictionary:
+	var g := DrawnLevel.shape_geometry(o)
+	var f: Rect2 = g.frame
+	var xf := Transform2D(float(o.rot), o.pos)
+	var out := {"scale": Vector2.INF, "w": Vector2.INF, "h": Vector2.INF}
+	var down: bool = o.type in SHAPE_H_DOWN
+	# rond « tourner » : toujours AU-DESSUS de la forme ; pour les formes qui
+	# montent (losange « hauteur » en haut au milieu), décalé vers la gauche
+	# pour ne pas se superposer au losange
+	var rx: float = f.get_center().x if down else f.position.x + f.size.x * 0.2
+	out.rotate = xf * Vector2(rx, f.position.y - 80.0 / z)
+	var dims: Array = SHAPE_STRETCH.get(o.type, [])
+	if "w" in dims:
+		out.w = xf * Vector2(f.end.x + 45.0 / z, f.get_center().y if o.type != "bend" else -12.0 / z)
+	if "h" in dims:
+		out.h = xf * Vector2(f.get_center().x, (f.end.y + 45.0 / z) if down else (f.position.y - 45.0 / z))
+	return out
+
+
+## Aperçu d'une forme : la même glace que les îlots (remplissage + trait bleu
+## sur la ligne de glisse) ; boosts de la rampe ; plafond lisse en plus foncé
+func _draw_shape(o: Dictionary, z: float) -> void:
+	var g := DrawnLevel.shape_geometry(o, _draw_bottom)
+	var fill := ICE_COLOR
+	if o.type == "ceiling" and DrawnLevel.shape_prop(o, "hook") < 0.5:
+		fill = ICE_COLOR.darkened(0.18)   # non accrochable
+	if g.poly.size() >= 3:
+		var tris := Geometry2D.triangulate_polygon(g.poly)
+		if tris.is_empty():
+			draw_polyline(g.poly, fill, 6.0 / z)
+		else:
+			draw_colored_polygon(g.poly, fill)
+	draw_polyline(g.top, EDGE_COLOR, maxf(24.0, 5.0 / z), true)
+	for b in g.boosts:
+		var k: float = DrawnLevel.shape_prop(o, "strength")
+		var c: Color = Color.WHITE.lerp(Color(1, 0.85, 0.1), minf(1.0, k * 2.0)).lerp(Color(1, 0.2, 0.15), maxf(0.0, k * 2.0 - 1.0))
+		draw_set_transform_matrix(Transform2D(b.rot, b.pos))
+		for j in 3:
+			var x0: float = -60.0 + j * 40.0
+			draw_colored_polygon(PackedVector2Array([Vector2(x0, -30), Vector2(x0 + 30, 0), Vector2(x0, 30), Vector2(x0 + 15, 30), Vector2(x0 + 45, 0), Vector2(x0 + 15, -30)]), c)
+		draw_set_transform_matrix(Transform2D.IDENTITY)
+
+
+## Sélection d'une forme : contour jaune + poignées (rond = tourner, losanges = étirer)
+func _draw_shape_selection(o: Dictionary, z: float) -> void:
+	var pts: PackedVector2Array = DrawnLevel.shape_geometry(o, _draw_bottom).poly
+	pts.append(pts[0])
+	draw_polyline(pts, SELECT_COLOR, 5.0 / z, true)
+	var hd := _shape_handles(o, z)
+	var f: Rect2 = DrawnLevel.shape_geometry(o).frame
+	var anchor: Vector2 = Transform2D(float(o.rot), o.pos) * Vector2(_hd_x_of(hd, o), f.position.y)
+	draw_line(anchor, hd.rotate, SELECT_COLOR, 3.0 / z)
+	draw_circle(hd.rotate, 14.0 / z, SELECT_COLOR)
+	draw_circle(hd.rotate, 8.0 / z, Color(0.1, 0.15, 0.3))
+	for k in ["w", "h"]:
+		var p: Vector2 = hd[k]
+		if p == Vector2.INF:
+			continue
+		var r: float = 17.0 / z
+		draw_colored_polygon(PackedVector2Array([p + Vector2(0, -r), p + Vector2(r, 0), p + Vector2(0, r), p + Vector2(-r, 0)]), SELECT_COLOR)
+		draw_colored_polygon(PackedVector2Array([p + Vector2(0, -r * 0.45), p + Vector2(r * 0.45, 0), p + Vector2(0, r * 0.45), p + Vector2(-r * 0.45, 0)]), Color(0.1, 0.15, 0.3))
+
+
+## Pied du trait du rond « tourner » : juste sous lui, sur le haut de la forme
+func _hd_x_of(hd: Dictionary, o: Dictionary) -> float:
+	return ((hd.rotate as Vector2) - o.pos).rotated(-float(o.rot)).x
+
+
+## Lignes de stats d'une forme (fiche de survol)
+func _shape_stats(o: Dictionary) -> Array:
+	var lines: Array = []
+	var dims: Array = SHAPE_STRETCH.get(o.type, [])
+	var parts: Array = []
+	if "w" in dims:
+		parts.append(("Rayon %d px" if o.type == "bend" else "Largeur %d px") % int(DrawnLevel.shape_prop(o, "w")))
+	if "h" in dims:
+		parts.append("%s %d px" % [SHAPE_H_NAME.get(o.type, "Hauteur"), int(DrawnLevel.shape_prop(o, "h"))])
+	lines.append("   ·   ".join(parts))
+	match str(o.type):
+		"ramp":
+			lines.append("Angle de sortie %d°" % int(DrawnLevel.shape_prop(o, "lip")))
+		"bend":
+			lines.append("Virage de %d°" % int(DrawnLevel.shape_prop(o, "angle")))
+		"slope":
+			lines.append("Boosts : force %d %%" % int(round(DrawnLevel.shape_prop(o, "strength") * 100.0)))
+		"ceiling":
+			lines.append("Accrochable au grappin" if DrawnLevel.shape_prop(o, "hook") > 0.5 else "Lisse : le grappin ne s'y accroche pas")
+	if absf(float(o.rot)) > 0.01:
+		lines.append("Tournée de %d°" % int(round(rad_to_deg(float(o.rot)))))
+	var g := DrawnLevel.shape_geometry(o)
+	if g.entry != Vector2.INF:
+		for st in DrawnLevel.strokes:
+			if (st[st.size() - 1] as Vector2).distance_to(g.entry) < 2.0:
+				lines.append("Collée au bout d'un sol")
+				break
+	return lines
+
+
+## Réglages d'une forme. Simple : tailles toutes faites + largeur / hauteur ;
+## Expert : + réglages propres (angle de sortie, virage, boosts, accrochable),
+## angle de la forme, position exacte.
+func _shape_settings(col: VBoxContainer, o: Dictionary) -> void:
+	var t: String = o.type
+	var dims: Array = SHAPE_STRETCH.get(t, [])
+	# tailles toutes faites (choix de l'équipe : surtout pour le mode Simple ;
+	# gardées en Expert, elles servent aussi)
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 4)
+	col.add_child(row)
+	for preset in DrawnLevel.SHAPE_PRESETS:
+		var f: float = DrawnLevel.SHAPE_PRESETS[preset]
+		var b := _button(preset, row, 72)
+		b.add_theme_font_size_override("font_size", 15)
+		b.pressed.connect(func():
+			_push_undo()
+			var it: Dictionary = DrawnLevel.objects[_sel.index]
+			for k in dims:
+				it.props[k] = float(DrawnLevel.SHAPE_DEFAULTS[t][k]) * f
+			_snap_flash(DrawnLevel.snap_shape(_sel.index))
+			_changed()
+			_rebuild_settings())
+	if "w" in dims:
+		_slider_row(col, "Rayon" if t == "bend" else "Largeur", 150.0, 3000.0, 10.0, DrawnLevel.shape_prop(o, "w"), func(v): _set_obj("w", v, true), func(v): return "%d px" % int(v))
+	if "h" in dims:
+		_slider_row(col, SHAPE_H_NAME.get(t, "Hauteur"), 60.0, 3000.0, 10.0, DrawnLevel.shape_prop(o, "h"), func(v): _set_obj("h", v, true), func(v): return "%d px" % int(v))
+	if expert:
+		match t:
+			"ramp":
+				_slider_row(col, "Angle de sortie", 5.0, 70.0, 1.0, DrawnLevel.shape_prop(o, "lip"), func(v): _set_obj("lip", v, true), func(v): return "%d°" % int(v))
+			"bend":
+				_slider_row(col, "Virage", 30.0, 150.0, 5.0, DrawnLevel.shape_prop(o, "angle"), func(v): _set_obj("angle", v, true), func(v): return "%d°" % int(v))
+			"slope":
+				_slider_row(col, "Force des boosts", 0.0, 1.0, 0.05, DrawnLevel.shape_prop(o, "strength"), func(v): _set_obj("strength", v, true), func(v): return "%d %%" % int(round(v * 100.0)))
+			"ceiling":
+				var hk := CheckButton.new()
+				hk.text = "Accrochable (stalactites)"
+				hk.button_pressed = DrawnLevel.shape_prop(o, "hook") > 0.5
+				hk.focus_mode = Control.FOCUS_NONE
+				for c in ["font_color", "font_hover_color", "font_pressed_color", "font_hover_pressed_color"]:
+					hk.add_theme_color_override(c, Color.WHITE)
+				hk.toggled.connect(func(on): _set_obj("hook", on, true))
+				col.add_child(hk)
+		_slider_row(col, "Angle", -180.0, 180.0, 15.0 if magnet else 1.0, wrapf(rad_to_deg(o.rot), -180.0, 180.0), func(v): _set_obj("rot", deg_to_rad(v)))
+		_spin_row(col, "X", o.pos.x, func(v): _set_obj("pos", Vector2(v, DrawnLevel.objects[_sel.index].pos.y)))
+		_spin_row(col, "Y", o.pos.y, func(v): _set_obj("pos", Vector2(DrawnLevel.objects[_sel.index].pos.x, v)))
 
 
 ## « ✔ Valider » : course en mode Score depuis le vrai départ ; à l'arrivée,
