@@ -353,6 +353,10 @@ func _build_tabs() -> void:
 	_pages["affichage"].add_child(free_zoom)
 	_pages["affichage"].add_child(zoom_help)
 	_move(["ArrowsTitle", "ArrowsChoice"], game_box, _pages["affichage"])
+	# [GLACE 1.77] style des plateformes (glace / d'origine)
+	_pages["affichage"].add_child(_new_switch("GroundStyle", "Plateformes en glace", Settings.ground_style == 1,
+		func(v): Settings.set_option("ground_style", 1 if v else 0),
+		"Une seule glace pour toutes les plateformes, avec un dessus clair.\nCoupé : les deux bleus et la bordure de cristaux d'origine.\nS'applique au prochain niveau lancé."))
 	# [FOND 1.76] le fond glisse pendant les grands sauts et les chutes
 	_pages["affichage"].add_child(_new_switch("BgFollowJumps", "Le fond suit les sauts et les chutes", Settings.bg_follow_jumps,
 		func(v): Settings.set_option("bg_follow_jumps", v),
