@@ -139,6 +139,9 @@ const BG_SKY_THEMES := [
 var bg_glacier_theme: int = 1
 ## [FOND 1.75] Thème choisi pour le ciel lointain (indice dans BG_SKY_THEMES).
 var bg_sky_theme: int = 1
+## [FOND 1.76] Le fond glisse pendant les grands sauts (on voit le ciel) et
+## les chutes (on voit le bas du glacier). Coupé = composition fixe (1.26-1.75).
+var bg_follow_jumps: bool = true
 
 
 func _ready() -> void:
@@ -189,6 +192,7 @@ func _load_options() -> void:
 		# [FOND 1.75] thèmes du fond (par défaut : falaise sans fond + nuit étoilée)
 		bg_glacier_theme = clampi(int(cfg.get_value("options", "bg_glacier_theme", 1)), 0, BG_GLACIER_THEMES.size() - 1)
 		bg_sky_theme = clampi(int(cfg.get_value("options", "bg_sky_theme", 1)), 0, BG_SKY_THEMES.size() - 1)
+		bg_follow_jumps = bool(cfg.get_value("options", "bg_follow_jumps", true))   # [FOND 1.76]
 	apply_music_volume()
 	# [OPTIONS 1.72] plein écran retrouvé au lancement (pas dans le navigateur :
 	# il n'y est permis qu'après un clic du joueur)

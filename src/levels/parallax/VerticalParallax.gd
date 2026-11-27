@@ -677,6 +677,84 @@ func _add_far_sky(clouds_spr: Sprite2D, clouds_reg: Rect2, clouds_top_y: float, 
 		_add_extension(sky, sky.region_rect, 0, 0.0, false, sky.get_rect(), img)
 
 
+# --- [FOND 1.76] Le fond suit les grands sauts et les chutes ---------------------
+# Demande de l'équipe (27/11) : « faire glisser le fond quand Pinpouin monte ou
+# descend beaucoup : le ciel apparaît en haut d'un grand saut, le glacier en
+# bas d'une chute ». Jusqu'ici la composition restait fixe à l'écran (1.26).
+# Principe : on mémorise la hauteur de la caméra « au sol » (référence) ; elle
+# rejoint vite la caméra tant que Pinpouin glisse (slide_ground_time), et très
+# lentement quand il est en l'air ou au grappin (slide_air_time). L'écart
+# caméra / référence = hauteur gagnée ou perdue depuis le dernier appui. Toute
+# la composition (ciel, nuages, montagnes, glacier) glisse alors D'UN SEUL
+# BLOC à l'écran, comme un plan lointain (Thalès : écart / (distance + recul
+# de la caméra)) :
+#   - saut vers le haut -> le fond descend, le ciel lointain apparaît ;
+#   - chute -> le fond monte, le bas du glacier apparaît.
+# Un seul bloc : les plans ne se séparent pas entre eux (sinon on reverrait la
+# « bande noire » du bas des nuages entre les montagnes et la brume, 1.26).
+# Glissement plafonné en douceur (tanh) à slide_max_frac de la hauteur
+# d'écran. Une longue descente AU SOL ne fait presque rien bouger (la
+# référence suit). Option « Le fond suit les sauts et les chutes »
+# (Settings.bg_follow_jumps, onglet Affichage) ; coupée = composition fixe.
+## [FOND 1.76] Force du glissement : px d'écran par px de hauteur, divisés
+## par (slide_distance + recul de la caméra).
+@export var slide_strength: float = 1.0
+## [FOND 1.76] Distance « vue » du bloc du fond (3 = comme les montagnes) :
+## au zoom normal, 1000 px de saut font glisser le fond de ~330 px.
+@export var slide_distance: float = 3.0
+## [FOND 1.76] Temps (s) pour que la référence rejoigne la caméra au sol / en l'air.
+@export var slide_ground_time: float = 0.5
+@export var slide_air_time: float = 2.5
+## [FOND 1.76] Écart de hauteur (px du monde) ignoré : seules les GRANDES
+## chutes font glisser le fond (sur Nice Slope, en l'air les 3/4 du temps en
+## descendant, il restait sinon décalé en permanence).
+@export var slide_dead_zone: float = 700.0
+## [FOND 1.76] Même chose vers le haut (sauts), plus petit.
+@export var slide_dead_zone_up: float = 200.0
+## [FOND 1.76] Glissement plus fort vers le haut (montées courtes).
+@export var slide_up_boost: float = 1.6
+## [FOND 1.76] Glissement maximum, en part de la hauteur d'écran.
+@export_range(0.0, 1.0) var slide_max_frac: float = 0.6
+var _slide_ref = null        # hauteur de référence de la caméra (monde)
+var _slide_last_cy = null    # hauteur de la caméra à l'image précédente
+var _slide_player = null     # le pingouin (pour savoir s'il touche le sol)
+var _slide := 0.0            # glissement actuel du fond (px d'écran, > 0 = vers le bas)
+
+
+## [FOND 1.76] Calcule le glissement du fond (voir l'en-tête ci-dessus).
+func _update_slide(cam: Camera2D, delta: float, d: float, view_h: float) -> float:
+	if cam == null or not Settings.bg_follow_jumps:
+		_slide_ref = null
+		return 0.0
+	var cy: float = cam.get_screen_center_position().y
+	# téléportation (réapparition, début de niveau) : on repart de là
+	if _slide_ref == null or (_slide_last_cy != null and absf(cy - _slide_last_cy) > 1500.0):
+		_slide_ref = cy
+	_slide_last_cy = cy
+	if _slide_player == null or not is_instance_valid(_slide_player):
+		_slide_player = get_tree().get_first_node_in_group("player")
+	var grounded := true
+	if _slide_player != null and "is_on_ground" in _slide_player:
+		grounded = _slide_player.is_on_ground
+	var tau: float = slide_ground_time if grounded else slide_air_time
+	_slide_ref = lerpf(_slide_ref, cy, 1.0 - exp(-delta / maxf(tau, 0.01)))
+	# > 0 : la caméra est AU-DESSUS de sa référence (grand saut) -> fond vers le bas
+	var gained: float = _slide_ref - cy
+	# zone morte : les petits sauts et les descentes ordinaires ne bougent
+	# pas le fond (sinon, sur Nice Slope, en l'air les 3/4 du temps, il
+	# restait décalé en permanence)
+	# Les montées sont plus rares et plus courtes que les chutes : zone morte
+	# plus petite et glissement plus fort vers le haut (on veut voir le ciel
+	# au sommet d'un grand saut).
+	if gained > 0.0:
+		gained = maxf(gained - slide_dead_zone_up, 0.0) * slide_up_boost
+	else:
+		gained = minf(gained + slide_dead_zone, 0.0)
+	var raw: float = gained * slide_strength / maxf(slide_distance + d, 0.2)
+	var cap: float = maxf(slide_max_frac * view_h, 1.0)
+	return cap * tanh(raw / cap)
+
+
 func _process_alto(delta: float) -> void:
 	var cam := get_viewport().get_camera_2d()
 	var view_h: float = get_viewport().get_visible_rect().size.y
@@ -701,6 +779,9 @@ func _process_alto(delta: float) -> void:
 		if _alto_last_cx != null:
 			dx = cx - _alto_last_cx
 		_alto_last_cx = cx
+	# [FOND 1.76] toute la composition glisse d'un bloc (grands sauts / chutes)
+	_slide = _update_slide(cam, delta, d, view_h)
+	top += _slide
 	for layer in _alto_sprites:
 		var spr: Sprite2D = _alto_sprites[layer][0]
 		var key: String = _alto_sprites[layer][1]

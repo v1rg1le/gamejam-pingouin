@@ -353,6 +353,10 @@ func _build_tabs() -> void:
 	_pages["affichage"].add_child(free_zoom)
 	_pages["affichage"].add_child(zoom_help)
 	_move(["ArrowsTitle", "ArrowsChoice"], game_box, _pages["affichage"])
+	# [FOND 1.76] le fond glisse pendant les grands sauts et les chutes
+	_pages["affichage"].add_child(_new_switch("BgFollowJumps", "Le fond suit les sauts et les chutes", Settings.bg_follow_jumps,
+		func(v): Settings.set_option("bg_follow_jumps", v),
+		"En haut d'un grand saut, on voit le ciel ; en bas d'une chute, le bas du glacier.\nCoupé : le fond reste fixe à l'écran."))
 	# [FOND 1.75] thèmes du fond : bas du glacier et ciel lointain
 	_add_theme_choice(_pages["affichage"], game_box, "BgGlacier", "Fond : bas du glacier",
 		Settings.BG_GLACIER_THEMES, Settings.bg_glacier_theme, "bg_glacier_theme")
