@@ -112,6 +112,34 @@ var fixed_trick: int = -1
 ## noms que TrickScore.gd). L'ordre sert d'indice pour fixed_trick.
 const TRICKS := [["trick_spin", "Toupie"], ["trick_boule", "Boule"], ["trick_etoile_ninja", "Étoile ninja"], ["trick_carpe", "Carpe"]]
 
+# --- [FOND 1.75] Thèmes du fond (demande de l'équipe du 27/11 : « je les veux
+# tous, en thème dans les options ») -------------------------------------------
+# Deux choix indépendants, onglet « Affichage » des options :
+#  - le BAS DU GLACIER : ce qu'on voit sous les falaises quand Pinpouin
+#    descend (avant 1.75 : un simple aplat de la couleur de la dernière ligne) ;
+#  - le CIEL LOINTAIN : un plan encore plus loin que les nuages, qu'on voit
+#    quand Pinpouin monte haut (avant 1.75 : aplat de la couleur du ciel).
+# Indice 0 = « D'origine » (comportement 1.74, aucune nouvelle image).
+# Les images sont générées par tools/art/fond_themes.py dans la palette des
+# fonds d'origine ; les images d'origine ne sont pas modifiées.
+# Chaque entrée : [nom affiché, image (ou "" pour l'origine), petite description].
+const BG_GLACIER_THEMES := [
+	["D'origine", "", "Aplat bleu sous les falaises (comme avant la 1.75)."],
+	["Falaise sans fond", "res://sprites/levels/fonds/Fond_bas_falaise.png", "La falaise continue et s'enfonce dans l'ombre."],
+	["Strates et grottes bleues", "res://sprites/levels/fonds/Fond_bas_strates.png", "Couches de glace ancienne et petites grottes qui brillent."],
+	["Pied du glacier sur la mer", "res://sprites/levels/fonds/Fond_bas_mer.png", "La falaise s'arrête sur une mer glacée, avec des icebergs."],
+]
+const BG_SKY_THEMES := [
+	["D'origine", "", "Aplat bleu au-dessus des nuages (comme avant la 1.75)."],
+	["Nuit étoilée", "res://sprites/levels/fonds/Fond_ciel_etoiles.png", "Le ciel fonce vers le bleu nuit, plein d'étoiles."],
+	["Aurore boréale", "res://sprites/levels/fonds/Fond_ciel_aurore.png", "Étoiles et deux rideaux d'aurore vert-bleu."],
+	["Voie lactée", "res://sprites/levels/fonds/Fond_ciel_voie_lactee.png", "Voie lactée, étoile filante et petite planète à anneau."],
+]
+## [FOND 1.75] Thème choisi pour le bas du glacier (indice dans BG_GLACIER_THEMES).
+var bg_glacier_theme: int = 1
+## [FOND 1.75] Thème choisi pour le ciel lointain (indice dans BG_SKY_THEMES).
+var bg_sky_theme: int = 1
+
 
 func _ready() -> void:
 	# [MOBILE] détection de la plateforme au lancement
@@ -158,6 +186,9 @@ func _load_options() -> void:
 		free_zoom = bool(cfg.get_value("options", "free_zoom", false))
 		show_coefs = bool(cfg.get_value("options", "show_coefs", false))
 		fixed_trick = clampi(int(cfg.get_value("options", "fixed_trick", -1)), -1, TRICKS.size() - 1)
+		# [FOND 1.75] thèmes du fond (par défaut : falaise sans fond + nuit étoilée)
+		bg_glacier_theme = clampi(int(cfg.get_value("options", "bg_glacier_theme", 1)), 0, BG_GLACIER_THEMES.size() - 1)
+		bg_sky_theme = clampi(int(cfg.get_value("options", "bg_sky_theme", 1)), 0, BG_SKY_THEMES.size() - 1)
 	apply_music_volume()
 	# [OPTIONS 1.72] plein écran retrouvé au lancement (pas dans le navigateur :
 	# il n'y est permis qu'après un clic du joueur)

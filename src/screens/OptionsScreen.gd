@@ -353,6 +353,11 @@ func _build_tabs() -> void:
 	_pages["affichage"].add_child(free_zoom)
 	_pages["affichage"].add_child(zoom_help)
 	_move(["ArrowsTitle", "ArrowsChoice"], game_box, _pages["affichage"])
+	# [FOND 1.75] thèmes du fond : bas du glacier et ciel lointain
+	_add_theme_choice(_pages["affichage"], game_box, "BgGlacier", "Fond : bas du glacier",
+		Settings.BG_GLACIER_THEMES, Settings.bg_glacier_theme, "bg_glacier_theme")
+	_add_theme_choice(_pages["affichage"], game_box, "BgSky", "Fond : ciel lointain (au-dessus des nuages)",
+		Settings.BG_SKY_THEMES, Settings.bg_sky_theme, "bg_sky_theme")
 	_move(["MusicTitle", "MusicSlider", "SfxTitle", "SfxSlider"], game_box, _pages["son"])
 	_move(["GhostHelp", "GhostList", "PasteButton", "FolderButton"], ghost_box, _pages["fantomes"])
 	_pages["dev"].add_child(_hint("Pour régler et tester le jeu. Tout est coupé par défaut."))
@@ -399,6 +404,44 @@ func _new_switch(node_name: String, text: String, value: bool, on_toggle: Callab
 	c.button_pressed = value
 	c.toggled.connect(on_toggle)
 	return c
+
+
+## [FOND 1.75] Choix d'un thème du fond : titre, liste déroulante, aperçu de
+## l'image (pixels nets, comme en jeu) et petite description. Le choix est
+## mémorisé tout de suite ; il s'applique au prochain niveau lancé.
+## `themes` : Settings.BG_GLACIER_THEMES ou BG_SKY_THEMES ([nom, image, texte]).
+func _add_theme_choice(page: VBoxContainer, game_box: Node, node_name: String, title: String,
+		themes: Array, current: int, option_key: String) -> void:
+	var t: Label = game_box.get_node("MusicTitle").duplicate()   # même style de titre
+	t.name = node_name + "Title"
+	t.text = title
+	page.add_child(t)
+	var choice := OptionButton.new()
+	choice.name = node_name + "Choice"
+	choice.custom_minimum_size = Vector2(0, 40)
+	for i in themes.size():
+		choice.add_item(themes[i][0], i)
+	choice.select(clampi(current, 0, themes.size() - 1))
+	page.add_child(choice)
+	# aperçu : l'image du thème, bande de 320 px de large agrandie ×2
+	var preview := TextureRect.new()
+	preview.name = node_name + "Preview"
+	preview.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	preview.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	preview.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	preview.custom_minimum_size = Vector2(0, 150)
+	page.add_child(preview)
+	var info := _hint("")
+	page.add_child(info)
+	var show := func(index: int) -> void:
+		var path: String = themes[index][1]
+		preview.texture = load(path) if path != "" and ResourceLoader.exists(path) else null
+		preview.visible = preview.texture != null
+		info.text = themes[index][2]
+	show.call(choice.selected)
+	choice.item_selected.connect(func(index):
+		Settings.set_option(option_key, choice.get_item_id(index))
+		show.call(index))
 
 
 ## Petit texte d'aide sous un réglage.

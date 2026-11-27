@@ -337,7 +337,11 @@ func _extend_sprite(spr: Sprite2D, is_back: bool) -> void:
 		_add_extension(spr, reg, bottom_row, rect.position.y + (bottom_row + 1 - reg.position.y), true, rect, img)
 
 
-func _add_extension(spr: Sprite2D, reg: Rect2, row: int, edge_y: float, downward: bool, rect: Rect2, img: Image) -> void:
+## [FOND 1.75] `rows` : longueur du prolongement en lignes d'image (-1 =
+## extension_rows, comme avant). Sert à garder un court raccord bleu au-dessus
+## des nuages quand le ciel lointain est affiché derrière.
+func _add_extension(spr: Sprite2D, reg: Rect2, row: int, edge_y: float, downward: bool, rect: Rect2, img: Image, rows: float = -1.0) -> void:
+	var n_rows: float = extension_rows if rows < 0.0 else rows
 	var ext := Sprite2D.new()
 	ext.name = "Prolongement" + ("Bas" if downward else "Haut")
 	ext.texture = spr.texture
@@ -348,8 +352,8 @@ func _add_extension(spr: Sprite2D, reg: Rect2, row: int, edge_y: float, downward
 	# faisait les longues « veines grises » verticales signalées par l'équipe.)
 	var x := _dominant_pixel_x(img, row)
 	ext.region_rect = Rect2(x, row, 1, 1)
-	ext.scale = Vector2(reg.size.x, extension_rows)
-	ext.position = Vector2(rect.position.x, edge_y - (0.0 if downward else extension_rows))
+	ext.scale = Vector2(reg.size.x, n_rows)
+	ext.position = Vector2(rect.position.x, edge_y - (0.0 if downward else n_rows))
 	ext.texture_repeat = CanvasItem.TEXTURE_REPEAT_ENABLED
 	ext.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
 	ext.show_behind_parent = true   # l'image d'origine reste dessinée par-dessus
@@ -554,11 +558,123 @@ func _setup_alto() -> void:
 		var rect: Rect2 = spr.get_rect()
 		# prolongements : ciel vers le haut (nuages), falaises vers le bas (glacier)
 		if key == "clouds":
-			_add_extension(spr, reg, used.position.y, rect.position.y + used.position.y, false, rect, img)
+			# [FOND 1.75] avec un ciel lointain, plus d'aplat bleu au-dessus des
+			# nuages : le ciel lointain le remplace. Son bas (SKY_JOIN_ROWS
+			# lignes de la couleur du haut des nuages) passe DERRIÈRE les nuages :
+			# quand les deux plans glissent l'un par rapport à l'autre (dézoom,
+			# sauts), c'est lui qui apparaît, jamais un vide.
+			var sky_tex := _theme_texture(Settings.BG_SKY_THEMES, Settings.bg_sky_theme)
+			if sky_tex == null:
+				_add_extension(spr, reg, used.position.y, rect.position.y + used.position.y, false, rect, img)
 			# brume de profondeur : le plan le plus lointain tire vers le ciel
 			spr.modulate = Color(1, 1, 1).lerp(Color(0.80, 0.86, 1.0), alto_haze)
+			if sky_tex != null:
+				_add_far_sky(spr, reg, rect.position.y + used.position.y, sky_tex)
 		elif key == "glacier":
-			_add_extension(spr, reg, used.end.y - 1, rect.position.y + used.end.y, true, rect, img)
+			# [FOND 1.75] bas du glacier dessiné (thème choisi dans les options)
+			# au lieu de l'aplat ; l'aplat continue ensuite sous la nouvelle image
+			var low_tex := _theme_texture(Settings.BG_GLACIER_THEMES, Settings.bg_glacier_theme)
+			if low_tex != null:
+				_add_glacier_bottom(spr, reg, rect.position.y + used.end.y, low_tex)
+			else:
+				_add_extension(spr, reg, used.end.y - 1, rect.position.y + used.end.y, true, rect, img)
+
+
+# --- [FOND 1.75] Thèmes du fond : bas du glacier et ciel lointain --------------
+# Demande de l'équipe (27/11) : « continue le glacier plus bas » et « au-dessus
+# des nuages, un plan encore beaucoup plus loin : le ciel, voire les étoiles ».
+# Les trois propositions de chaque ont été gardées comme thèmes au choix
+# (Settings.BG_GLACIER_THEMES / BG_SKY_THEMES, onglet Affichage des options).
+## Lignes du bas du ciel lointain cachées derrière les nuages (son bas a la
+## couleur du haut des nuages : il sert de raccord quand les plans glissent).
+const SKY_JOIN_ROWS := 30.0
+## Distance du ciel lointain (piste = 1, nuages = 5) : il défile deux fois
+## moins vite que les nuages (Thalès : vitesse ∝ 1 / distance).
+@export var far_sky_distance: float = 10.0
+
+
+## Image du thème `index` (null pour « D'origine » ou si l'image manque).
+func _theme_texture(themes: Array, index: int) -> Texture2D:
+	if index <= 0 or index >= themes.size():
+		return null
+	var path: String = themes[index][1]
+	if path == "" or not ResourceLoader.exists(path):
+		return null
+	return load(path)
+
+
+## Pose l'image du bas du glacier juste sous les falaises (enfant de l'image
+## du glacier : elle suit exactement sa place, sa taille et son défilement).
+## La 1re ligne de la nouvelle image continue la dernière ligne des falaises
+## (elle a été générée à partir d'elle). Sous la nouvelle image, l'aplat de
+## sa dernière ligne (très sombre) prend le relais : jamais de vide.
+func _add_glacier_bottom(spr: Sprite2D, reg: Rect2, edge_y: float, tex: Texture2D) -> void:
+	var low := Sprite2D.new()
+	low.name = "BasDuGlacier"
+	low.texture = tex
+	low.centered = false
+	low.region_enabled = true
+	var th: float = tex.get_size().y
+	# même départ horizontal que la région du glacier : les colonnes de glace
+	# (crevasses, reflets) tombent pile sous celles des falaises
+	low.region_rect = Rect2(reg.position.x, 0.0, reg.size.x, th)
+	low.position = Vector2(spr.get_rect().position.x, edge_y)
+	low.texture_repeat = CanvasItem.TEXTURE_REPEAT_ENABLED
+	low.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	spr.add_child(low)
+	var img: Image = tex.get_image()
+	if img != null and img.is_compressed():
+		img = img.duplicate()
+		img.decompress()
+	if img != null:
+		var lrect: Rect2 = low.get_rect()
+		_add_extension(low, low.region_rect, int(th) - 1, lrect.position.y + th, true, lrect, img)
+
+
+## Ajoute le ciel lointain AU-DESSUS des nuages, comme un plan à part, plus
+## loin que tous les autres (far_sky_distance) : il a sa propre taille et sa
+## propre vitesse dans le fond « Thalès » (voir _process_alto). Au-dessus de
+## l'image, l'aplat de sa 1re ligne (bleu nuit) monte à l'infini.
+func _add_far_sky(clouds_spr: Sprite2D, clouds_reg: Rect2, clouds_top_y: float, tex: Texture2D) -> void:
+	var th: float = tex.get_size().y
+	var sky := Sprite2D.new()
+	sky.name = "CielLointain"
+	sky.texture = tex
+	sky.centered = false
+	sky.region_enabled = true
+	sky.region_rect = Rect2(0.0, 0.0, clouds_reg.size.x, th)
+	sky.texture_repeat = CanvasItem.TEXTURE_REPEAT_ENABLED
+	sky.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	sky.z_index = int(alto_z["clouds"]) - 1          # derrière les nuages
+	# brume un peu plus forte que les nuages : c'est le plan le plus lointain
+	sky.modulate = Color(1, 1, 1).lerp(Color(0.80, 0.86, 1.0), alto_haze * 1.5)
+	var img: Image = tex.get_image()
+	if img != null and img.is_compressed():
+		img = img.duplicate()
+		img.decompress()
+	if thales_dolly and _dolly_root != null:
+		# plan à part : une couche vide sert de « clé » dans les tables du fond
+		var key_layer := ParallaxLayer.new()
+		key_layer.name = "CielLointain"
+		key_layer.motion_scale = Vector2.ZERO
+		add_child(key_layer)
+		sky.scale = Vector2(art_scale, art_scale)
+		_dolly_root.add_child(sky)
+		_alto_dist[key_layer] = maxf(far_sky_distance, 1.0)
+		_alto_period[key_layer] = tex.get_size().x * art_scale
+		_alto_scroll[key_layer] = 0.0
+		# le bas de l'image touche le haut du dessin des nuages
+		alto_rows["ciel_lointain"] = float(alto_rows["clouds"]) + clouds_top_y - th + SKY_JOIN_ROWS
+		_alto_sprites[key_layer] = [sky, "ciel_lointain", 0.0]   # profondeur 0 : ne bouge pas en hauteur
+	else:
+		# fond sans « Thalès » : simple enfant des nuages, posé au-dessus d'eux
+		sky.position = Vector2(clouds_spr.get_rect().position.x, clouds_top_y - th + SKY_JOIN_ROWS)
+		sky.z_index = 0
+		sky.z_as_relative = true
+		sky.show_behind_parent = true
+		clouds_spr.add_child(sky)
+	if img != null:
+		_add_extension(sky, sky.region_rect, 0, 0.0, false, sky.get_rect(), img)
 
 
 func _process_alto(delta: float) -> void:
