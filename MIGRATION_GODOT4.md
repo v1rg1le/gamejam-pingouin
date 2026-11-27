@@ -1416,3 +1416,15 @@ Demande de l'équipe : on ne pouvait quitter le jeu que par le menu pause, en pl
 
 - `LevelSelectionScreen._add_quit_button()` : bouton « Quitter le jeu » en bas du menu principal, juste après « Options » (copie de son style). PC seulement : masqué dans le navigateur (impossible de fermer l'onglet) et sur téléphone (geste « accueil »), comme dans le menu pause.
 - Confirmation comme dans le menu pause : 1er clic -> « Sûr ? Clique encore » (rouge foncé) pendant 3 s, 2e clic -> `get_tree().quit()`. Vérifié : un seul clic ne ferme pas le jeu, deux clics le ferment.
+
+## 85. Fond « Thalès complet » : le dézoom est une caméra qui recule (27/11, version 1.74)
+
+Retour de l'équipe : « là où on glisse, ça va encore moins vite que le glacier du fond ; plus on s'éloigne, plus les couches doivent aller lentement : c'est Thalès, non ? ».
+
+- **Cause** : les plans du fond ignoraient le zoom de la caméra (`scroll_ignore_camera_zoom`) pour garder leur taille, donc aussi pour leur vitesse, alors que la piste ralentit à l'écran quand on dézoome. Au zoom 0,4 (trous, cavernes), la piste défilait à 0,4 et le glacier toujours à 0,5 : il passait devant. La correction de la 1.69 n'avait remis l'ordre qu'au zoom 1.
+- **Correction (choix B de l'équipe)**, `VerticalParallax.gd` (`thales_dolly`, `dolly_reference_zoom`, `dolly_horizon_row`) : en perspective, un objet à la distance Z se déplace à l'écran de f·T/Z quand la caméra se décale de T (Thalès). Piste à la distance 1, plans à Z = 1 / `alto_speeds` (glacier 2, montagnes ~2,9, nuages 5). Le dézoom z de la caméra est traité comme un recul D = 1/z − 1 : taille d'un plan = Z / (Z + D), vitesse à l'écran = 1 / (Z + D). Au zoom 0,33 : piste ×0,33, glacier ×0,5, montagnes ×0,59, nuages ×0,71 ; l'ordre des vitesses (piste > glacier > montagnes > nuages) est toujours respecté, quel que soit le zoom.
+- Les plans rétrécissent vers le **point de fuite** : centre de l'écran en largeur, **ligne d'horizon** (ligne 75 sur 180 : pied des montagnes / haut de la brume) en hauteur. (Avec le centre de l'écran en hauteur, le bas sombre des nuages apparaissait entre les montagnes et la brume.) Au dézoom, les falaises du glacier remontent dans l'image ; leurs prolongements évitent tout vide.
+- Le défilement est **cumulé image par image** (pas recalculé depuis la position absolue de la caméra : sinon le fond sauterait à chaque changement de zoom).
+- Les images quittent leur `ParallaxLayer` pour un nœud `DollyPlans` placé en coordonnées d'écran (le `ParallaxBackground` recalculait la place de ses plans selon le zoom après notre placement : l'image se décalait). La répétition de texture est remise sur ce nœud ; `SkyCycle.gd` teinte aussi `DollyPlans` (ciel du Sans fin). Aucune image modifiée.
+- `thales_dolly = false` remet le fond de la 1.73.
+- Vérifié : Nice Slope, Gruyère, Chill 704, Sans fin (jour et nuit), L'Œuf (fond de grotte, non concerné) ; tuto (élève des invites) terminé ; physique inchangée.

@@ -146,6 +146,45 @@ extends ParallaxBackground
 @export var alto_follow_time: float = 0.8
 @export_range(0.0, 1.0) var alto_haze: float = 0.12
 const ALTO_SCREEN_ROWS := 180.0
+# -----------------------------------------------------------------------------
+# [FOND 1.74] « Thalès complet » : le dézoom est une caméra qui RECULE
+# -----------------------------------------------------------------------------
+# Retour de l'équipe : « là où on glisse, ça va encore moins vite que le
+# glacier du fond ; plus on s'éloigne, plus les couches doivent aller
+# lentement : c'est Thalès, non ? ». Oui : en perspective, un objet à la
+# distance Z se déplace à l'écran de f·T/Z quand la caméra se décale de T
+# (théorème de Thalès) : vitesse à l'écran ∝ 1 / distance.
+# Le bug : les fonds ignoraient le zoom de la caméra (scroll_ignore_camera_zoom)
+# pour garder leur taille, donc aussi pour leur VITESSE, alors que la piste,
+# elle, ralentit à l'écran quand on dézoome. Au zoom 0,4 (trous, cavernes) la
+# piste défilait à 0,4 et le glacier toujours à 0,5 : il passait devant.
+# Correction (choix B de l'équipe) : le dézoom est traité comme une caméra
+# qui recule d'une distance D (piste à la distance 1, glacier 2, montagnes
+# ~2,9, nuages 5 : Z = 1 / alto_speeds). Au zoom z de la caméra :
+#     D = 1 / z - 1          (la piste est vue z fois plus petite)
+#     taille d'un plan  = Z / (Z + D)   (1 au zoom normal)
+#     vitesse à l'écran = 1 / (Z + D)   par pixel de déplacement de la caméra
+# Au zoom 0,33 : piste ×0,33, glacier ×0,5, montagnes ×0,59, nuages ×0,71 ;
+# l'ordre des vitesses (piste > glacier > montagnes > nuages) est TOUJOURS
+# respecté. Les plans rétrécissent vers le centre de l'écran (point de
+# fuite) ; leurs prolongements (ciel en haut, falaises en bas) évitent tout
+# vide. Le défilement est cumulé image par image (pas recalculé à partir de
+# la position absolue de la caméra, sinon le fond sauterait quand le zoom
+# change). Les images ne sont pas modifiées, seulement leur échelle à l'écran.
+## [FOND 1.74] false = comportement 1.73 (vitesse fixe, taille fixe).
+@export var thales_dolly: bool = true
+## [FOND 1.74] Zoom de la caméra qui correspond à la vue « normale » (1.0).
+@export var dolly_reference_zoom: float = 1.0
+## [FOND 1.74] Ligne d'HORIZON (sur 180) : point de fuite vers lequel les plans
+## rétrécissent quand la caméra recule (pied des montagnes = haut de la brume
+## du glacier). Avec le centre de l'écran comme point de fuite, le bas sombre
+## des nuages apparaissait entre les montagnes et la brume.
+@export var dolly_horizon_row: float = 75.0
+var _alto_dist := {}         # ParallaxLayer -> distance Z (piste = 1)
+var _alto_scroll := {}       # ParallaxLayer -> défilement cumulé (px, échelle 1)
+var _alto_period := {}       # ParallaxLayer -> période de l'image (px, échelle 1)
+var _alto_last_cx = null     # centre de la vue (monde), image précédente
+var _dolly_root: Node2D = null   # [FOND 1.74] porte les images (repère = écran)
 var _alto_sprites := {}      # ParallaxLayer -> [Sprite2D, nom, profondeur 0..1]
 var _alto_follow = null
 
@@ -478,7 +517,27 @@ func _setup_alto() -> void:
 		# selon son rang d'affichage
 		var spd: float = alto_speeds.get(key, parallax_speeds[mini(i, parallax_speeds.size() - 1)])
 		layer.motion_scale = Vector2(spd, 0.0)
-		if infinite_horizontal:
+		if thales_dolly:
+			# [FOND 1.74] défilement horizontal calculé ici (voir l'en-tête) :
+			# la bande de l'image (région de 7000 px × art_scale, répétée par la
+			# texture) couvre largement l'écran. L'image quitte son
+			# ParallaxLayer pour un simple nœud placé en coordonnées d'écran
+			# (_dolly_root) : le ParallaxBackground recalculait la place de ses
+			# plans à chaque mouvement de caméra selon le zoom, après notre
+			# placement, et l'image tremblait / se décalait au dézoom.
+			_alto_dist[layer] = 1.0 / maxf(spd, 0.01)
+			_alto_period[layer] = _layer_period(layer)
+			_alto_scroll[layer] = 0.0
+			layer.motion_scale = Vector2.ZERO
+			layer.motion_mirroring = Vector2.ZERO
+			if _dolly_root == null:
+				_dolly_root = Node2D.new()
+				_dolly_root.name = "DollyPlans"
+				# la répétition de texture était héritée du ParallaxLayer
+				_dolly_root.texture_repeat = CanvasItem.TEXTURE_REPEAT_ENABLED
+				add_child(_dolly_root)
+			spr.reparent(_dolly_root, false)
+		elif infinite_horizontal:
 			var period := _layer_period(layer)
 			if period > 0.0:
 				layer.motion_mirroring.x = period
@@ -515,6 +574,17 @@ func _process_alto(delta: float) -> void:
 			_alto_follow = cy
 		_alto_follow = lerpf(_alto_follow, cy, 1.0 - exp(-delta / maxf(alto_follow_time, 0.01)))
 		dy = cy - _alto_follow
+	# [FOND 1.74] recul de la caméra (D) et déplacement horizontal de la vue
+	var view: Vector2 = get_viewport().get_visible_rect().size
+	var d := 0.0
+	var dx := 0.0
+	if cam != null and thales_dolly:
+		var z: float = cam.zoom.x / maxf(dolly_reference_zoom, 0.01)
+		d = maxf(1.0 / maxf(z, 0.05) - 1.0, -0.6)   # zoom > 1 (plus près) : D < 0, borné
+		var cx: float = cam.get_screen_center_position().x
+		if _alto_last_cx != null:
+			dx = cx - _alto_last_cx
+		_alto_last_cx = cx
 	for layer in _alto_sprites:
 		var spr: Sprite2D = _alto_sprites[layer][0]
 		var key: String = _alto_sprites[layer][1]
@@ -522,6 +592,27 @@ func _process_alto(delta: float) -> void:
 		var limit: float = alto_max_shift * depth
 		var shift: float = limit * tanh(-dy * alto_vertical_strength * depth / maxf(limit, 0.01))
 		var target: float = top + float(alto_rows[key]) * art_scale + shift
+		if thales_dolly and _alto_dist.has(layer):
+			# [FOND 1.74] taille et vitesse selon la distance du plan (Thalès)
+			var zd: float = _alto_dist[layer]
+			var f: float = zd / (zd + d)          # taille (1 au zoom normal)
+			var k: float = 1.0 / (zd + d)         # px d'écran par px de caméra
+			spr.scale = Vector2(signf(spr.scale.x) * art_scale * f, art_scale * f)
+			# défilement cumulé, mesuré à l'échelle 1 (puis ramené dans une période)
+			var per: float = _alto_period[layer]
+			_alto_scroll[layer] += dx * k / f
+			if per > 0.0:
+				_alto_scroll[layer] = fposmod(_alto_scroll[layer], per)
+			# rétrécit vers le point de fuite (centre de l'écran en largeur, ligne
+			# d'horizon en hauteur) : le point de l'image sous le centre reste
+			# sous le centre ; l'origine de la bande
+			# est placée 2 périodes à gauche pour toujours couvrir l'écran
+			var x0: float = view.x * 0.5 - (_alto_scroll[layer] + 2.0 * per) * f
+			var horizon: float = top + dolly_horizon_row * art_scale
+			target = horizon + (target - horizon) * f
+			# placement direct (repère du nœud = écran)
+			spr.position = Vector2(x0, target)
+			continue
 		# position réelle du haut de l'image à l'écran -> on corrige l'écart
 		var actual: float = spr.get_global_transform_with_canvas().origin.y
 		layer.motion_offset.y += target - actual

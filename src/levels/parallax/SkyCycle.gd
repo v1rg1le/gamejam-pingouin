@@ -36,6 +36,7 @@ const KEYS := [
 ]
 
 var _layers: Array = []          # ParallaxLayer du fond
+var _bg: Node = null             # [FOND 1.74] ParallaxBackground (voir _process)
 var _world_tint: CanvasModulate = null
 var _stars: Node2D = null
 var _player = null
@@ -48,6 +49,7 @@ func _ready() -> void:
 	_old_clear = RenderingServer.get_default_clear_color()
 	var level := get_parent()
 	var bg := level.get_node_or_null("ParallaxBackground")
+	_bg = bg
 	if bg != null:
 		for c in bg.get_children():
 			if c is ParallaxLayer:
@@ -99,6 +101,13 @@ func _apply(m: float) -> void:
 	for l in _layers:
 		if is_instance_valid(l):
 			l.modulate = bg_tint
+	# [FOND 1.74] depuis le fond « Thalès », les images des plans sont portées
+	# par le nœud « DollyPlans » (VerticalParallax) et non plus par leurs
+	# ParallaxLayer : on lui donne la même teinte
+	if is_instance_valid(_bg):
+		var dp := _bg.get_node_or_null("DollyPlans")
+		if dp != null:
+			dp.modulate = bg_tint
 	if is_instance_valid(_world_tint):
 		_world_tint.color = fg_tint
 	RenderingServer.set_default_clear_color(sky)
