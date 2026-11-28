@@ -216,6 +216,9 @@ func _add_shape(o: Dictionary) -> void:
 	if o.type == "cave":
 		_add_cave(o)   # [CAVERNE 1.84] gros bloc : le générateur du Gruyère
 		return
+	if o.type == "carved":
+		_add_carved(o)   # [TAILLÉE 1.85] caverne taillée à la main
+		return
 	var g := DrawnLevel.shape_geometry(o, _bottom)
 	var body := StaticBody2D.new()
 	body.collision_layer = 2
@@ -267,6 +270,65 @@ func _add_cave(o: Dictionary) -> void:
 	g.position = o.pos
 	add_child(g)
 	_caves.append(g)
+
+
+## [TAILLÉE 1.85] Caverne taillée à la main : mêmes ingrédients que les
+## cavernes générées (CaveGenerator._build_nodes) — roche en tranches (couleur
+## de roche : IceStyle en fait la glace profonde), voile de glace dans les
+## galeries, collisions en segments (contours seulement), bordures de sol
+## (IceStyle y pose la neige sur les dessus et un fin contour ailleurs).
+## Choix de l'équipe : le grappin s'accroche PARTOUT dans la roche taillée
+## (le corps n'est pas dans le groupe « no_hook »).
+func _add_carved(o: Dictionary) -> void:
+	var d := DrawnLevel.carved_data(o)
+	var root := Node2D.new()
+	root.name = "CaverneTaillee"
+	root.position = o.pos
+	add_child(root)
+	var rock := Node2D.new()
+	rock.name = "Roche"
+	rock.z_index = 1
+	root.add_child(rock)
+	for pc in d.pieces:
+		var f := Polygon2D.new()
+		f.polygon = pc
+		f.color = CaveGenerator.ROCK_COLOR
+		f.antialiased = false
+		rock.add_child(f)
+	var glass := Node2D.new()
+	glass.name = "Glace"
+	glass.z_index = -5
+	root.add_child(glass)
+	for v in d.veil:
+		var g := Polygon2D.new()
+		g.polygon = v
+		g.color = CaveGenerator.GLASS_COLOR
+		g.texture = CaveGenerator.GLASS_TILE
+		g.texture_repeat = CanvasItem.TEXTURE_REPEAT_ENABLED
+		g.texture_scale = Vector2.ONE / 6.0
+		glass.add_child(g)
+	var body := StaticBody2D.new()
+	body.name = "Collisions"
+	body.collision_layer = 2
+	root.add_child(body)
+	if d.segs.size() >= 2:
+		var shape := ConcavePolygonShape2D.new()
+		shape.segments = d.segs
+		var cs := CollisionShape2D.new()
+		cs.shape = shape
+		body.add_child(cs)
+	for ch in d.chains:
+		if (ch as PackedVector2Array).size() < 2:
+			continue
+		var edge := Line2D.new()
+		edge.texture = edge_texture
+		edge.texture_mode = Line2D.LINE_TEXTURE_TILE
+		edge.texture_repeat = CanvasItem.TEXTURE_REPEAT_ENABLED
+		edge.width = 64.0
+		edge.position = Vector2(0, 28)
+		edge.points = ch
+		edge.z_index = 3
+		root.add_child(edge)
 
 
 ## Appelé à chaque image (voir _physics_process) quand il y a des cavernes

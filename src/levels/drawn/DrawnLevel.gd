@@ -1210,7 +1210,8 @@ const VALID_TYPES := ["egg", "boost", "start", "finish", "checkpoint", "sign", "
 	"arch", "podium", "bush", "igloo", "colisee", "ice1", "ice2", "ice3",
 	# [FORMES 1.83] formes du terrain (voir la partie 10)
 	"ramp", "halfpipe", "bowl", "slope", "bend", "upipe", "ceiling", "floating", "wall", "pillar",
-	"cave"]   # [CAVERNE 1.84]
+	"cave",   # [CAVERNE 1.84]
+	"carved"]   # [TAILLÉE 1.85]
 ## Types dont il ne peut y avoir qu'un seul exemplaire
 const UNIQUE_TYPES := ["start", "finish"]
 
@@ -1374,7 +1375,8 @@ static func record_validation(time: float) -> void:
 #   pillar   pilier : colonne qui descend dans le vide depuis son dessus (Gruyère).
 
 const SHAPE_TYPES := ["ramp", "halfpipe", "bowl", "slope", "bend", "upipe", "ceiling", "floating", "wall", "pillar",
-	"cave"]   # [CAVERNE 1.84] caverne générée par une graine (voir la partie 11)
+	"cave",   # [CAVERNE 1.84] caverne générée par une graine (voir la partie 11)
+	"carved"]   # [TAILLÉE 1.85] caverne taillée à la main (voir la partie 12)
 ## Réglages par défaut (taille « Moyen »)
 const SHAPE_DEFAULTS := {
 	"ramp": {"w": 640.0, "h": 240.0, "lip": 32.0},
@@ -1390,6 +1392,8 @@ const SHAPE_DEFAULTS := {
 	# [CAVERNE 1.84] graine, longueur (colonnes), étages, étage d'entrée et de
 	# sortie, sinuosité (amplitude de la vague, px) et longueur des vagues
 	"cave": {"seed": 1.0, "columns": 5.0, "lanes": 3.0, "entry": 0.0, "exit": 2.0, "amp": 900.0, "wave": 2.5},
+	# [TAILLÉE 1.85] bloc de départ, taille, contour libre (0..1), opérations
+	"carved": {"base": "rect", "w": 3200.0, "h": 1600.0, "outline": [], "ops": []},
 }
 ## Tailles toutes faites du mode Simple : facteur sur la largeur et la hauteur
 const SHAPE_PRESETS := {"Petit": 0.6, "Moyen": 1.0, "Grand": 1.6}
@@ -1397,7 +1401,7 @@ const SHAPE_PRESETS := {"Petit": 0.6, "Moyen": 1.0, "Grand": 1.6}
 const SHAPE_MIN := 60.0
 const SHAPE_MAX := 4000.0
 ## Formes qui s'aimantent au sol (entrée au bout d'un trait / posées dessus)
-const SHAPE_GROUNDED := ["ramp", "halfpipe", "bowl", "slope", "bend", "upipe", "wall", "cave"]
+const SHAPE_GROUNDED := ["ramp", "halfpipe", "bowl", "slope", "bend", "upipe", "wall", "cave", "carved"]
 ## Formes creusées (sous le niveau du sol) : seulement aimantées par les
 ## bouts (posées au milieu d'un sol, le sol les remplirait)
 const SHAPE_DUG := ["halfpipe", "bowl"]
@@ -1420,6 +1424,11 @@ static func is_shape(o: Dictionary) -> bool:
 ## Valeur bornée d'un réglage de forme (les codes reçus ne peuvent pas
 ## fabriquer de formes géantes)
 static func shape_prop(o: Dictionary, key: String) -> float:
+	if o.type == "carved" and key in ["w", "h"]:
+		# [TAILLÉE 1.85] un bloc à creuser peut être bien plus grand qu'une forme
+		var vv = o.props.get(key, SHAPE_DEFAULTS.carved[key])
+		var ff := float(vv) if typeof(vv) in [TYPE_FLOAT, TYPE_INT] and is_finite(float(vv)) else float(SHAPE_DEFAULTS.carved[key])
+		return clampf(ff, CARVED_MIN, CARVED_MAX)
 	var d = SHAPE_DEFAULTS.get(o.type, {}).get(key, 0.0)
 	var v = o.props.get(key, d)
 	if typeof(v) == TYPE_BOOL:
@@ -1475,6 +1484,18 @@ static func shape_geometry(o: Dictionary, bottom: float = INF) -> Dictionary:
 	var frame := Rect2()
 	var boosts: Array = []
 	match t:
+		"carved":
+			# [TAILLÉE 1.85] contour = le bloc de départ ; on se pose sur le sol
+			# par le coin bas-gauche (entrée) / bas-droite (sortie)
+			poly = carved_base(o)
+			top = PackedVector2Array(poly)
+			# entrée / sortie un peu AU-DESSUS du bas du bloc : il reste de la
+			# roche sous la galerie (sinon le sol s'arrête au ras du bloc et
+			# Pinpouin passe dessous) ; prises sur le contour (œuf, rond…)
+			var es := carved_entry_exit(o, poly)
+			entry = es[0]
+			exit = es[1]
+			frame = Rect2(0, 0, w, h)
 		"cave":
 			# [CAVERNE 1.84] contour = la montagne ; entrée / sortie = début du
 			# couloir d'entrée et fin du couloir de sortie (sur les flancs)
@@ -1614,7 +1635,7 @@ static func shape_geometry(o: Dictionary, bottom: float = INF) -> Dictionary:
 			poly = PackedVector2Array([Vector2(0, 0), Vector2(w, 0), Vector2(w, h), Vector2(0, h)])
 			entry = Vector2.INF
 			frame = Rect2(0, 0, w, h)
-	var xf := Transform2D(0.0 if t == "cave" else float(o.get("rot", 0.0)), o.pos)   # (une caverne ne se tourne pas)
+	var xf := Transform2D(0.0 if t in ["cave", "carved"] else float(o.get("rot", 0.0)), o.pos)   # (une caverne ne se tourne pas)
 	var out := {"poly": xf * poly, "top": xf * top, "frame": frame, "boosts": [],
 		"entry": xf * entry if entry != Vector2.INF else Vector2.INF,
 		"exit": xf * exit if exit != Vector2.INF else Vector2.INF}
@@ -1791,3 +1812,375 @@ static func cave_data(o: Dictionary) -> Dictionary:
 		_cave_cache.clear()
 	_cave_cache[key] = d
 	return d
+
+
+
+# --- 12. [TAILLÉE 1.85] Caverne taillée à la main ------------------------------------
+# Demande de l'équipe (28/11) : « partir d'un bloc œuf, rectangulaire ou autre
+# et pouvoir le tailler » (« cavernes taillées à la main », pour les distinguer
+# des cavernes générées par une graine). Choix : on part d'un bloc rectangle,
+# œuf, rond, montagne ou d'un contour libre dessiné au doigt ; on le creuse en
+# TRAÇANT la galerie (tunnel de largeur étroite / normale / large, valeur libre
+# en Expert), à la PIOCHE (pinceau rond) et on rebouche à la TRUELLE ;
+# grappin accroché PARTOUT dans la roche taillée ; avertissement (pas de
+# blocage) si aucune galerie ne traverse le bloc de part en part.
+#
+# Données (props) : base, w, h, outline (contour libre, coordonnées 0..1 du
+# bloc), ops = liste des coups dans l'ordre : {k: "tunnel" | "dig" | "fill",
+# r: rayon, p: [x0, y0, x1, y1…]} en coordonnées locales du bloc (origine en
+# haut à gauche). La roche est RECALCULÉE à partir du bloc et des coups (une
+# fois par état : cache), comme le font les cavernes générées :
+#  - dessin : tranches verticales de CARVE_SLAB px (bloc ∩ tranche, moins les
+#    galeries, plus les rebouchages) : jamais de trou au milieu d'un morceau
+#    (tout coup est plus large qu'une tranche) ;
+#  - contours : les bords des morceaux, sauf les coupures entre tranches là où
+#    il y a de la roche des deux côtés ; orientés roche à DROITE du sens de
+#    parcours (comme les bordures des sols : IceStyle pose la neige sur les
+#    morceaux tournés vers le haut et un fin contour ailleurs) ;
+#  - collisions : ces mêmes contours, en segments (pas d'arêtes intérieures).
+
+const CARVED_BASES := ["rect", "egg", "round", "mountain", "free"]
+const CARVED_BASE_NAMES := {"rect": "Rectangle", "egg": "Œuf", "round": "Rond", "mountain": "Montagne", "free": "Forme libre"}
+const CARVED_MIN := 600.0
+const CARVED_MAX := 9000.0
+## Largeur des tranches de roche (moins que le plus petit coup : 2 x CARVE_R_MIN)
+const CARVE_SLAB := 96.0
+## Rayon des coups (px) : un coup plus petit pourrait laisser un trou dans une tranche
+const CARVE_R_MIN := 60.0
+const CARVE_R_MAX := 900.0
+## Hauteur des galeries tracées (choix de l'équipe : 3 tailles, libre en Expert)
+const CARVE_WIDTHS := {"Étroite": 300.0, "Normale": 520.0, "Large": 800.0}
+## Rayons de la pioche / truelle
+const CARVE_BRUSHES := {"Petite": 90.0, "Moyenne": 160.0, "Grosse": 280.0}
+## Limites (codes reçus : pas de calcul géant)
+const CARVE_MAX_OPS := 400
+const CARVE_MAX_POINTS := 8000
+
+static var _carved_cache := {}
+
+
+## Contour du bloc de départ (coordonnées locales, origine en haut à gauche)
+static func carved_base(o: Dictionary) -> PackedVector2Array:
+	var w := shape_prop(o, "w")
+	var h := shape_prop(o, "h")
+	var b := str(o.props.get("base", "rect"))
+	var out := PackedVector2Array()
+	match b:
+		"egg":
+			# même forme que les œufs du jeu (pointe un peu plus fine en haut)
+			for i in 48:
+				var t := TAU * i / 48.0
+				var sn := sin(t)
+				out.append(Vector2(w * 0.5 + w * 0.5 / 1.12 * cos(t) * (1.0 + 0.12 * sn), h * 0.5 + h * 0.5 * sn))
+		"round":
+			for i in 48:
+				var t := TAU * i / 48.0
+				out.append(Vector2(w * 0.5 + w * 0.5 * cos(t), h * 0.5 + h * 0.5 * sin(t)))
+		"mountain":
+			# dessous plat, flancs raides, sommet arrondi (comme les falaises du tuto)
+			out.append(Vector2(0, h))
+			for i in 33:
+				var k := i / 32.0
+				out.append(Vector2(w * k, h - h * pow(sin(PI * k), 0.55) * (0.92 + 0.08 * cos(TAU * 2.0 * k))))
+			out.append(Vector2(w, h))
+		"free":
+			var fl = o.props.get("outline", [])
+			if fl is Array and fl.size() >= 6 and fl.size() <= 2000:
+				for i in range(0, fl.size() - 1, 2):
+					var x := float(fl[i])
+					var y := float(fl[i + 1])
+					if is_finite(x) and is_finite(y):
+						out.append(Vector2(clampf(x, 0.0, 1.0) * w, clampf(y, 0.0, 1.0) * h))
+			if out.size() < 3 or Geometry2D.triangulate_polygon(out).is_empty():
+				out = PackedVector2Array()   # contour illisible : rectangle
+	if out.size() < 3:
+		# rectangle aux coins arrondis
+		var r: float = minf(120.0, minf(w, h) * 0.2)
+		for q in 4:
+			var c: Vector2 = [Vector2(w - r, h - r), Vector2(r, h - r), Vector2(r, r), Vector2(w - r, r)][q]
+			for i in 7:
+				var a := PI * 0.5 * q + PI * 0.5 * i / 6.0
+				out.append(c + Vector2(cos(a), sin(a)) * r)
+	return out
+
+
+## Hauteur de roche gardée sous l'entrée / la sortie (le plancher des galeries)
+const CARVE_FLOOR := 260.0
+
+
+## [TAILLÉE 1.85] Entrée (gauche) et sortie (droite) du bloc : là où la ligne
+## « CARVE_FLOOR au-dessus du bas » coupe le contour (le sol s'y colle)
+static func carved_entry_exit(o: Dictionary, base: PackedVector2Array = PackedVector2Array()) -> Array:
+	if base.is_empty():
+		base = carved_base(o)
+	var w := shape_prop(o, "w")
+	var h := shape_prop(o, "h")
+	var y := h - minf(CARVE_FLOOR, h * 0.3)
+	var lo := INF
+	var hi := -INF
+	for i in base.size():
+		var a: Vector2 = base[i]
+		var b: Vector2 = base[(i + 1) % base.size()]
+		if (a.y - y) * (b.y - y) <= 0.0 and absf(b.y - a.y) > 0.001:
+			var x := a.x + (b.x - a.x) * (y - a.y) / (b.y - a.y)
+			lo = minf(lo, x)
+			hi = maxf(hi, x)
+	if lo == INF:
+		return [Vector2(0, y), Vector2(w, y)]
+	return [Vector2(lo, y), Vector2(hi, y)]
+
+
+## Polygones d'un coup (tunnel / pioche / truelle) : le trait « épaissi » de
+## son rayon, bouts arrondis ; un seul point = un rond
+static func carve_op_polys(op: Dictionary) -> Array:
+	var r := clampf(float(op.get("r", 160.0)) if typeof(op.get("r", 0)) in [TYPE_FLOAT, TYPE_INT] else 160.0, CARVE_R_MIN, CARVE_R_MAX)
+	var flat = op.get("p", [])
+	var pts := PackedVector2Array()
+	if flat is Array:
+		for i in range(0, mini(flat.size(), CARVE_MAX_POINTS * 2) - 1, 2):
+			var x := float(flat[i]) if typeof(flat[i]) in [TYPE_FLOAT, TYPE_INT] else NAN
+			var y := float(flat[i + 1]) if typeof(flat[i + 1]) in [TYPE_FLOAT, TYPE_INT] else NAN
+			if is_finite(x) and is_finite(y) and absf(x) < COORD_MAX and absf(y) < COORD_MAX:
+				out_append_unique(pts, Vector2(x, y))
+	if pts.is_empty():
+		return []
+	if pts.size() == 1:
+		var c := PackedVector2Array()
+		for i in 24:
+			c.append(pts[0] + Vector2.from_angle(TAU * i / 24.0) * r)
+		return [c]
+	var res: Array = Geometry2D.offset_polyline(pts, r, Geometry2D.JOIN_ROUND, Geometry2D.END_ROUND)
+	var out: Array = []
+	for pl in res:
+		if not Geometry2D.is_polygon_clockwise(pl) or res.size() == 1:
+			out.append(pl)
+	return out
+
+
+static func out_append_unique(pts: PackedVector2Array, p: Vector2) -> void:
+	if pts.is_empty() or pts[pts.size() - 1].distance_to(p) > 2.0:
+		pts.append(p)
+
+
+## Bord gauche / droit d'un polygone
+static func _x_span(poly: PackedVector2Array) -> Vector2:
+	var lo := INF
+	var hi := -INF
+	for p in poly:
+		lo = minf(lo, p.x)
+		hi = maxf(hi, p.x)
+	return Vector2(lo, hi)
+
+
+## Roche d'une caverne taillée (coordonnées LOCALES), calculée une fois par état :
+##  pieces : morceaux de roche (tranches) ; veil : galeries (voile de glace) ;
+##  chains : contours orientés (roche à droite) ; segs : collisions (paires de
+##  points) ; frame ; crosses : une galerie traverse le bloc de part en part
+static func carved_data(o: Dictionary) -> Dictionary:
+	var key := JSON.stringify([o.props.get("base", "rect"), shape_prop(o, "w"), shape_prop(o, "h"), o.props.get("outline", []), o.props.get("ops", [])]).sha256_text()
+	if _carved_cache.has(key):
+		return _carved_cache[key]
+	var base := carved_base(o)
+	var fr := Rect2(base[0], Vector2.ZERO)
+	for p in base:
+		fr = fr.expand(p)
+	# coups, dans l'ordre, avec leur étendue en x (pour ne pas les tester partout)
+	var ops: Array = []
+	var raw_ops = o.props.get("ops", [])
+	if raw_ops is Array:
+		for op in raw_ops.slice(0, CARVE_MAX_OPS):
+			if not (op is Dictionary):
+				continue
+			var k := str(op.get("k", ""))
+			if not (k in ["tunnel", "dig", "fill"]):
+				continue
+			for pl in carve_op_polys(op):
+				ops.append([k, pl, _x_span(pl)])
+	# 1) tranches de roche
+	var pieces: Array = []     # [poly, slab_left_x]
+	var x0: float = floor(fr.position.x / CARVE_SLAB) * CARVE_SLAB
+	var x := x0
+	while x < fr.end.x:
+		var slab := PackedVector2Array([Vector2(x, fr.position.y - 10.0), Vector2(x + CARVE_SLAB, fr.position.y - 10.0),
+			Vector2(x + CARVE_SLAB, fr.end.y + 10.0), Vector2(x, fr.end.y + 10.0)])
+		var ps: Array = Geometry2D.intersect_polygons(base, slab)
+		for op in ops:
+			if op[2].y < x or op[2].x > x + CARVE_SLAB:
+				continue
+			if op[0] == "fill":
+				# truelle : on rebouche, mais seulement dans le bloc de départ
+				for add in Geometry2D.intersect_polygons(op[1], slab):
+					for add2 in Geometry2D.intersect_polygons(add, base):
+						var m: PackedVector2Array = add2
+						var keep: Array = []
+						for pp in ps:
+							var mg: Array = Geometry2D.merge_polygons(pp, m)
+							var outer: Array = mg.filter(func(q): return not Geometry2D.is_polygon_clockwise(q))
+							if outer.size() == 1:
+								m = outer[0]
+							else:
+								keep.append(pp)
+						keep.append(m)
+						ps = keep
+			else:
+				var nx: Array = []
+				for pp in ps:
+					nx.append_array(Geometry2D.clip_polygons(pp, op[1]))
+				ps = nx
+		for pp in ps:
+			if Geometry2D.is_polygon_clockwise(pp) and ps.size() > 1:
+				continue   # (trou : ne devrait pas arriver, les coups sont plus larges qu'une tranche)
+			if pp.size() >= 3:
+				pieces.append([pp, x])
+		x += CARVE_SLAB
+	# 2) contours : bords des morceaux, orientés roche à droite (-d.y, d.x),
+	#    sauf les coupures entre tranches avec de la roche des deux côtés
+	var segs: Array = []       # [a, b] orientés
+	var cuts := {}             # x de coupure -> {"l": [Vector2(y0, y1)…], "r": […]}
+	for pc in pieces:
+		var poly: PackedVector2Array = pc[0]
+		var sx: float = pc[1]
+		var n := poly.size()
+		# sens du polygone : la roche est-elle à droite de son 1er bord utile ?
+		var flip := false
+		for i in n:
+			var a: Vector2 = poly[i]
+			var b: Vector2 = poly[(i + 1) % n]
+			if a.distance_to(b) > 1.0:
+				var d := (b - a).normalized()
+				var probe := (a + b) * 0.5 + Vector2(-d.y, d.x) * 0.5
+				flip = not Geometry2D.is_point_in_polygon(probe, poly)
+				break
+		for i in n:
+			var a: Vector2 = poly[i]
+			var b: Vector2 = poly[(i + 1) % n]
+			if a.distance_to(b) < 0.01:
+				continue
+			if flip:
+				var tmp := a
+				a = b
+				b = tmp
+			var on_l := absf(a.x - sx) < 0.01 and absf(b.x - sx) < 0.01
+			var on_r := absf(a.x - sx - CARVE_SLAB) < 0.01 and absf(b.x - sx - CARVE_SLAB) < 0.01
+			if on_l or on_r:
+				var cx: float = sx if on_l else sx + CARVE_SLAB
+				if not cuts.has(cx):
+					cuts[cx] = {"l": [], "r": []}
+				# roche à gauche de la coupure = morceau de la tranche de gauche (on_r)
+				cuts[cx]["l" if on_r else "r"].append(Vector2(minf(a.y, b.y), maxf(a.y, b.y)))
+			else:
+				segs.append([a, b])
+	for cx in cuts:
+		var L: Array = _merge_intervals(cuts[cx].l)
+		var R: Array = _merge_intervals(cuts[cx].r)
+		# roche seulement à gauche : on descend (roche à droite du sens = vers -x)
+		for iv in _subtract_intervals(L, R):
+			segs.append([Vector2(cx, iv.x), Vector2(cx, iv.y)])
+		# roche seulement à droite : on monte
+		for iv in _subtract_intervals(R, L):
+			segs.append([Vector2(cx, iv.y), Vector2(cx, iv.x)])
+	# 3) chaînes (bout à bout) pour les bordures dessinées
+	var by_start := {}
+	for i in segs.size():
+		var k := _pt_key(segs[i][0])
+		if not by_start.has(k):
+			by_start[k] = []
+		by_start[k].append(i)
+	var used := {}
+	var chains: Array = []
+	for i in segs.size():
+		if used.has(i):
+			continue
+		var ch := PackedVector2Array([segs[i][0], segs[i][1]])
+		used[i] = true
+		var cur := i
+		for _guard in segs.size():
+			var nk := _pt_key(segs[cur][1])
+			var nxt := -1
+			for j in by_start.get(nk, []):
+				if not used.has(j):
+					nxt = j
+					break
+			if nxt < 0:
+				break
+			used[nxt] = true
+			ch.append(segs[nxt][1])
+			cur = nxt
+		chains.append(ch)
+	var flat_segs := PackedVector2Array()
+	for sg in segs:
+		flat_segs.append(sg[0])
+		flat_segs.append(sg[1])
+	# 4) galeries (voile de glace) et avertissement « traverse de part en part »
+	var veil: Array = []
+	var air: Array = []
+	for op in ops:
+		if op[0] == "fill":
+			continue
+		for v in Geometry2D.intersect_polygons(base, op[1]):
+			if not Geometry2D.is_polygon_clockwise(v):
+				veil.append(v)
+		air.append(op[1])
+	var crosses := false
+	var merged: Array = []
+	for a in air:
+		var m: PackedVector2Array = a
+		var keep: Array = []
+		for pp in merged:
+			var mg: Array = Geometry2D.merge_polygons(pp, m)
+			var outer: Array = mg.filter(func(q): return not Geometry2D.is_polygon_clockwise(q))
+			if outer.size() == 1:
+				m = outer[0]
+			else:
+				keep.append(pp)
+		keep.append(m)
+		merged = keep
+	for m in merged:
+		var sp := _x_span(m)
+		if sp.x <= fr.position.x + 10.0 and sp.y >= fr.end.x - 10.0:
+			crosses = true
+	var d := {"pieces": pieces.map(func(pc): return pc[0]), "veil": veil, "chains": chains, "segs": flat_segs,
+		"frame": fr, "crosses": crosses, "ops": raw_ops.size() if raw_ops is Array else 0}
+	if _carved_cache.size() > 32:
+		_carved_cache.clear()
+	_carved_cache[key] = d
+	return d
+
+
+static func _pt_key(p: Vector2) -> String:
+	return "%d:%d" % [roundi(p.x * 10.0), roundi(p.y * 10.0)]
+
+
+## Réunion d'intervalles [Vector2(début, fin)…] (triés, fusionnés)
+static func _merge_intervals(iv: Array) -> Array:
+	var a := iv.duplicate()
+	a.sort_custom(func(p, q): return p.x < q.x)
+	var out: Array = []
+	for v in a:
+		if not out.is_empty() and v.x <= out[out.size() - 1].y + 0.01:
+			out[out.size() - 1].y = maxf(out[out.size() - 1].y, v.y)
+		else:
+			out.append(v)
+	return out
+
+
+## A moins B (intervalles réunis)
+static func _subtract_intervals(A: Array, B: Array) -> Array:
+	var out: Array = []
+	for a in A:
+		var pieces: Array = [a]
+		for b in B:
+			var nx: Array = []
+			for p in pieces:
+				if b.y <= p.x or b.x >= p.y:
+					nx.append(p)
+					continue
+				if b.x > p.x:
+					nx.append(Vector2(p.x, b.x))
+				if b.y < p.y:
+					nx.append(Vector2(b.y, p.y))
+			pieces = nx
+		for p in pieces:
+			if p.y - p.x > 0.5:
+				out.append(p)
+	return out

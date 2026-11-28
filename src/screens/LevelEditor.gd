@@ -253,6 +253,8 @@ func _unhandled_input(event: InputEvent) -> void:
 		if _panning:
 			cam.position -= mm.relative / cam.zoom.x
 			queue_redraw()
+		elif _carving:
+			_carve_add(_to_world(mm.position))   # [TAILLÉE 1.85]
 		elif _drag != "":
 			_drag_update(_to_world(mm.position))   # [CRÉATEUR v2 1.80]
 		elif _drawing:
@@ -264,6 +266,13 @@ func _unhandled_input(event: InputEvent) -> void:
 ## Appui (clic gauche ou un doigt) selon l'outil choisi
 func _press(screen_pos: Vector2) -> void:
 	var wp := _to_world(screen_pos)
+	# [TAILLÉE 1.85] outil de taille actif sur le bloc sélectionné : le doigt
+	# trace / creuse / rebouche (deux doigts déplacent toujours la vue)
+	if _carve_target() >= 0:
+		_carving = true
+		_carve_pts = PackedVector2Array([wp])
+		queue_redraw()
+		return
 	match tool:
 		Tool.DRAW:
 			_drawing = true
@@ -289,6 +298,11 @@ func _press(screen_pos: Vector2) -> void:
 				# [OBJETS 1.81] pose de l'objet choisi dans la palette
 				_push_undo()
 				var i := DrawnLevel.add_object(DrawnLevel.make_object(palette_item, _snap_pos(wp)))
+				if palette_item == "carved":
+					# [TAILLÉE 1.85] l'origin du bloc est son coin haut-gauche : on le
+					# remonte pour que le doigt tienne l'entrée (en bas à gauche,
+					# posée sur le sol) — sinon le bloc tombe trop bas pour se coller
+					DrawnLevel.objects[i].pos.y -= (DrawnLevel.carved_entry_exit(DrawnLevel.objects[i])[0] as Vector2).y
 				if DrawnLevel.is_shape(DrawnLevel.objects[i]):
 					_snap_flash(DrawnLevel.snap_shape(i))   # [FORMES 1.83] se colle au sol
 				_changed()
@@ -307,6 +321,9 @@ func _press(screen_pos: Vector2) -> void:
 func _release() -> void:
 	_panning = false
 	_erasing = false
+	if _carving:
+		_finish_carve()   # [TAILLÉE 1.85]
+		return
 	if _drag != "":
 		_end_drag()   # [CRÉATEUR v2 1.80]
 		return
@@ -352,6 +369,8 @@ func _erase_at(screen_pos: Vector2) -> void:
 
 func _start_two_finger() -> void:
 	_drawing = false        # le 2e doigt annule le trait commencé par le 1er
+	_carving = false        # [TAILLÉE 1.85] (même chose pour un coup de pioche)
+	_carve_pts = PackedVector2Array()
 	_raw = PackedVector2Array()
 	_panning = false
 	_erasing = false
@@ -773,6 +792,8 @@ func _snap_angle(a: float) -> float:
 
 ## Choisit (ou vide, avec {}) la sélection et met le panneau de réglages à jour
 func _select(sel: Dictionary) -> void:
+	if sel != _sel:
+		carve_tool = ""   # [TAILLÉE 1.85] l'outil de taille ne vaut que pour son bloc
 	_sel = sel
 	if _hover == sel:
 		_set_hover({})   # [SURVOL 1.82] sélectionné : le halo de survol s'efface
@@ -1895,7 +1916,7 @@ const PALETTE := [
 	# [CAVERNE 1.84] demande de l'équipe (28/11) : cavernes d'abord — caverne
 	# générée (sinueuse) en 1.84, caverne taillée à la main en 1.85 ; le reste
 	# est décalé (balcon, stalactite, falaise 1.86 ; autres gros blocs 1.87)
-	["Gros blocs", [["cave", "Caverne", ""], ["carved", "Caverne taillée", "1.85"], ["void", "Zone de vide", "1.87"],
+	["Gros blocs", [["cave", "Caverne", ""], ["carved", "Caverne taillée", ""], ["void", "Zone de vide", "1.87"],
 		["pillars", "Motif piliers", "1.87"], ["bigegg", "Grand œuf", "1.87"], ["endless", "Tronçon du Sans fin", "1.87"]]],
 ]
 
@@ -2110,7 +2131,8 @@ const OBJ_NAMES := {"egg": "Œuf à grappiner", "boost": "Boost", "start": "Dép
 	# [FORMES 1.83]
 	"ramp": "Tremplin", "halfpipe": "Half-pipe", "bowl": "Bol", "slope": "Rampe à boosts", "bend": "Virage en pipe",
 	"upipe": "Virage en U", "ceiling": "Plafond", "floating": "Plateforme flottante", "wall": "Mur", "pillar": "Pilier",
-	"cave": "Caverne"}   # [CAVERNE 1.84]
+	"cave": "Caverne",   # [CAVERNE 1.84]
+	"carved": "Caverne taillée"}   # [TAILLÉE 1.85]
 const EGG_STYLE_NAMES := ["", "glace", "tacheté", "craquelé", "bonnet de neige", "bébé Pinpouin"]
 ## Types qu'on peut tourner (les autres restent droits)
 const ROTATABLE := ["egg", "boost", "arch", "podium", "bush", "igloo", "colisee", "ice1", "ice2", "ice3",
@@ -2282,11 +2304,12 @@ func _draw_objects(z: float, font: Font, fs: int) -> void:
 # qui pendent). Mode Simple : tailles toutes faites (Petit / Moyen / Grand).
 
 ## Formes dont la hauteur `h` se compte vers le BAS (creusées, ou qui pendent)
-const SHAPE_H_DOWN := ["halfpipe", "bowl", "ceiling", "floating", "pillar"]
+const SHAPE_H_DOWN := ["halfpipe", "bowl", "ceiling", "floating", "pillar", "carved"]
 ## Dimensions étirables de chaque forme
 const SHAPE_STRETCH := {"ramp": ["w", "h"], "halfpipe": ["w", "h"], "bowl": ["w", "h"], "slope": ["w", "h"],
 	"bend": ["w"], "upipe": ["h"], "ceiling": ["w", "h"], "floating": ["w", "h"], "wall": ["w", "h"], "pillar": ["w", "h"],
-	"cave": []}   # [CAVERNE 1.84] taille réglée par la longueur et les étages
+	"cave": [],   # [CAVERNE 1.84] taille réglée par la longueur et les étages
+	"carved": ["w", "h"]}   # [TAILLÉE 1.85] taille du bloc
 ## Nom du réglage `h` selon la forme
 const SHAPE_H_NAME := {"halfpipe": "Profondeur", "bowl": "Profondeur", "ceiling": "Épaisseur", "floating": "Épaisseur",
 	"upipe": "Diamètre", "pillar": "Hauteur"}
@@ -2315,7 +2338,7 @@ func _shape_handles(o: Dictionary, z: float) -> Dictionary:
 	# pour ne pas se superposer au losange
 	var rx: float = f.get_center().x if down else f.position.x + f.size.x * 0.2
 	out.rotate = xf * Vector2(rx, f.position.y - 80.0 / z)
-	if o.type == "cave":
+	if o.type in ["cave", "carved"]:
 		out.rotate = Vector2.INF   # [CAVERNE 1.84] une caverne ne se tourne pas
 	var dims: Array = SHAPE_STRETCH.get(o.type, [])
 	if "w" in dims:
@@ -2330,6 +2353,9 @@ func _shape_handles(o: Dictionary, z: float) -> Dictionary:
 func _draw_shape(o: Dictionary, z: float) -> void:
 	if o.type == "cave":
 		_draw_cave(o, z)   # [CAVERNE 1.84]
+		return
+	if o.type == "carved":
+		_draw_carved(o, z)   # [TAILLÉE 1.85]
 		return
 	var g := DrawnLevel.shape_geometry(o, _draw_bottom)
 	var fill := ICE_COLOR
@@ -2381,6 +2407,13 @@ func _hd_x_of(hd: Dictionary, o: Dictionary) -> float:
 ## Lignes de stats d'une forme (fiche de survol)
 func _shape_stats(o: Dictionary) -> Array:
 	var lines: Array = []
+	if o.type == "carved":
+		# [TAILLÉE 1.85]
+		var cd := DrawnLevel.carved_data(o)
+		lines.append("Bloc : %s, %d × %d px" % [DrawnLevel.CARVED_BASE_NAMES.get(str(o.props.get("base", "rect")), "?"), int(DrawnLevel.shape_prop(o, "w")), int(DrawnLevel.shape_prop(o, "h"))])
+		lines.append("%d coup%s (galeries, pioche, truelle)" % [cd.ops, "s" if cd.ops > 1 else ""])
+		lines.append("Une galerie traverse le bloc" if cd.crosses else "⚠ Aucune galerie ne traverse le bloc de part en part")
+		return lines
 	if o.type == "cave":
 		# [CAVERNE 1.84]
 		var cd := DrawnLevel.cave_data(o)
@@ -2424,6 +2457,9 @@ func _shape_settings(col: VBoxContainer, o: Dictionary) -> void:
 	var t: String = o.type
 	if t == "cave":
 		_cave_settings(col, o)   # [CAVERNE 1.84]
+		return
+	if t == "carved":
+		_carved_settings(col, o)   # [TAILLÉE 1.85]
 		return
 	var dims: Array = SHAPE_STRETCH.get(t, [])
 	# tailles toutes faites (choix de l'équipe : surtout pour le mode Simple ;
@@ -2555,6 +2591,307 @@ func _cave_settings(col: VBoxContainer, o: Dictionary) -> void:
 		_slider_row(col, "Étage de sortie", 1, lanes, 1, DrawnLevel.shape_prop(o, "exit") + 1.0, func(v): _set_cave("exit", float(v) - 1.0), func(v): return "%d" % int(v))
 		_slider_row(col, "Vagues", 1.0, 6.0, 0.5, DrawnLevel.shape_prop(o, "wave"), func(v): _set_cave("wave", v), func(v): return "%.1f colonnes" % v)
 		_spin_row(col, "Graine", DrawnLevel.shape_prop(o, "seed"), func(v): _set_cave("seed", float(clampi(int(v), 1, 99999))))
+		_spin_row(col, "X", o.pos.x, func(v): _set_obj("pos", Vector2(v, DrawnLevel.objects[_sel.index].pos.y)))
+		_spin_row(col, "Y", o.pos.y, func(v): _set_obj("pos", Vector2(DrawnLevel.objects[_sel.index].pos.x, v)))
+
+
+# --- [TAILLÉE 1.85] Caverne taillée à la main dans l'éditeur -------------------------
+# Outils (panneau du bloc sélectionné) : ✏ Tracer (la galerie suit le doigt :
+# tunnel de la hauteur choisie, sol lissé), ⛏ Pioche (creuse au pinceau),
+# 🧱 Truelle (rebouche, seulement dans le bloc), ◯ Forme libre (on dessine le
+# contour du bloc). Un doigt = l'outil, deux doigts = déplacer / zoomer la vue
+# (choix de l'équipe). Chaque geste est une étape « Annuler ».
+
+var carve_tool := ""                     # "", "tunnel", "dig", "fill", "outline"
+var carve_width: float = 520.0           # hauteur des galeries tracées
+var carve_brush: float = 160.0           # rayon de la pioche / truelle
+var _carving := false
+var _carve_pts := PackedVector2Array()   # points du geste (monde)
+const CARVE_HINTS := {
+	"tunnel": "Trace la galerie avec le doigt : elle suit ton trait (deux doigts pour bouger la vue).",
+	"dig": "Frotte pour creuser la roche à la pioche (deux doigts pour bouger la vue).",
+	"fill": "Frotte pour reboucher à la truelle (seulement dans le bloc).",
+	"outline": "Dessine le contour du bloc d'un seul trait : il se ferme tout seul.",
+}
+
+
+## Index du bloc à tailler si un outil de taille est actif, sinon -1
+func _carve_target() -> int:
+	if carve_tool == "" or _sel.get("kind", "") != "obj" or _sel.index >= DrawnLevel.objects.size():
+		return -1
+	return _sel.index if DrawnLevel.objects[_sel.index].type == "carved" else -1
+
+
+func _set_carve_tool(t: String) -> void:
+	carve_tool = t
+	if t == "":
+		_set_tool(tool)   # aide de l'outil normal
+	else:
+		_hint.text = CARVE_HINTS.get(t, "")
+	_rebuild_settings()
+	queue_redraw()
+
+
+func _carve_add(wp: Vector2) -> void:
+	var step: float = 24.0 if carve_tool in ["tunnel", "outline"] else maxf(20.0, carve_brush * 0.35)
+	if _carve_pts.is_empty() or _carve_pts[_carve_pts.size() - 1].distance_to(wp) >= step:
+		_carve_pts.append(wp)
+		queue_redraw()
+
+
+## Un point tous les `step` px le long du trait, dans n'importe quel sens
+## (DrawnLevel._resample_arc garde des x croissants : bon pour un sol, pas
+## pour une galerie qui monte à la verticale ou revient en arrière)
+func _resample_free(pts: PackedVector2Array, step: float) -> PackedVector2Array:
+	if pts.size() < 2:
+		return pts
+	var out := PackedVector2Array([pts[0]])
+	var carry := 0.0
+	for i in range(1, pts.size()):
+		var a: Vector2 = pts[i - 1]
+		var b: Vector2 = pts[i]
+		var seg := a.distance_to(b)
+		var d := step - carry
+		while d <= seg:
+			out.append(a.lerp(b, d / maxf(seg, 0.001)))
+			d += step
+		carry = seg - (d - step)
+	if out[out.size() - 1].distance_to(pts[pts.size() - 1]) > 4.0:
+		out.append(pts[pts.size() - 1])
+	return out
+
+
+## Aimant d'une galerie tracée (après lissage) : commencée près de l'entrée du
+## bloc, elle démarre par un bout de plancher bien plat pile au niveau du sol
+## dessiné (et pareil à la sortie). Sans ça, le lissage laisse une petite
+## marche de quelques px au bord du bloc : un mur qui arrête Pinpouin net.
+## Le plancher est 8 px SOUS le sol à l'entrée et 8 px AU-DESSUS à la sortie :
+## une toute petite descente à chaque bout, jamais une marche à monter.
+func _carve_magnet(o: Dictionary, local: PackedVector2Array, near_in: bool, near_out: bool) -> PackedVector2Array:
+	var es := DrawnLevel.carved_entry_exit(o)
+	var rr: float = carve_width * 0.5
+	var drop := 8.0
+	var changed := false
+	if near_in:
+		var yin: float = (es[0] as Vector2).y - rr + drop
+		var xin: float = (es[0] as Vector2).x
+		var keep := PackedVector2Array([Vector2(xin - rr, yin), Vector2(xin + rr, yin)])
+		for p in local:
+			if p.x > xin + rr + 40.0 or keep.size() > 2:
+				keep.append(p)
+		local = keep
+		changed = true
+	if near_out:
+		var yout: float = (es[1] as Vector2).y - rr - drop
+		var xout: float = (es[1] as Vector2).x
+		# on enlève la fin du trait qui touche la sortie (en partant du bout)
+		var cut := local.size()
+		while cut > (2 if near_in else 0) and local[cut - 1].x > xout - rr - 40.0:
+			cut -= 1
+		local = local.slice(0, cut)
+		local.append(Vector2(xout - rr, yout))
+		local.append(Vector2(xout + rr, yout))
+		changed = true
+	if changed:
+		# un passage de Chaikin arrondit les raccords ; le plancher plat reste
+		# plat au bord du bloc (le 3/4 du segment plat est encore dans le plat)
+		local = _resample_free(DrawnLevel._chaikin(local), 40.0)
+	return local
+
+
+## Fin d'un geste de taille : il devient un « coup » du bloc (une étape Annuler)
+func _finish_carve() -> void:
+	_carving = false
+	var i := _carve_target()
+	var pts := _carve_pts
+	_carve_pts = PackedVector2Array()
+	if i < 0 or pts.is_empty():
+		queue_redraw()
+		return
+	var o: Dictionary = DrawnLevel.objects[i]
+	var local := PackedVector2Array()
+	for p in pts:
+		local.append(p - o.pos)
+	if carve_tool == "outline":
+		_finish_outline(i, local)
+		return
+	if carve_tool == "tunnel":
+		if local.size() < 2:
+			_flash("Trace la galerie en glissant le doigt.")
+			queue_redraw()
+			return
+		var near_in: bool = local[0].distance_to(DrawnLevel.carved_entry_exit(o)[0]) < carve_width * 1.2
+		var near_out: bool = local[local.size() - 1].distance_to(DrawnLevel.carved_entry_exit(o)[1]) < carve_width * 1.2
+		# trait lissé comme les sols dessinés : sol de galerie sans à-coups
+		# (rééchantillonné le long du trait : une galerie peut revenir en arrière)
+		local = _resample_free(DrawnLevel._chaikin(DrawnLevel._chaikin(DrawnLevel._simplify(local, 12.0))), 40.0)
+		local = _carve_magnet(o, local, near_in, near_out)
+	var flat: Array = []
+	for p in local:
+		flat.append(snappedf(p.x, 0.1))
+		flat.append(snappedf(p.y, 0.1))
+	var r: float = carve_width * 0.5 if carve_tool == "tunnel" else carve_brush
+	_push_undo()
+	var ops: Array = (o.props.get("ops", []) as Array).duplicate()
+	if ops.size() >= DrawnLevel.CARVE_MAX_OPS:
+		_flash("Ce bloc a déjà beaucoup de coups : utilise « Tout reboucher » ou un autre bloc.")
+		_undo.pop_back()
+		return
+	ops.append({"k": carve_tool, "r": clampf(r, DrawnLevel.CARVE_R_MIN, DrawnLevel.CARVE_R_MAX), "p": flat})
+	o.props.ops = ops
+	_changed()
+	_rebuild_settings()
+	queue_redraw()
+
+
+## Contour libre : le bloc prend la forme dessinée ; les coups déjà faits
+## restent au même endroit dans le monde
+func _finish_outline(i: int, local: PackedVector2Array) -> void:
+	var poly := DrawnLevel._chaikin(DrawnLevel._simplify(local, 16.0))
+	if poly.size() < 3 or Geometry2D.triangulate_polygon(poly).is_empty():
+		_flash("Contour trop petit ou qui se croise : dessine une boucle simple.")
+		queue_redraw()
+		return
+	var r := Rect2(poly[0], Vector2.ZERO)
+	for p in poly:
+		r = r.expand(p)
+	if r.size.x < DrawnLevel.CARVED_MIN or r.size.y < DrawnLevel.CARVED_MIN:
+		_flash("Contour trop petit : le bloc fait au moins %d px." % int(DrawnLevel.CARVED_MIN))
+		queue_redraw()
+		return
+	_push_undo()
+	var o: Dictionary = DrawnLevel.objects[i]
+	var flat: Array = []
+	for p in poly:
+		flat.append(snappedf((p.x - r.position.x) / r.size.x, 0.0001))
+		flat.append(snappedf((p.y - r.position.y) / r.size.y, 0.0001))
+	o.props.base = "free"
+	o.props.outline = flat
+	o.props.w = r.size.x
+	o.props.h = r.size.y
+	# l'origine du bloc bouge : les coups sont décalés d'autant (même place à l'écran)
+	var ops: Array = []
+	for op in o.props.get("ops", []):
+		var q: Dictionary = (op as Dictionary).duplicate(true)
+		var pf: Array = q.get("p", [])
+		for k in range(0, pf.size() - 1, 2):
+			pf[k] = float(pf[k]) - r.position.x
+			pf[k + 1] = float(pf[k + 1]) - r.position.y
+		q.p = pf
+		ops.append(q)
+	o.props.ops = ops
+	o.pos += r.position
+	carve_tool = ""
+	_changed()
+	_rebuild_settings()
+	queue_redraw()
+
+
+## Aperçu d'une caverne taillée : roche, galeries (clair), contours, et le
+## geste en cours
+func _draw_carved(o: Dictionary, z: float) -> void:
+	var cd := DrawnLevel.carved_data(o)
+	draw_set_transform(o.pos)
+	for v in cd.veil:
+		_safe_polygon(v, CAVE_GALLERY)
+	for pc in cd.pieces:
+		_safe_polygon(pc, CAVE_ROCK)
+	for ch in cd.chains:
+		if (ch as PackedVector2Array).size() >= 2:
+			draw_polyline(ch, EDGE_COLOR, maxf(8.0, 3.0 / z), true)
+	draw_set_transform_matrix(Transform2D.IDENTITY)
+	if _carving and _carve_pts.size() >= 1 and _carve_target() >= 0 and DrawnLevel.objects[_carve_target()] == o:
+		var col: Color = {"tunnel": Color(0.8, 0.95, 1.0, 0.6), "dig": Color(1.0, 0.6, 0.3, 0.5), "fill": Color(0.25, 0.35, 0.55, 0.7), "outline": Color(1, 0.9, 0.3, 0.9)}[carve_tool]
+		var wdt: float = carve_width if carve_tool == "tunnel" else (carve_brush * 2.0 if carve_tool != "outline" else 8.0 / z)
+		if _carve_pts.size() == 1:
+			draw_circle(_carve_pts[0], wdt * 0.5, col)
+		else:
+			draw_polyline(_carve_pts, col, wdt, true)
+
+
+## Réglages d'une caverne taillée
+func _carved_settings(col: VBoxContainer, o: Dictionary) -> void:
+	var cd := DrawnLevel.carved_data(o)
+	# bloc de départ
+	var lb := Label.new()
+	lb.text = "Bloc de départ"
+	lb.add_theme_color_override("font_color", Color.WHITE)
+	col.add_child(lb)
+	var grid := GridContainer.new()
+	grid.columns = 3
+	grid.add_theme_constant_override("h_separation", 4)
+	grid.add_theme_constant_override("v_separation", 4)
+	col.add_child(grid)
+	for bname in ["rect", "egg", "round", "mountain"]:
+		var b := _button(DrawnLevel.CARVED_BASE_NAMES[bname], grid, 72)
+		b.add_theme_font_size_override("font_size", 14)
+		b.toggle_mode = true
+		b.button_pressed = str(o.props.get("base", "rect")) == bname
+		b.pressed.connect(func():
+			_push_undo()
+			DrawnLevel.objects[_sel.index].props.base = bname
+			_changed()
+			_rebuild_settings())
+	var fb := _button("Forme libre", grid, 72)
+	fb.add_theme_font_size_override("font_size", 14)
+	fb.toggle_mode = true
+	fb.button_pressed = carve_tool == "outline" or str(o.props.get("base", "")) == "free"
+	fb.pressed.connect(func(): _set_carve_tool("outline"))
+	# outils de taille
+	var lt := Label.new()
+	lt.text = "Tailler"
+	lt.add_theme_color_override("font_color", Color.WHITE)
+	col.add_child(lt)
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 4)
+	col.add_child(row)
+	for tt in [["tunnel", "✏ Tracer"], ["dig", "⛏ Pioche"], ["fill", "🧱 Truelle"]]:
+		var b := _button(tt[1], row, 72)
+		b.add_theme_font_size_override("font_size", 14)
+		b.toggle_mode = true
+		b.button_pressed = carve_tool == tt[0]
+		var which: String = tt[0]
+		b.pressed.connect(func(): _set_carve_tool("" if carve_tool == which else which))
+	if carve_tool != "":
+		var done := _button("✋ Fini (déplacer le bloc)", col, 220)
+		done.add_theme_font_size_override("font_size", 14)
+		done.pressed.connect(func(): _set_carve_tool(""))
+	# largeur de la galerie / taille de la pioche
+	var row2 := HBoxContainer.new()
+	row2.add_theme_constant_override("separation", 4)
+	col.add_child(row2)
+	var sizes: Dictionary = DrawnLevel.CARVE_WIDTHS if carve_tool != "dig" and carve_tool != "fill" else DrawnLevel.CARVE_BRUSHES
+	for nm in sizes:
+		var v: float = sizes[nm]
+		var b := _button(nm, row2, 72)
+		b.add_theme_font_size_override("font_size", 14)
+		b.toggle_mode = true
+		b.button_pressed = is_equal_approx(v, carve_width if sizes == DrawnLevel.CARVE_WIDTHS else carve_brush)
+		b.pressed.connect(func():
+			if sizes == DrawnLevel.CARVE_WIDTHS:
+				carve_width = v
+			else:
+				carve_brush = v
+			_rebuild_settings())
+	if expert:
+		_slider_row(col, "Galerie", 200.0, 1600.0, 20.0, carve_width, func(v): carve_width = v, func(v): return "%d px" % int(v))
+		_slider_row(col, "Pioche", DrawnLevel.CARVE_R_MIN, 500.0, 10.0, carve_brush, func(v): carve_brush = v, func(v): return "%d px" % int(v))
+	# état et « tout reboucher »
+	var warn := Label.new()
+	warn.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	warn.custom_minimum_size = Vector2(220, 0)
+	warn.text = "Une galerie traverse le bloc." if cd.crosses else "⚠ Aucune galerie ne traverse le bloc de part en part."
+	warn.add_theme_color_override("font_color", Color(0.7, 1.0, 0.7) if cd.crosses else Color(1.0, 0.8, 0.4))
+	col.add_child(warn)
+	if cd.ops > 0:
+		var clr := _button("Tout reboucher", col, 160)
+		clr.add_theme_font_size_override("font_size", 14)
+		clr.pressed.connect(func():
+			_push_undo()
+			DrawnLevel.objects[_sel.index].props.ops = []
+			_changed()
+			_rebuild_settings())
+	if expert:
 		_spin_row(col, "X", o.pos.x, func(v): _set_obj("pos", Vector2(v, DrawnLevel.objects[_sel.index].pos.y)))
 		_spin_row(col, "Y", o.pos.y, func(v): _set_obj("pos", Vector2(DrawnLevel.objects[_sel.index].pos.x, v)))
 
