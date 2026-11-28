@@ -1909,8 +1909,8 @@ const PALETTE := [
 	["Terrain", [["draw", "Sol (outil Dessiner)", ""], ["ramp", "Tremplin", ""], ["halfpipe", "Half-pipe", ""],
 		["bowl", "Bol", ""], ["slope", "Rampe", ""], ["bend", "Virage en pipe", ""], ["upipe", "Virage en U", ""],
 		["ceiling", "Plafond", ""], ["floating", "Plateforme flottante", ""], ["wall", "Mur", ""],
-		["pillar", "Pilier", ""], ["balcony", "Balcon de glace", "1.86"], ["stal", "Plateforme-stalactite", "1.86"],
-		["cliff", "Falaise", "1.86"]]],
+		["pillar", "Pilier", ""], ["balcony", "Balcon de glace", ""], ["stal", "Plateforme-stalactite", ""],
+		["cliff", "Falaise", ""]]],   # [FORMES 2 1.86]
 	["Décor", [["arch", "Arche", ""], ["podium", "Podium FIN", ""], ["bush", "Buisson", ""], ["igloo", "Igloo", ""],
 		["colisee", "Colisée", ""], ["ice1", "Bloc de glace 1", ""], ["ice2", "Bloc de glace 2", ""], ["ice3", "Petit bloc de glace", ""]]],
 	# [CAVERNE 1.84] demande de l'équipe (28/11) : cavernes d'abord — caverne
@@ -1937,8 +1937,10 @@ const PALETTE_TIPS := {
 	"bend": "Un virage en morceau de tuyau qui relève Pinpouin (angle réglable en Expert).", "upipe": "Un demi-tuyau qui renvoie Pinpouin vers la gauche, la tête en bas.",
 	"ceiling": "Un plafond. Avec stalactites : le grappin s'y accroche ; lisse : non (réglage Expert).", "floating": "Une plateforme qui flotte en l'air.",
 	"wall": "Un mur (plus de 75° : ni PUMP ni saut pour le grimper).", "pillar": "Un pilier qui sort du vide, comme dans le Gruyère.",
-	"balcony": "Un balcon de glace à stalactites.", "stal": "Une plateforme-stalactite comme dans L'Œuf.",
-	"cliff": "Une falaise en forme de montagne.",
+	# [FORMES 2 1.86]
+	"balcony": "Un balcon de glace qui sort du bout d'un sol, avec des stalactites dessous (le grappin s'y accroche).",
+	"stal": "Une plateforme-stalactite comme dans L'Œuf. Bouton « Série » : un escalier de plateformes avec leurs prises.",
+	"cliff": "Une falaise en forme de montagne (paroi à pic, sommet arrondi, longue descente), avec une prise de grappin pour la grimper.",
 	"arch": "L'arche de glace.", "podium": "Le podium FIN.", "bush": "Un buisson enneigé.", "igloo": "Un igloo.",
 	"colisee": "Le Colisée de glace.", "ice1": "Un bloc de glace.", "ice2": "Un autre bloc de glace.", "ice3": "Un petit bloc de glace.",
 	"cave": "Une caverne générée par une graine : galeries qui montent et descendent, routes qui se croisent, sans cul-de-sac. 🎲 pour en tirer une autre.",
@@ -2132,11 +2134,13 @@ const OBJ_NAMES := {"egg": "Œuf à grappiner", "boost": "Boost", "start": "Dép
 	"ramp": "Tremplin", "halfpipe": "Half-pipe", "bowl": "Bol", "slope": "Rampe à boosts", "bend": "Virage en pipe",
 	"upipe": "Virage en U", "ceiling": "Plafond", "floating": "Plateforme flottante", "wall": "Mur", "pillar": "Pilier",
 	"cave": "Caverne",   # [CAVERNE 1.84]
-	"carved": "Caverne taillée"}   # [TAILLÉE 1.85]
+	"carved": "Caverne taillée",   # [TAILLÉE 1.85]
+	"balcony": "Balcon de glace", "stal": "Plateforme-stalactite", "cliff": "Falaise"}   # [FORMES 2 1.86]
 const EGG_STYLE_NAMES := ["", "glace", "tacheté", "craquelé", "bonnet de neige", "bébé Pinpouin"]
 ## Types qu'on peut tourner (les autres restent droits)
 const ROTATABLE := ["egg", "boost", "arch", "podium", "bush", "igloo", "colisee", "ice1", "ice2", "ice3",
-	"ramp", "halfpipe", "bowl", "slope", "bend", "upipe", "ceiling", "floating", "wall", "pillar"]   # [FORMES 1.83]
+	"ramp", "halfpipe", "bowl", "slope", "bend", "upipe", "ceiling", "floating", "wall", "pillar",   # [FORMES 1.83]
+	"stal"]   # [FORMES 2 1.86] (le balcon et la falaise restent droits : tournés, ils seraient à l'envers)
 
 
 ## Change une valeur de l'objet sélectionné (props si `prop`) avec une étape « Annuler »
@@ -2304,15 +2308,25 @@ func _draw_objects(z: float, font: Font, fs: int) -> void:
 # qui pendent). Mode Simple : tailles toutes faites (Petit / Moyen / Grand).
 
 ## Formes dont la hauteur `h` se compte vers le BAS (creusées, ou qui pendent)
-const SHAPE_H_DOWN := ["halfpipe", "bowl", "ceiling", "floating", "pillar", "carved"]
+const SHAPE_H_DOWN := ["halfpipe", "bowl", "ceiling", "floating", "pillar", "carved",
+	"balcony", "stal"]   # [FORMES 2 1.86] épaisseur comptée vers le bas
 ## Dimensions étirables de chaque forme
 const SHAPE_STRETCH := {"ramp": ["w", "h"], "halfpipe": ["w", "h"], "bowl": ["w", "h"], "slope": ["w", "h"],
 	"bend": ["w"], "upipe": ["h"], "ceiling": ["w", "h"], "floating": ["w", "h"], "wall": ["w", "h"], "pillar": ["w", "h"],
 	"cave": [],   # [CAVERNE 1.84] taille réglée par la longueur et les étages
-	"carved": ["w", "h"]}   # [TAILLÉE 1.85] taille du bloc
+	"carved": ["w", "h"],   # [TAILLÉE 1.85] taille du bloc
+	"balcony": ["w", "h"], "stal": ["w", "h"], "cliff": ["w", "h"]}   # [FORMES 2 1.86]
 ## Nom du réglage `h` selon la forme
 const SHAPE_H_NAME := {"halfpipe": "Profondeur", "bowl": "Profondeur", "ceiling": "Épaisseur", "floating": "Épaisseur",
-	"upipe": "Diamètre", "pillar": "Hauteur"}
+	"upipe": "Diamètre", "pillar": "Hauteur",
+	"balcony": "Épaisseur", "stal": "Épaisseur", "cliff": "Hauteur"}   # [FORMES 2 1.86]
+## [FORMES 2 1.86] Nom du réglage `w` quand ce n'est pas une largeur
+const SHAPE_W_NAME := {"bend": "Rayon", "balcony": "Longueur", "stal": "Longueur", "cliff": "Sommet"}
+## [FORMES 2 1.86] Série de plateformes-stalactites (bouton « Série ») :
+## nombre de plateformes et montée d'une marche à l'autre (retenus d'une
+## série à l'autre pendant la séance)
+var stal_count := 5
+var stal_rise: float = DrawnLevel.STAL_RISE
 var _stretch_offset := 0.0      # écart doigt / dimension pendant un étirement
 var _draw_bottom := INF         # fond commun des îlots pendant _draw
 
@@ -2368,6 +2382,12 @@ func _draw_shape(o: Dictionary, z: float) -> void:
 		else:
 			draw_colored_polygon(g.poly, fill)
 	draw_polyline(g.top, EDGE_COLOR, maxf(24.0, 5.0 / z), true)
+	# [FORMES 2 1.86] glaçons sous les plateformes-stalactites (décor : en jeu,
+	# les mêmes images que dans L'Œuf)
+	for ic in g.icicles:
+		var p0: Vector2 = ic[0]
+		var ln: float = ic[1]
+		draw_colored_polygon(PackedVector2Array([p0 + Vector2(-34, 0), p0 + Vector2(34, 0), p0 + Vector2(0, ln)]), ICE_COLOR.darkened(0.12))
 	for b in g.boosts:
 		var k: float = DrawnLevel.shape_prop(o, "strength")
 		var c: Color = Color.WHITE.lerp(Color(1, 0.85, 0.1), minf(1.0, k * 2.0)).lerp(Color(1, 0.2, 0.15), maxf(0.0, k * 2.0 - 1.0))
@@ -2426,7 +2446,7 @@ func _shape_stats(o: Dictionary) -> Array:
 	var dims: Array = SHAPE_STRETCH.get(o.type, [])
 	var parts: Array = []
 	if "w" in dims:
-		parts.append(("Rayon %d px" if o.type == "bend" else "Largeur %d px") % int(DrawnLevel.shape_prop(o, "w")))
+		parts.append("%s %d px" % [SHAPE_W_NAME.get(o.type, "Largeur"), int(DrawnLevel.shape_prop(o, "w"))])
 	if "h" in dims:
 		parts.append("%s %d px" % [SHAPE_H_NAME.get(o.type, "Hauteur"), int(DrawnLevel.shape_prop(o, "h"))])
 	lines.append("   ·   ".join(parts))
@@ -2439,6 +2459,11 @@ func _shape_stats(o: Dictionary) -> Array:
 			lines.append("Boosts : force %d %%" % int(round(DrawnLevel.shape_prop(o, "strength") * 100.0)))
 		"ceiling":
 			lines.append("Accrochable au grappin" if DrawnLevel.shape_prop(o, "hook") > 0.5 else "Lisse : le grappin ne s'y accroche pas")
+		# [FORMES 2 1.86]
+		"balcony":
+			lines.append("Dessous accrochable au grappin")
+		"cliff":
+			lines.append("Prise automatique au-dessus de la paroi" if DrawnLevel.shape_prop(o, "holds") > 0.5 else "Sans prise automatique")
 	if absf(float(o.rot)) > 0.01:
 		lines.append("Tournée de %d°" % int(round(rad_to_deg(float(o.rot)))))
 	var g := DrawnLevel.shape_geometry(o)
@@ -2480,9 +2505,14 @@ func _shape_settings(col: VBoxContainer, o: Dictionary) -> void:
 			_changed()
 			_rebuild_settings())
 	if "w" in dims:
-		_slider_row(col, "Rayon" if t == "bend" else "Largeur", 150.0, 3000.0, 10.0, DrawnLevel.shape_prop(o, "w"), func(v): _set_obj("w", v, true), func(v): return "%d px" % int(v))
+		_slider_row(col, SHAPE_W_NAME.get(t, "Largeur"), 150.0, 3000.0, 10.0, DrawnLevel.shape_prop(o, "w"), func(v): _set_obj("w", v, true), func(v): return "%d px" % int(v))
 	if "h" in dims:
 		_slider_row(col, SHAPE_H_NAME.get(t, "Hauteur"), 60.0, 3000.0, 10.0, DrawnLevel.shape_prop(o, "h"), func(v): _set_obj("h", v, true), func(v): return "%d px" % int(v))
+	# [FORMES 2 1.86] réglages propres, en Simple aussi (choix de l'équipe)
+	if t == "cliff":
+		_cliff_settings(col, o)
+	elif t == "stal":
+		_stal_settings(col, o)
 	if expert:
 		match t:
 			"ramp":
@@ -2503,6 +2533,68 @@ func _shape_settings(col: VBoxContainer, o: Dictionary) -> void:
 		_slider_row(col, "Angle", -180.0, 180.0, 15.0 if magnet else 1.0, wrapf(rad_to_deg(o.rot), -180.0, 180.0), func(v): _set_obj("rot", deg_to_rad(v)))
 		_spin_row(col, "X", o.pos.x, func(v): _set_obj("pos", Vector2(v, DrawnLevel.objects[_sel.index].pos.y)))
 		_spin_row(col, "Y", o.pos.y, func(v): _set_obj("pos", Vector2(DrawnLevel.objects[_sel.index].pos.x, v)))
+
+
+# --- [FORMES 2 1.86] Réglages de la falaise et des plateformes-stalactites -----------
+
+## Petit interrupteur blanc (même style que « Accrochable » du plafond)
+func _check_row(col: VBoxContainer, text: String, on: bool, cb: Callable) -> CheckButton:
+	var c := CheckButton.new()
+	c.text = text
+	c.button_pressed = on
+	c.focus_mode = Control.FOCUS_NONE
+	for k in ["font_color", "font_hover_color", "font_pressed_color", "font_hover_pressed_color"]:
+		c.add_theme_color_override(k, Color.WHITE)
+	c.toggled.connect(cb)
+	col.add_child(c)
+	return c
+
+
+## Falaise : prise automatique (choix de l'équipe : oui, avec option) ;
+## « Détacher la prise » la change en prise normale, qu'on déplace, tourne ou
+## supprime à la main (la prise automatique est alors coupée).
+func _cliff_settings(col: VBoxContainer, o: Dictionary) -> void:
+	var on: bool = DrawnLevel.shape_prop(o, "holds") > 0.5
+	_check_row(col, "Prise automatique", on, func(v): _set_obj("holds", v, true); _rebuild_settings())
+	if on:
+		var b := _button("Détacher la prise (la déplacer à la main)", col)
+		b.add_theme_font_size_override("font_size", 15)
+		b.pressed.connect(_detach_cliff_holds)
+
+
+func _detach_cliff_holds() -> void:
+	if _sel.get("kind", "") != "obj":
+		return
+	var o: Dictionary = DrawnLevel.objects[_sel.index]
+	var hs: Array = DrawnLevel.shape_geometry(o).holds
+	if hs.is_empty():
+		return
+	_push_undo()
+	for hp in hs:
+		DrawnLevel.hooks.append(DrawnLevel.make_hook(hp))
+	o.props.holds = false
+	_changed()
+	_flash("Prise détachée : touche-la pour la déplacer.")
+	_rebuild_settings()
+
+
+## Plateforme-stalactite : une par une (poignées, Dupliquer) + « Série »
+## (choix de l'équipe) : un escalier alterné comme le chemin de gauche de
+## L'Œuf, avec une prise de grappin par marche. Nombre de plateformes en
+## Simple ; montée d'une marche à l'autre en Expert.
+func _stal_settings(col: VBoxContainer, o: Dictionary) -> void:
+	_slider_row(col, "Série : plateformes", 2.0, float(DrawnLevel.STAL_SERIES_MAX), 1.0, float(stal_count),
+		func(v): stal_count = int(v), func(v): return "%d" % int(v))
+	if expert:
+		_slider_row(col, "Série : montée", 400.0, 1200.0, 20.0, stal_rise,
+			func(v): stal_rise = v, func(v): return "%d px" % int(v))
+	var b := _button("Série (escalier + prises)", col)
+	b.add_theme_font_size_override("font_size", 15)
+	b.pressed.connect(func():
+		_push_undo()
+		var n := DrawnLevel.stal_series(_sel.index, stal_count, stal_rise)
+		_changed()
+		_flash("%d plateformes ajoutées, chacune avec sa prise." % n))
 
 
 # --- [CAVERNE 1.84] Caverne générée dans l'éditeur ----------------------------------

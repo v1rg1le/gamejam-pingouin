@@ -212,6 +212,15 @@ func _add_egg(o: Dictionary) -> void:
 ## bordure — à partir de la géométrie commune DrawnLevel.shape_geometry (ce
 ## que l'éditeur a dessiné). IceStyle l'habille ensuite (glace, neige sur les
 ## dessus) et fond son contour avec le sol qu'elle touche.
+## [FORMES 2 1.86] Glaçons des plateformes-stalactites (images de L'Œuf)
+const ICICLE_TEXTURES := [
+	preload("res://sprites/levels/egg/stalactite_0.png"),
+	preload("res://sprites/levels/egg/stalactite_1.png"),
+	preload("res://sprites/levels/egg/stalactite_2.png"),
+	preload("res://sprites/levels/egg/stalactite_3.png"),
+]
+
+
 func _add_shape(o: Dictionary) -> void:
 	if o.type == "cave":
 		_add_cave(o)   # [CAVERNE 1.84] gros bloc : le générateur du Gruyère
@@ -242,7 +251,21 @@ func _add_shape(o: Dictionary) -> void:
 	if o.type == "ceiling" and DrawnLevel.shape_prop(o, "hook") < 0.5:
 		body.add_to_group("no_hook")
 	add_child(body)
-	# rampe : boosts le long de la pente (mêmes boosts que les rampes des cavernes)
+	# [FORMES 2 1.86] glaçons sous les plateformes-stalactites : les mêmes
+	# images que dans L'Œuf (EggGenerator._add_icicles), décor seul (pas de
+	# collision) ; choix de l'image fixe selon la place (même niveau = mêmes
+	# glaçons à chaque partie)
+	for ic in g.icicles:
+		var tex: Texture2D = ICICLE_TEXTURES[absi(hash(Vector2i((ic[0] as Vector2).round()))) % ICICLE_TEXTURES.size()]
+		var spr := Sprite2D.new()
+		spr.texture = tex
+		spr.centered = false
+		var sc: float = float(ic[1]) / float(tex.get_height())
+		spr.scale = Vector2(sc, sc)
+		spr.position = (ic[0] as Vector2) - Vector2(tex.get_width() * sc * 0.5, 0)
+		spr.z_index = 2
+		add_child(spr)
+		# rampe : boosts le long de la pente (mêmes boosts que les rampes des cavernes)
 	for b in g.boosts:
 		var ba = boost_res.instantiate()
 		ba.position = b.pos

@@ -425,6 +425,12 @@ static func hook_list(isl: Array) -> Array:
 			for k in n:
 				var x: float = g.x0 + g.width * (k + 0.5) / n
 				out.append({"pos": Vector2(x, top - HOOK_HEIGHT), "auto": true, "rot": 0.0, "scale": 1.0})
+	# [FORMES 2 1.86] prise automatique de chaque falaise (désactivable dans
+	# ses réglages, ou « détachée » en prise normale qu'on déplace à la main)
+	for o in objects:
+		if str(o.get("type", "")) == "cliff":
+			for hp in shape_geometry(o).holds:
+				out.append({"pos": hp, "auto": true, "rot": 0.0, "scale": 1.0})
 	for h in hooks:
 		# [CRÉATEUR v2 1.80] angle et taille du bloc posé à la main
 		out.append({"pos": h.pos, "auto": false, "rot": h.rot, "scale": h.scale})
@@ -1211,7 +1217,8 @@ const VALID_TYPES := ["egg", "boost", "start", "finish", "checkpoint", "sign", "
 	# [FORMES 1.83] formes du terrain (voir la partie 10)
 	"ramp", "halfpipe", "bowl", "slope", "bend", "upipe", "ceiling", "floating", "wall", "pillar",
 	"cave",   # [CAVERNE 1.84]
-	"carved"]   # [TAILLÉE 1.85]
+	"carved",   # [TAILLÉE 1.85]
+	"balcony", "stal", "cliff"]   # [FORMES 2 1.86]
 ## Types dont il ne peut y avoir qu'un seul exemplaire
 const UNIQUE_TYPES := ["start", "finish"]
 
@@ -1376,7 +1383,9 @@ static func record_validation(time: float) -> void:
 
 const SHAPE_TYPES := ["ramp", "halfpipe", "bowl", "slope", "bend", "upipe", "ceiling", "floating", "wall", "pillar",
 	"cave",   # [CAVERNE 1.84] caverne générée par une graine (voir la partie 11)
-	"carved"]   # [TAILLÉE 1.85] caverne taillée à la main (voir la partie 12)
+	"carved",   # [TAILLÉE 1.85] caverne taillée à la main (voir la partie 12)
+	# [FORMES 2 1.86] 2e partie des formes du terrain (voir la partie 13)
+	"balcony", "stal", "cliff"]
 ## Réglages par défaut (taille « Moyen »)
 const SHAPE_DEFAULTS := {
 	"ramp": {"w": 640.0, "h": 240.0, "lip": 32.0},
@@ -1394,6 +1403,12 @@ const SHAPE_DEFAULTS := {
 	"cave": {"seed": 1.0, "columns": 5.0, "lanes": 3.0, "entry": 0.0, "exit": 2.0, "amp": 900.0, "wave": 2.5},
 	# [TAILLÉE 1.85] bloc de départ, taille, contour libre (0..1), opérations
 	"carved": {"base": "rect", "w": 3200.0, "h": 1600.0, "outline": [], "ops": []},
+	# [FORMES 2 1.86] balcon (longueur, épaisseur à la racine), plateforme-
+	# stalactite (longueur, épaisseur), falaise (h = hauteur de la paroi,
+	# w = longueur du sommet, holds = prise automatique au-dessus de la paroi)
+	"balcony": {"w": 1100.0, "h": 130.0},
+	"stal": {"w": 1400.0, "h": 180.0},
+	"cliff": {"w": 1400.0, "h": 1100.0, "holds": true},
 }
 ## Tailles toutes faites du mode Simple : facteur sur la largeur et la hauteur
 const SHAPE_PRESETS := {"Petit": 0.6, "Moyen": 1.0, "Grand": 1.6}
@@ -1401,7 +1416,8 @@ const SHAPE_PRESETS := {"Petit": 0.6, "Moyen": 1.0, "Grand": 1.6}
 const SHAPE_MIN := 60.0
 const SHAPE_MAX := 4000.0
 ## Formes qui s'aimantent au sol (entrée au bout d'un trait / posées dessus)
-const SHAPE_GROUNDED := ["ramp", "halfpipe", "bowl", "slope", "bend", "upipe", "wall", "cave", "carved"]
+const SHAPE_GROUNDED := ["ramp", "halfpipe", "bowl", "slope", "bend", "upipe", "wall", "cave", "carved",
+	"balcony", "cliff"]   # [FORMES 2 1.86] le balcon part du bout d'un sol, la falaise monte du sol
 ## Formes creusées (sous le niveau du sol) : seulement aimantées par les
 ## bouts (posées au milieu d'un sol, le sol les remplirait)
 const SHAPE_DUG := ["halfpipe", "bowl"]
@@ -1483,7 +1499,44 @@ static func shape_geometry(o: Dictionary, bottom: float = INF) -> Dictionary:
 	var exit := Vector2.INF
 	var frame := Rect2()
 	var boosts: Array = []
+	var icicles: Array = []   # [FORMES 2 1.86] glaçons décoratifs [pos locale, longueur]
+	var holds: Array = []     # [FORMES 2 1.86] prises automatiques (positions locales)
 	match t:
+		"balcony":
+			# [FORMES 2 1.86] balcon de glace à stalactites (comme ceux du
+			# Gruyère, CaveGenerator._balcony_shape style 2) : dalle qui sort du
+			# bout du sol, plus fine vers le bout, gouttes rondes dessous, nez
+			# arrondi. Choix de l'équipe : dessous TOUJOURS accrochable.
+			var b := balcony_outline(w, h)
+			top = b[0]
+			poly = b[1]
+			entry = Vector2(0, 0)
+			exit = Vector2(w, 0)
+			frame = Rect2(0, 0, w, h + 140.0)
+		"stal":
+			# [FORMES 2 1.86] plateforme-stalactite de L'Œuf (EggGenerator.
+			# _add_left_path) : dessus plat, flancs biseautés, rangée de glaçons
+			# dessous (décor seul, comme dans L'Œuf)
+			top = PackedVector2Array([Vector2(0, 0), Vector2(w, 0)])
+			poly = PackedVector2Array([Vector2(0, 0), Vector2(w, 0), Vector2(w, h * 0.7),
+				Vector2(w - 60.0, h), Vector2(60.0, h), Vector2(0, h * 0.7)])
+			icicles = stal_icicles(w, h)
+			entry = Vector2.INF
+			frame = Rect2(0, 0, w, h)
+		"cliff":
+			# [FORMES 2 1.86] falaise en montagne du tuto (BateauGenerator.
+			# _add_cliff) : paroi de 75 à 100° (petit surplomb), sommet bombé,
+			# longue descente douce jusqu'au niveau du départ
+			var c := cliff_outline(w, h)
+			top = c[0]
+			poly = PackedVector2Array([Vector2(0, SHAPE_DEPTH)])
+			poly.append_array(top)
+			poly.append(Vector2(top[top.size() - 1].x, SHAPE_DEPTH))
+			entry = Vector2(0, 0)
+			exit = top[top.size() - 1]
+			frame = Rect2(0, -h - CLIFF_DOME, exit.x, h + CLIFF_DOME)
+			if shape_prop(o, "holds") > 0.5:
+				holds.append(c[1])
 		"carved":
 			# [TAILLÉE 1.85] contour = le bloc de départ ; on se pose sur le sol
 			# par le coin bas-gauche (entrée) / bas-droite (sortie)
@@ -1636,11 +1689,15 @@ static func shape_geometry(o: Dictionary, bottom: float = INF) -> Dictionary:
 			entry = Vector2.INF
 			frame = Rect2(0, 0, w, h)
 	var xf := Transform2D(0.0 if t in ["cave", "carved"] else float(o.get("rot", 0.0)), o.pos)   # (une caverne ne se tourne pas)
-	var out := {"poly": xf * poly, "top": xf * top, "frame": frame, "boosts": [],
+	var out := {"poly": xf * poly, "top": xf * top, "frame": frame, "boosts": [], "icicles": [], "holds": [],
 		"entry": xf * entry if entry != Vector2.INF else Vector2.INF,
 		"exit": xf * exit if exit != Vector2.INF else Vector2.INF}
 	for b in boosts:
 		out.boosts.append({"pos": xf * b.pos, "rot": b.rot + float(o.get("rot", 0.0))})
+	for ic in icicles:
+		out.icicles.append([xf * (ic[0] as Vector2), ic[1]])
+	for hp in holds:
+		out.holds.append(xf * (hp as Vector2))
 	return out
 
 
@@ -2184,3 +2241,128 @@ static func _subtract_intervals(A: Array, B: Array) -> Array:
 			if p.y - p.x > 0.5:
 				out.append(p)
 	return out
+
+
+# =============================================================================
+#  Partie 13 — [FORMES 2 1.86] balcon, plateforme-stalactite, falaise
+# =============================================================================
+# Choix de l'équipe (28/11) : dessous du balcon TOUJOURS accrochable ;
+# plateformes-stalactites posées une par une + bouton « Série » (escalier
+# alterné comme le chemin de gauche de L'Œuf) ; falaise avec une prise
+# automatique au-dessus de la paroi, désactivable et détachable.
+
+## Profil de la paroi (angle depuis l'horizontale, part de la hauteur) :
+## le même que BateauGenerator.FACE_PROFILE (falaises du tuto)
+const CLIFF_FACE := [[78.0, 0.22], [90.0, 0.18], [100.0, 0.14], [84.0, 0.22], [76.0, 0.12],
+	[55.0, 0.05], [35.0, 0.04], [18.0, 0.03]]
+const CLIFF_DOME := 60.0            # le sommet est bombé (arrondi)
+const CLIFF_DESCENT := 2.2          # longueur de la descente = 2,2 × hauteur
+const CLIFF_HOLD_IN := 200.0        # prise : 200 px après le haut de la paroi…
+const CLIFF_HOLD_UP := 300.0        # … et 300 px au-dessus (comme dans le tuto)
+## Série de plateformes-stalactites (bouton « Série ») : valeurs de L'Œuf
+const STAL_RISE := 760.0            # chaque plateforme est 760 px plus haut
+const STAL_HOLD_IN := 60.0          # prise : 60 px du bord, dans la colonne d'en face…
+const STAL_HOLD_UP := 300.0         # … 300 px au-dessus du dessus
+const STAL_SERIES_MAX := 12
+
+
+## Balcon : [ligne du dessus, contour] en local (racine en (0, 0))
+static func balcony_outline(w: float, h: float) -> Array:
+	var top := PackedVector2Array()
+	var under := PackedVector2Array()
+	var n := maxi(8, int(w / 12.0))
+	# gouttes rondes dessous : pas de hasard (même balcon à chaque partie),
+	# largeurs et longueurs qui varient selon un motif fixe
+	var drips: Array = []
+	var x := 70.0
+	var k := 0
+	while x < w - 60.0:
+		var dw: float = 44.0 + 32.0 * float((k * 5) % 4) / 3.0
+		drips.append([x + dw * 0.5, dw, (60.0 + 140.0 * float((k * 7) % 5) / 4.0) * (1.0 - 0.6 * x / w)])
+		x += dw + 4.0 + 32.0 * float((k * 3) % 3) / 2.0
+		k += 1
+	for i in n + 1:
+		var d := w * i / n
+		var u := d / w
+		top.append(Vector2(d, 0))
+		var base := 0.46 * h + 0.54 * h * (1.0 - u)     # plus fin vers le bout
+		var t := base + 140.0 * pow(maxf(0.0, 1.0 - d / 220.0), 2.0)   # congé à la racine
+		for dr in drips:
+			var dx: float = (d - dr[0]) / (dr[1] * 0.5)
+			if absf(dx) < 1.0:
+				t = maxf(t, base + dr[2] * sqrt(1.0 - dx * dx))
+		var r := minf(t, 70.0)
+		if d > w - r:
+			var v := (d - (w - r)) / r
+			t *= sqrt(maxf(0.0, 1.0 - v * v))
+		under.append(Vector2(d, maxf(t, 0.0)))
+	var poly := PackedVector2Array(top)
+	for i in range(under.size() - 1, -1, -1):
+		if under[i].y > 0.5 or i == 0:
+			poly.append(under[i])
+	return [top, poly]
+
+
+## Glaçons sous une plateforme-stalactite : [pos locale du haut, longueur]
+## (pas de hasard ; pas dans les 300 px du bout gauche, où l'on monte au
+## grappin le long du bord dans L'Œuf, ni plus longs que 330 px)
+static func stal_icicles(w: float, h: float) -> Array:
+	var out: Array = []
+	var x := 100.0
+	var k := 0
+	while x < w - 100.0:
+		out.append([Vector2(x, h - 30.0), 140.0 + 190.0 * float((k * 7) % 5) / 4.0])
+		x += 110.0 + 150.0 * float((k * 3) % 4) / 3.0
+		k += 1
+	return out
+
+
+## Falaise : [ligne du dessus (pied de la paroi en (0, 0), fin de la
+## descente à droite au niveau 0), position de la prise]
+static func cliff_outline(w: float, h: float) -> Array:
+	var top := PackedVector2Array([Vector2.ZERO])
+	var x := 0.0
+	var y := 0.0
+	for sec in CLIFF_FACE:
+		var dh: float = h * float(sec[1])
+		x += dh / tan(deg_to_rad(float(sec[0])))
+		y -= dh
+		top.append(Vector2(x, y))
+	var hold := Vector2(x + CLIFF_HOLD_IN, y - CLIFF_HOLD_UP)
+	# sommet bombé
+	for k in range(1, 13):
+		var t := k / 12.0
+		top.append(Vector2(x + w * t, y - CLIFF_DOME * sin(PI * t)))
+	x += w
+	# descente douce (profil en cosinus) jusqu'au niveau du pied
+	var descent := h * CLIFF_DESCENT
+	for k in range(1, 25):
+		var t := k / 24.0
+		top.append(Vector2(x + descent * t, lerpf(y, 0.0, 0.5 - 0.5 * cos(PI * t))))
+	return [top, hold]
+
+
+## Série de plateformes-stalactites à partir de l'objet n° i (bouton
+## « Série ») : `count` plateformes en tout, en escalier alterné (une à
+## droite, une à gauche, chacune STAL_RISE plus haut), une prise de grappin
+## par marche dans la colonne d'en face (comme dans L'Œuf). Renvoie le
+## nombre de plateformes ajoutées.
+static func stal_series(i: int, count: int, rise: float = STAL_RISE) -> int:
+	var o: Dictionary = objects[i]
+	var w := shape_prop(o, "w")
+	var added := 0
+	# les plateformes alternent autour du bout droit de la première (le
+	# « couloir » où l'on monte au grappin)
+	var mid_x: float = o.pos.x + w
+	for k in range(1, clampi(count, 2, STAL_SERIES_MAX)):
+		var q: Dictionary = (o as Dictionary).duplicate(true)
+		var right := k % 2 == 1
+		q.pos = Vector2(mid_x if right else mid_x - w, o.pos.y - k * rise)
+		q.rot = 0.0
+		objects.append(q)
+		# prise : au-dessus du dessus de la nouvelle plateforme, mais dans la
+		# colonne d'en face (sinon le grappin se plante dans son dessous)
+		var hold := Vector2(mid_x + (-STAL_HOLD_IN if right else STAL_HOLD_IN), q.pos.y - STAL_HOLD_UP)
+		hooks.append(make_hook(hold))
+		added += 1
+	return added
