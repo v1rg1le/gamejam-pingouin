@@ -214,11 +214,27 @@ func _fill_list() -> void:
 		var row := HBoxContainer.new()
 		row.add_theme_constant_override("separation", 8)
 		_list.add_child(row)
+		# [PARTAGE v2 1.91] miniature « silhouette » du niveau (choix de
+		# l'équipe) : sol et blocs en glace sur le ciel, prises, départ, arrivée
+		var data: Dictionary = DrawnLevel.official_data(e.slug) if community else DrawnLevel.level_data(e.id)
+		if not data.is_empty():
+			var th := TextureRect.new()
+			th.texture = DrawnLevel.thumbnail(data)
+			th.custom_minimum_size = Vector2(DrawnLevel.THUMB_SIZE) * Vector2(1.05, 1.05)
+			th.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+			th.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+			th.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+			th.name = "Miniature"
+			row.add_child(th)
 		# JOUER : nom + record ; médaille au bout du bouton
 		var path: String = DrawnLevel.race_path_of(e)
 		var text: String = "▶  " + str(e.name)
 		if str(e.get("author", "")) != "":
 			text += "  ·  par " + str(e.author)   # [PARTAGE 1.47] niveau reçu ou de la communauté
+		# [PARTAGE v2 1.91] copie d'un niveau d'un autre : auteur d'origine cité
+		var origin: Dictionary = e.get("based_on", {})
+		if not origin.is_empty() and str(origin.get("author", "")) != "":
+			text += "  ·  d'après " + str(origin.author)
 		# [RÈGLES 1.90] défi figures : meilleur score en points ; glisse libre : pas de record
 		var kind := str(e.get("type", "course"))
 		if kind == "tricks":
@@ -248,6 +264,11 @@ func _fill_list() -> void:
 		if community:
 			var slug: String = e.slug
 			play.pressed.connect(func(): _on_play_official(slug))
+			# [PARTAGE v2 1.91] « Copier pour modifier » : une copie à toi dans
+			# « Mes niveaux », ouverte dans le créateur (l'auteur reste cité)
+			var cp := _button("Copier pour modifier", row, 200)
+			cp.tooltip_text = "Une copie de ce niveau dans « Mes niveaux », à modifier comme tu veux (l'auteur d'origine reste cité)."
+			cp.pressed.connect(func(): _on_copy_official(slug))
 			continue
 		play.pressed.connect(func(): _on_play(id))
 		_button("Modifier", row, 104).pressed.connect(func(): _on_edit(id))
@@ -280,6 +301,16 @@ func _on_play_official(slug: String) -> void:
 		return
 	DrawnLevel.return_scene = DrawnLevel.COMMUNITY_SCENE
 	get_tree().change_scene_to_file(DrawnLevel.LEVEL_SCENE)
+
+
+## [PARTAGE v2 1.91] copie d'un niveau de la Communauté, ouverte dans le créateur
+func _on_copy_official(slug: String) -> void:
+	var d := DrawnLevel.official_data(slug)
+	if d.is_empty():
+		return
+	var new_id := DrawnLevel.copy_to_mine(d)
+	if DrawnLevel.open_level(new_id):
+		get_tree().change_scene_to_file(DrawnLevel.EDITOR_SCENE)
 
 
 func _on_edit(id: String) -> void:

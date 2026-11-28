@@ -439,6 +439,33 @@ func start_race(level_path: String, mode: int = 0) -> void:
 	_rpc_start.rpc(level_path, randi(), mode)   # [MODES 1.25] + le mode de jeu
 
 
+## [MULTI CRÉATEUR 1.91] Hôte : lance une course sur un niveau du créateur
+## (un des siens, validé ou en glisse libre, ou un niveau de la Communauté).
+## Le niveau voyage compressé (DrawnLevel.pack_payload) avec l'ordre de départ.
+func start_drawn_race(kind: String, ref: String, mode: int = 0) -> void:
+	if not is_host():
+		return
+	var p := DrawnLevel.net_payload(kind, ref)
+	if p.is_empty():
+		return
+	var packed := DrawnLevel.pack_payload(p)
+	_rpc_start_drawn.rpc(int(packed[0]), packed[1], randi(), mode)
+
+
+@rpc("authority", "call_local", "reliable")
+func _rpc_start_drawn(size: int, bytes: PackedByteArray, seed_value: int, mode: int = 0) -> void:
+	# chaque joueur vérifie le niveau reçu (comme un code de partage) avant de
+	# l'ouvrir, en lecture seule ; il retrouvera le sien en revenant au salon
+	var d := DrawnLevel.unpack_payload(size, bytes)
+	if d.is_empty():
+		pending_message = "Le niveau envoyé par l'hôte est illisible (versions du jeu différentes ?)."
+		leave()
+		get_tree().change_scene_to_file(LOBBY_SCENE)
+		return
+	DrawnLevel.load_net_level(d)
+	_rpc_start(DrawnLevel.LEVEL_SCENE, seed_value, mode)
+
+
 @rpc("authority", "call_local", "reliable")
 func _rpc_start(level_path: String, seed_value: int, mode: int = 0) -> void:
 	in_race = true
@@ -540,6 +567,7 @@ func _rpc_back_to_lobby() -> void:
 	# [MODES 1.25] pas de classement à afficher au salon après une course Chill
 	last_results = [] if race_mode == Settings.MODE_CHILL else ranking()
 	in_race = false
+	DrawnLevel.end_net_level()   # [MULTI CRÉATEUR 1.91] chacun retrouve son niveau ouvert
 	Engine.time_scale = 1.0
 	get_tree().paused = false
 	get_tree().change_scene_to_file(LOBBY_SCENE)

@@ -618,6 +618,8 @@ static func save() -> void:
 	if old != null and old.has("validated_hash"):
 		data["validated_hash"] = old.validated_hash
 		data["gold_time"] = old.get("gold_time", 0.0)
+	if old != null and old.has("based_on"):
+		data["based_on"] = old.based_on   # [PARTAGE v2 1.91] « d'après … » gardé
 	data["modified"] = Time.get_unix_time_from_system()
 	var f := FileAccess.open(path, FileAccess.WRITE)
 	if f != null:
@@ -708,7 +710,8 @@ static func list_levels() -> Array:
 		out.append({"id": file.get_basename(), "name": str(data.get("name", "?")),
 			"modified": float(data.get("modified", 0)), "hash": str(data.get("hash", "")),
 			"author": str(data.get("author", "")),
-			"type": str(clean_rules(data.get("rules", {})).get("type", "course"))})   # [RÈGLES 1.90]
+			"type": str(clean_rules(data.get("rules", {})).get("type", "course")),   # [RÈGLES 1.90]
+			"based_on": clean_based_on(data.get("based_on", null))})   # [PARTAGE v2 1.91]
 	out.sort_custom(func(a, b): return a.modified > b.modified)
 	return out
 
@@ -895,6 +898,15 @@ static func share_code(level_id: String, with_ghost: bool) -> String:
 		var g = RaceManager.load_best_ghost(race_path_of({"id": level_id, "hash": str(data.get("hash", ""))}))
 		if g != null:
 			payload["ghost"] = g
+	# [PARTAGE v2 1.91] code plus court : les traits voyagent en nombres
+	# entiers (dixièmes de px, comme dans le fichier) codés en écarts d'un
+	# point au suivant (petits nombres qui se compressent très bien) ;
+	# version 3 du code (les codes v1 et v2 restent lisibles)
+	payload["pk"] = pack_strokes(payload.strokes)
+	payload.erase("strokes")
+	payload.v = CODE_VERSION_PACKED
+	if data.has("based_on"):
+		payload["based_on"] = data.based_on   # [1.91] auteur d'origine d'une copie
 	var raw := var_to_bytes(payload)
 	return CODE_PREFIX + str(raw.size()) + ":" + Marshalls.raw_to_base64(raw.compress(FileAccess.COMPRESSION_ZSTD)) + ":FIN"
 
@@ -933,8 +945,15 @@ static func decode_code(text: String) -> Dictionary:
 	if raw.size() != size:
 		return {"ok": false, "msg": "Code abîmé (texte coupé ?)."}
 	var data = bytes_to_var(raw)   # sans objets : pas de code exécutable
-	if typeof(data) != TYPE_DICTIONARY or int(data.get("v", 0)) < CODE_VERSION or int(data.get("v", 0)) > CODE_VERSION_MAX:
+	if typeof(data) != TYPE_DICTIONARY or int(data.get("v", 0)) < CODE_VERSION or int(data.get("v", 0)) > CODE_VERSION_PACKED:
 		return {"ok": false, "msg": "Code d'une autre version du jeu, ou abîmé."}
+	# [PARTAGE v2 1.91] code v3 : traits en écarts entiers, remis en nombres
+	if int(data.get("v", 0)) == CODE_VERSION_PACKED:
+		var st = unpack_strokes(data.get("pk", null))
+		if st == null:
+			return {"ok": false, "msg": "Code abîmé (dessin illisible)."}
+		data["strokes"] = st
+		data.erase("pk")
 	var err := _validate(data)
 	if err != "":
 		return {"ok": false, "msg": err}
@@ -994,6 +1013,7 @@ static func import_level(data: Dictionary) -> String:
 	hooks = []
 	_apply({"strokes": data.strokes, "hooks": data.hooks, "auto_hooks": bool(data.get("auto_hooks", true)),
 		"objects": data.get("objects", []), "rules": data.get("rules", {}), "ambiance": data.get("ambiance", {})})
+	var based_on = clean_based_on(data.get("based_on", null))   # [1.91] copie d'un niveau d'un autre
 	var h := content_hash()
 	for e in list_levels():
 		if e.hash == h:
@@ -1018,6 +1038,8 @@ static func import_level(data: Dictionary) -> String:
 	restore(snap)
 	current_author = str(data.get("author", "")).strip_edges().left(NAME_MAX)
 	save()
+	if not based_on.is_empty():
+		_set_file_key(current_id, "based_on", based_on)
 	# [VALIDATION 1.81] niveau reçu validé : on garde son or
 	var gold := float(data.get("gold", 0.0)) if (typeof(data.get("gold", 0.0)) in [TYPE_FLOAT, TYPE_INT]) else 0.0
 	if gold > 0.0 and gold < 36000.0:
@@ -1115,7 +1137,8 @@ static func list_official() -> Array:
 			continue
 		var tmp := {"id": "off-" + slug, "slug": slug, "name": str(data.get("name", slug)),
 			"author": str(data.get("author", "")), "gold": float(data.get("gold_time", 0.0)),
-			"order": int(data.get("order", 999)), "hash": ""}
+			"order": int(data.get("order", 999)), "hash": "",
+			"type": str(clean_rules(data.get("rules", {})).get("type", "course"))}   # [RÈGLES 1.90]
 		tmp.hash = _hash_of(data)
 		out.append(tmp)
 	out.sort_custom(func(a, b): return a.order < b.order or (a.order == b.order and a.name < b.name))
@@ -3118,3 +3141,375 @@ static func bridge_points() -> Array:
 			out.append(o.pos)
 	out.sort_custom(func(a, b): return a.x < b.x)
 	return out
+
+
+# =============================================================================
+#  Partie 17 — [MULTI + PARTAGE v2 1.91]
+# =============================================================================
+# Étape 1.91 du plan du créateur. Choix de l'équipe (28/11) :
+#  - multijoueur avec les niveaux du créateur : l'hôte lance un de SES
+#    niveaux (validés, ou en glisse libre) ou un niveau de la Communauté ; le
+#    niveau est envoyé à chaque joueur (net_payload / load_net_level), joué
+#    en lecture seule, puis chacun retrouve son propre niveau ouvert
+#    (end_net_level) ;
+#  - partage v2 : miniature « silhouette » du niveau dans les listes
+#    (thumbnail), « Copier pour modifier » (copy_to_mine, auteur d'origine
+#    cité dans `based_on`), codes plus courts (pack_strokes, code v3).
+# La copie des niveaux officiels du jeu (Gruyère, L'Œuf…) viendra en 1.92.
+
+## Code de partage v3 : traits en entiers « écarts »
+const CODE_VERSION_PACKED := 3
+
+
+## Traits [x0, y0, x1, y1, …] (floats au 1/10 de px) -> PackedInt32Array :
+## [nb de traits, nb de points du trait 1, x0, y0, dx, dy, …, nb du trait 2, …]
+## (en dixièmes de px ; écarts d'un point au précédent)
+static func pack_strokes(st: Array) -> PackedInt32Array:
+	var out := PackedInt32Array([st.size()])
+	for flat in st:
+		var n: int = (flat as Array).size() / 2
+		out.append(n)
+		var px := 0
+		var py := 0
+		for i in n:
+			var x := int(round(float(flat[i * 2]) * 10.0))
+			var y := int(round(float(flat[i * 2 + 1]) * 10.0))
+			out.append(x - px)
+			out.append(y - py)
+			px = x
+			py = y
+	return out
+
+
+## L'inverse ; null si le paquet est abîmé
+static func unpack_strokes(pk):
+	if typeof(pk) != TYPE_PACKED_INT32_ARRAY:
+		return null
+	var a: PackedInt32Array = pk
+	if a.is_empty() or a[0] < 0 or a[0] > MAX_STROKES:
+		return null
+	var out: Array = []
+	var k := 1
+	for s_i in a[0]:
+		if k >= a.size():
+			return null
+		var n := a[k]
+		k += 1
+		if n < 2 or n > MAX_POINTS or k + n * 2 > a.size():
+			return null
+		var flat: Array = []
+		var x := 0
+		var y := 0
+		for i in n:
+			x += a[k]
+			y += a[k + 1]
+			k += 2
+			flat.append(x / 10.0)
+			flat.append(y / 10.0)
+		out.append(flat)
+	return out if k == a.size() else null
+
+
+## « D'après … » nettoyé : {name, author} ou {} 
+static func clean_based_on(b) -> Dictionary:
+	if not (b is Dictionary):
+		return {}
+	var n := str(b.get("name", "")).strip_edges().left(NAME_MAX)
+	var a := str(b.get("author", "")).strip_edges().left(NAME_MAX)
+	if n == "" and a == "":
+		return {}
+	return {"name": n, "author": a}
+
+
+static func _set_file_key(level_id: String, key: String, value) -> void:
+	var path := LEVELS_DIR.path_join(level_id + ".json")
+	var fd = _read_file(path)
+	if fd == null:
+		return
+	fd[key] = value
+	var f := FileAccess.open(path, FileAccess.WRITE)
+	if f != null:
+		f.store_string(JSON.stringify(fd))
+		f.close()
+
+
+# --- Copier pour modifier ------------------------------------------------------
+
+## Copie un niveau (fichier lu sur le disque : niveau de la Communauté ou
+## niveau reçu) dans « Mes niveaux », modifiable, au nom de « … (copie) » ;
+## l'auteur d'origine est cité (`based_on`). La copie n'est pas validée (son
+## or sera ton temps). Le niveau ouvert ne change pas. Renvoie l'id de la copie.
+static func copy_to_mine(data: Dictionary) -> String:
+	load_once()
+	var keep := _state()
+	_apply(data)
+	var snap := snapshot()
+	var src_name := str(data.get("name", "Niveau")).strip_edges()
+	var src_author := str(data.get("author", "")).strip_edges()
+	var names := {}
+	for e in list_levels():
+		names[e.name] = true
+	var base := src_name.left(NAME_MAX - 8) + " (copie)"
+	var final_name := base
+	var k := 2
+	while names.has(final_name):
+		final_name = "%s %d" % [base.left(NAME_MAX - 3), k]
+		k += 1
+	new_level(final_name)
+	restore(snap)
+	current_author = ""   # c'est ta copie ; l'auteur d'origine est cité à part
+	save()
+	var origin := clean_based_on(data.get("based_on", null))
+	if origin.is_empty():
+		origin = clean_based_on({"name": src_name, "author": src_author if src_author != "" else author_name()})
+	_set_file_key(current_id, "based_on", origin)
+	var new_id := current_id
+	_back_to(keep)
+	return new_id
+
+
+## Données d'un niveau de la Communauté (fichier du jeu), ou {}
+static func official_data(slug: String) -> Dictionary:
+	var d = _read_file(OFFICIAL_DIR.path_join(slug + ".json"))
+	return d if d is Dictionary else {}
+
+
+## Données d'un de mes niveaux (fichier), ou {}
+static func level_data(level_id: String) -> Dictionary:
+	var d = _read_file(LEVELS_DIR.path_join(level_id + ".json"))
+	return d if d is Dictionary else {}
+
+
+# --- Multijoueur ---------------------------------------------------------------
+
+## Niveau reçu de l'hôte en cours de partie (lecture seule)
+static var net_level := false
+static var _net_keep: Dictionary = {}
+
+## Niveaux du créateur que l'hôte peut lancer : [{kind: "mine"|"off", ref, name, type}]
+## (les miens : validés ou en glisse libre — choix de l'équipe)
+static func multi_levels() -> Array:
+	var out: Array = []
+	for e in list_levels():
+		if entry_validated(e):
+			out.append({"kind": "mine", "ref": e.id, "name": e.name, "type": e.get("type", "course")})
+	for e in list_official():
+		var d := official_data(e.slug)
+		out.append({"kind": "off", "ref": e.slug, "name": e.name,
+			"type": str(clean_rules(d.get("rules", {})).get("type", "course"))})
+	return out
+
+
+## Ce qu'on envoie aux joueurs : le dessin, les règles, l'ambiance, le nom,
+## l'auteur et l'or (mêmes clés qu'un code de partage). {} si introuvable.
+static func net_payload(kind: String, ref: String) -> Dictionary:
+	var d := official_data(ref) if kind == "off" else level_data(ref)
+	if d.is_empty():
+		return {}
+	var gold := 0.0
+	if kind == "off":
+		gold = float(d.get("gold_time", 0.0))
+	elif str(d.get("validated_hash", "")) == str(d.get("hash", "")):
+		gold = float(d.get("gold_time", 0.0))
+	var p := {"name": str(d.get("name", "?")), "author": str(d.get("author", "")) if str(d.get("author", "")) != "" else author_name(),
+		"auto_hooks": bool(d.get("auto_hooks", true)), "strokes": d.get("strokes", []), "hooks": d.get("hooks", []),
+		"objects": d.get("objects", []), "rules": d.get("rules", {}), "ambiance": d.get("ambiance", {}), "gold": gold}
+	return p
+
+
+## Paquet compressé (pour le réseau) : [taille, octets]
+static func pack_payload(p: Dictionary) -> Array:
+	var q := p.duplicate()
+	q["pk"] = pack_strokes(q.get("strokes", []))
+	q.erase("strokes")
+	var raw := var_to_bytes(q)
+	return [raw.size(), raw.compress(FileAccess.COMPRESSION_ZSTD)]
+
+
+## L'inverse, vérifié comme un code reçu ({} si abîmé ou trop grand)
+static func unpack_payload(size: int, bytes: PackedByteArray) -> Dictionary:
+	if size <= 0 or size > 8_000_000:
+		return {}
+	var raw := bytes.decompress(size, FileAccess.COMPRESSION_ZSTD)
+	if raw.size() != size:
+		return {}
+	var d = bytes_to_var(raw)   # sans objets : pas de code exécutable
+	if not (d is Dictionary):
+		return {}
+	var st = unpack_strokes(d.get("pk", null))
+	if st == null:
+		return {}
+	d["strokes"] = st
+	d.erase("pk")
+	if _validate(d) != "":
+		return {}
+	return d
+
+
+## Ouvre (en mémoire, lecture seule) le niveau envoyé par l'hôte ; le niveau
+## que le joueur avait ouvert est gardé pour end_net_level()
+static func load_net_level(d: Dictionary) -> void:
+	load_once()
+	if not net_level:
+		_net_keep = _state()
+	net_level = true
+	_apply(d)
+	current_id = "net-" + content_hash()
+	current_name = str(d.get("name", "?")).left(NAME_MAX)
+	current_author = str(d.get("author", "")).left(NAME_MAX)
+	var g = d.get("gold", 0.0)
+	current_gold = float(g) if typeof(g) in [TYPE_FLOAT, TYPE_INT] and is_finite(float(g)) else 0.0
+	is_official = true   # lecture seule : jamais enregistré, pas de bouton « Éditer »
+	test_from = Vector2.INF
+
+
+## Fin de partie : on retrouve le niveau qu'on avait ouvert
+static func end_net_level() -> void:
+	if not net_level:
+		return
+	net_level = false
+	if not _net_keep.is_empty():
+		_back_to(_net_keep)
+	_net_keep = {}
+
+
+# --- Miniature « silhouette » ----------------------------------------------------
+# Choix de l'équipe : une silhouette calculée (comme une mini-carte) : le sol
+# et les blocs en glace sur le ciel, les prises en gris, départ et arrivée.
+# Calculée à partir des données (rien à partager), gardée en cache disque
+# (user://miniatures/<empreinte>.png).
+
+const THUMB_DIR := "user://miniatures"
+const THUMB_SIZE := Vector2i(120, 44)
+const THUMB_SKY := Color(0.36, 0.55, 0.78)
+const THUMB_ICE := Color(0.80, 0.92, 0.99)
+const THUMB_ICE_DARK := Color(0.55, 0.74, 0.9)
+
+
+## Miniature d'un niveau (données d'un fichier) ; ImageTexture
+static func thumbnail(d: Dictionary) -> ImageTexture:
+	var keep := _state()
+	_apply(d)
+	var h := content_hash()
+	var path := THUMB_DIR.path_join(h + ".png")
+	var img: Image = null
+	if FileAccess.file_exists(path):
+		img = Image.load_from_file(path)
+	if img == null:
+		img = _draw_thumbnail()
+		DirAccess.make_dir_recursive_absolute(THUMB_DIR)
+		img.save_png(path)
+	_back_to(keep)
+	return ImageTexture.create_from_image(img)
+
+
+## Dessin de la miniature du niveau ouvert (Image)
+static func _draw_thumbnail() -> Image:
+	var W := THUMB_SIZE.x
+	var H := THUMB_SIZE.y
+	var img := Image.create(W, H, false, Image.FORMAT_RGBA8)
+	img.fill(THUMB_SKY)
+	# polygones à remplir : îlots (dessus du trait jusqu'au fond), formes
+	var polys: Array = []      # [poly, couleur]
+	var isl := islands()
+	var bottom := -INF
+	var r := Rect2()
+	var any := false
+	for st in isl:
+		for q in st:
+			r = Rect2(q, Vector2.ZERO) if not any else r.expand(q)
+			any = true
+	for o in objects:
+		if is_shape(o):
+			var g: Dictionary = shape_geometry(o) if o.type != "carved" else {"poly": Transform2D(0.0, o.pos) * carved_base(o), "extra": []}
+			for q in g.poly:
+				r = Rect2(q, Vector2.ZERO) if not any else r.expand(q)
+				any = true
+	if not any:
+		return img
+	bottom = r.end.y + maxf(200.0, r.size.y * 0.15)
+	for st in isl:
+		var poly := PackedVector2Array(st)
+		poly.append(Vector2(st[st.size() - 1].x, bottom))
+		poly.append(Vector2(st[0].x, bottom))
+		polys.append([poly, THUMB_ICE])
+	for o in objects:
+		if not is_shape(o):
+			continue
+		if o.type == "carved":
+			polys.append([Transform2D(0.0, o.pos) * carved_base(o), THUMB_ICE_DARK])
+			continue
+		var g := shape_geometry(o)
+		polys.append([g.poly, THUMB_ICE])
+		for ex in g.extra:
+			if (ex.poly as PackedVector2Array).size() >= 3:
+				polys.append([ex.poly, THUMB_ICE if ex.hook else THUMB_ICE_DARK])
+	# échelle : tout le niveau dans la miniature, mêmes proportions (1 px du
+	# monde = s px), centré, 2 px de marge
+	var span := Rect2(r.position, Vector2(r.size.x, bottom - r.position.y))
+	var s: float = minf((W - 4) / maxf(1.0, span.size.x), (H - 4) / maxf(1.0, span.size.y))
+	var off := Vector2((W - span.size.x * s) * 0.5, (H - span.size.y * s) * 0.5) - span.position * s
+	for pc in polys:
+		var sp := PackedVector2Array()
+		for q in pc[0]:
+			sp.append(q * s + off)
+		_fill_poly(img, sp, pc[1])
+	# prises (gris), départ (vert), arrivée (jaune)
+	for hk in hook_list(isl):
+		_dot(img, hk.pos * s + off, Color(0.62, 0.66, 0.72))
+	var st_o := first_object("start")
+	if not isl.is_empty() or not st_o.is_empty():
+		var sp: Vector2 = st_o.pos if not st_o.is_empty() else (isl[0][0] as Vector2)
+		_dot(img, sp * s + off, Color(0.36, 0.81, 0.42))
+	if level_type() == "course" and not isl.is_empty():
+		var fo := first_object("finish")
+		var last: PackedVector2Array = isl[isl.size() - 1]
+		var fp: Vector2 = fo.pos if not fo.is_empty() else chain_end(last[last.size() - 1])
+		_dot(img, fp * s + off, Color(1, 0.84, 0.25))
+	return img
+
+
+## Remplissage d'un polygone (balayage ligne par ligne, règle pair-impair)
+static func _fill_poly(img: Image, poly: PackedVector2Array, c: Color) -> void:
+	var n := poly.size()
+	if n < 3:
+		return
+	var y0 := maxi(0, int(floor(_min_y(poly))))
+	var y1 := mini(img.get_height() - 1, int(ceil(_max_y(poly))))
+	for y in range(y0, y1 + 1):
+		var yc := y + 0.5
+		var xs: Array = []
+		for i in n:
+			var a := poly[i]
+			var b := poly[(i + 1) % n]
+			if (a.y <= yc and b.y > yc) or (b.y <= yc and a.y > yc):
+				xs.append(a.x + (yc - a.y) / (b.y - a.y) * (b.x - a.x))
+		xs.sort()
+		for k in range(0, xs.size() - 1, 2):
+			var xa := maxi(0, int(round(xs[k])))
+			var xb := mini(img.get_width() - 1, int(round(xs[k + 1])) - 1)
+			for x in range(xa, xb + 1):
+				img.set_pixel(x, y, c)
+
+
+static func _min_y(p: PackedVector2Array) -> float:
+	var m := INF
+	for q in p:
+		m = minf(m, q.y)
+	return m
+
+
+static func _max_y(p: PackedVector2Array) -> float:
+	var m := -INF
+	for q in p:
+		m = maxf(m, q.y)
+	return m
+
+
+static func _dot(img: Image, p: Vector2, c: Color) -> void:
+	for dy in range(-1, 2):
+		for dx in range(-1, 2):
+			var x := int(p.x) + dx
+			var y := int(p.y) + dy
+			if x >= 0 and y >= 0 and x < img.get_width() and y < img.get_height():
+				img.set_pixel(x, y, c)

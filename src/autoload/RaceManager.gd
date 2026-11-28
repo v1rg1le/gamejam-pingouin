@@ -236,6 +236,9 @@ func _on_node_added(node: Node) -> void:
 		Settings.level_glacier_theme = -1
 		Settings.level_sky_theme = -1
 		MusicController.end_level_music()
+		# [MULTI CRÉATEUR 1.91] hors partie réseau, on retrouve son propre niveau
+		if not NetSession.in_race:
+			DrawnLevel.end_net_level()
 		# [VALIDATION 1.81] après une course « ✔ Valider » (courue en mode
 		# Score), on remet le mode de jeu du joueur
 		if DrawnLevel.validation_prev_mode >= 0:
@@ -248,7 +251,9 @@ func _prepare_level(path: String) -> void:
 	# [RÈGLES 1.90] fond et musique imposés par un niveau du créateur : posés
 	# ICI, avant la construction du niveau (le fond lit Settings.glacier_theme()
 	# dans son _ready). Les autres niveaux remettent tout comme le joueur l'a choisi.
-	if path.ends_with(DRAWN_LEVEL + ".tscn") and not NetSession.in_race:
+	# ([MULTI CRÉATEUR 1.91] en partie réseau aussi : le niveau reçu de l'hôte
+	# a son ambiance)
+	if path.ends_with(DRAWN_LEVEL + ".tscn"):
 		DrawnLevel.load_once()
 		Settings.level_glacier_theme = int(DrawnLevel.amb("glacier"))
 		Settings.level_sky_theme = int(DrawnLevel.amb("far"))
@@ -413,6 +418,14 @@ func _start_race() -> void:
 	scene.add_child(_hud)
 	_hud.set_best(get_best_time(level_path))
 	_setup_tricks(scene)
+	# [MULTI CRÉATEUR 1.91] niveau du créateur sans arrivée (glisse libre,
+	# défi figures) joué en multijoueur : un défi figures chronométré pour
+	# tout le monde (durée du créateur, 3 min en glisse libre) ; à la fin du
+	# temps, chacun annonce ses points (classement au score)
+	if NetSession.in_race and _is_any_drawn_level() and DrawnLevel.level_type() != "course":
+		var attack = preload("res://src/ui/race/TrickAttack.gd").new()
+		attack.setup(_player, level_path)
+		scene.add_child(attack)
 	# [TUTO 1.41] ateliers du tuto : chrono caché, pas de fantôme pour l'instant
 	# (pas en multijoueur : là, le tuto est une simple course du départ à l'arrivée)
 	tutorial_intro = level_path.get_file().get_basename() == TUTO_LEVEL and not NetSession.in_race

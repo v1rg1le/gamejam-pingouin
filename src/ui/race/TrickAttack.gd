@@ -145,6 +145,8 @@ func _points() -> int:
 func _physics_process(delta: float) -> void:
 	if over:
 		return
+	if NetSession.in_race and not RaceManager.racing:
+		return   # [MULTI CRÉATEUR 1.91] le chrono part au « GO » du décompte
 	time_left = maxf(0.0, time_left - delta)
 	# 10 dernières secondes : un bip par seconde
 	var sec := int(ceil(time_left))
@@ -186,7 +188,7 @@ func _finish() -> void:
 	# [RÈGLES 1.90] défi d'un niveau du créateur : la course « ✔ Valider »
 	# fixe l'or (les points du créateur) ; « Tester d'ici » (chemin réel
 	# LevelDrawn) n'enregistre rien
-	var counts: bool = level_key != "LevelDrawn"
+	var counts: bool = level_key != "LevelDrawn" and not NetSession.in_race
 	if _is_drawn(level_key) and DrawnLevel.validating and counts and pts > 0:
 		DrawnLevel.record_validation(float(pts))
 		medal = medal_for(level_key, pts)
@@ -199,6 +201,20 @@ func _finish() -> void:
 	RaceManager.free_ride = false
 	RaceManager.last_score = {"speed": 0, "tricks": pts, "score": pts, "medal": medal, "is_best_score": record}
 	Sfx.play("bonus_fin")
+	if NetSession.in_race:
+		# [MULTI CRÉATEUR 1.91] on annonce ses points ; l'hôte ramène tout le
+		# monde au salon quand chacun a fini (classement au score)
+		RaceManager.racing = false
+		# (sans médaille : le bandeau du classement (RaceHud._score_text) ne
+		# montre alors que les points de figures)
+		RaceManager.last_score = {"speed": 0, "tricks": pts, "score": pts, "is_best_score": false, "best_score": -1}
+		NetSession.report_finish(DrawnLevel.tricks_time(), pts)
+		_update_labels()
+		_best_label.text = "Temps écoulé ! %d pts — on attend les autres…" % pts
+		if is_instance_valid(player):
+			player.process_mode = Node.PROCESS_MODE_DISABLED
+		RaceManager.emit_signal("race_completed")
+		return
 	if record and pts > 0:
 		get_tree().create_timer(0.7).timeout.connect(func(): Sfx.play("record"))
 	if is_instance_valid(player):

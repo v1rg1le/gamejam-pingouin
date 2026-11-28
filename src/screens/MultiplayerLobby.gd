@@ -56,6 +56,20 @@ const RACES = [
 
 var _connecting: bool = false   # invité : connexion en cours (pas encore dans la liste)
 var mode_option: OptionButton    # [MODES 1.25] choix Chill / Score (hôte)
+var _choices: Array = []         # [MULTI CRÉATEUR 1.91] ce que lance chaque ligne de la liste
+
+
+## [MULTI CRÉATEUR 1.91] « Lancer » : une course du jeu, ou un niveau du
+## créateur envoyé à tous les joueurs
+func _on_start_pressed() -> void:
+	var c: Dictionary = _choices[level_option.selected] if level_option.selected >= 0 and level_option.selected < _choices.size() else {"kind": "sep"}
+	match str(c.kind):
+		"race":
+			NetSession.start_race(c.ref, mode_option.selected)   # [MODES 1.25]
+		"mine", "off":
+			NetSession.start_drawn_race(c.kind, c.ref, mode_option.selected)
+		_:
+			status_label.text = "Choisis une course dans la liste."
 
 
 func _ready() -> void:
@@ -70,9 +84,35 @@ func _ready() -> void:
 	version_label.text = "v" + str(ProjectSettings.get_setting("application/config/version", "?"))
 	name_edit.text = NetSession.player_name
 	name_edit.text_changed.connect(NetSession.set_player_name)
+	# [MULTI CRÉATEUR 1.91] après les courses du jeu : mes niveaux (validés ou
+	# en glisse libre) et ceux de la Communauté (choix de l'équipe). Chaque
+	# ligne garde ce qu'il faut lancer dans _choices (même ordre que la liste).
+	DrawnLevel.end_net_level()   # (sécurité : on revient toujours ici avec son propre niveau)
+	_choices.clear()
 	for race in RACES:
 		level_option.add_item(race[0])
-	level_option.selected = clampi(NetSession.last_level_index, 0, RACES.size() - 1)
+		_choices.append({"kind": "race", "ref": race[1]})
+	var mine: Array = []
+	var off: Array = []
+	for e in DrawnLevel.multi_levels():
+		(mine if e.kind == "mine" else off).append(e)
+	for group in [["Mes niveaux", mine], ["Communauté", off]]:
+		if (group[1] as Array).is_empty():
+			continue
+		level_option.add_separator("— %s —" % group[0])
+		_choices.append({"kind": "sep"})
+		for e in group[1]:
+			var label: String = str(e.name)
+			if e.type == "free":
+				label += "  (glisse libre : 3 min de figures)"
+			elif e.type == "tricks":
+				label += "  (défi figures)"
+			level_option.add_item(label)
+			_choices.append(e)
+	var start_i := clampi(NetSession.last_level_index, 0, _choices.size() - 1)
+	if _choices[start_i].kind == "sep":
+		start_i = 0
+	level_option.selected = start_i
 	level_option.item_selected.connect(func(i): NetSession.last_level_index = i)
 	# [MODES 1.25] l'hôte choisit le mode de jeu pour tout le monde : copie
 	# du menu des niveaux (même style), juste en dessous
@@ -91,7 +131,7 @@ func _ready() -> void:
 	host_button.pressed.connect(_on_host_pressed)
 	join_button.pressed.connect(func(): _join(ip_edit.text))
 	ip_edit.text_submitted.connect(_join)
-	start_button.pressed.connect(func(): NetSession.start_race(RACES[level_option.selected][1], mode_option.selected))   # [MODES 1.25]
+	start_button.pressed.connect(_on_start_pressed)
 	leave_button.pressed.connect(func():
 		NetSession.leave()
 		status_label.text = "Tu as quitté la partie.")
