@@ -716,11 +716,14 @@ func _confirm_rename() -> void:
 func _frame_content() -> void:
 	var isl := DrawnLevel.islands()
 	var vp: Vector2 = get_viewport().get_visible_rect().size
-	if isl.is_empty():
+	# [COPIES DU JEU 1.92] tout le contenu (traits, prises, objets, morceaux,
+	# cavernes) : une copie de L'Œuf ou du Gruyère n'a aucun trait
+	var all: Rect2 = DrawnLevel.level_bounds()
+	if isl.is_empty() and all.size == Vector2.ZERO:
 		cam.zoom = Vector2(ZOOM_DEFAULT, ZOOM_DEFAULT)
 		cam.position = Vector2(vp.x * 0.5 / ZOOM_DEFAULT - 400.0, 0)
 		return
-	var r := Rect2(isl[0][0], Vector2.ZERO)
+	var r := all if all.size != Vector2.ZERO else Rect2(isl[0][0], Vector2.ZERO)
 	for s in isl:
 		for p in s:
 			r = r.expand(p)
@@ -758,7 +761,7 @@ func _draw() -> void:
 		gy += step
 
 	var isl := DrawnLevel.islands()
-	if isl.is_empty() and not _drawing:
+	if isl.is_empty() and not _drawing and DrawnLevel.objects.is_empty():   # [COPIES DU JEU 1.92] pas sur un niveau tout en blocs
 		var c := view.get_center()
 		draw_string(font, c + Vector2(-9.0 * fs, 0), "Dessine le sol ici, de gauche à droite", HORIZONTAL_ALIGNMENT_LEFT, -1, int(fs * 1.3), Color(1, 1, 1, 0.85))
 
@@ -830,8 +833,9 @@ func _draw() -> void:
 		var ends := DrawnLevel.carved_default_ends()
 		var st_o := DrawnLevel.first_object("start")
 		var fi_o := DrawnLevel.first_object("finish")
-		_draw_start_finish(st_o.pos + Vector2(0, 80) if not st_o.is_empty() else ends[0] + Vector2(0, 80),
-			fi_o.pos if not fi_o.is_empty() else ends[1], z, font, fs)
+		# [COPIES DU JEU 1.92] pas de faisceau « ARRIVÉE » sur un défi / une glisse libre
+		var fin_at: Vector2 = (fi_o.pos if not fi_o.is_empty() else ends[1]) if DrawnLevel.level_type() == "course" else Vector2.INF
+		_draw_start_finish(st_o.pos + Vector2(0, 80) if not st_o.is_empty() else ends[0] + Vector2(0, 80), fin_at, z, font, fs)
 	if not isl.is_empty():
 		var first: PackedVector2Array = isl[0]
 		var sx: float = minf(first[0].x + 150.0, first[first.size() - 1].x)
@@ -847,9 +851,12 @@ func _draw() -> void:
 		var fin_obj := DrawnLevel.first_object("finish")
 		if not fin_obj.is_empty():
 			fp = fin_obj.pos
-		var beam := PackedVector2Array([fp + Vector2(-70, 0), fp + Vector2(70, 0), fp + Vector2(42, -1600), fp + Vector2(-42, -1600)])
-		draw_polygon(beam, PackedColorArray([Color(1, 0.95, 0.4, 0.6), Color(1, 0.95, 0.4, 0.6), Color(1, 0.95, 0.4, 0), Color(1, 0.95, 0.4, 0)]))
-		draw_string(font, fp + Vector2(-2.3 * fs, -160.0), "ARRIVÉE", HORIZONTAL_ALIGNMENT_LEFT, -1, fs, Color(1, 0.95, 0.4))
+		# [COPIES DU JEU 1.92] pas d'arrivée sur un défi figures / une glisse libre
+		# (le jeu n'en pose pas : l'éditeur ne la montre plus non plus)
+		if DrawnLevel.level_type() == "course":
+			var beam := PackedVector2Array([fp + Vector2(-70, 0), fp + Vector2(70, 0), fp + Vector2(42, -1600), fp + Vector2(-42, -1600)])
+			draw_polygon(beam, PackedColorArray([Color(1, 0.95, 0.4, 0.6), Color(1, 0.95, 0.4, 0.6), Color(1, 0.95, 0.4, 0), Color(1, 0.95, 0.4, 0)]))
+			draw_string(font, fp + Vector2(-2.3 * fs, -160.0), "ARRIVÉE", HORIZONTAL_ALIGNMENT_LEFT, -1, fs, Color(1, 0.95, 0.4))
 
 	# e2. [SURVOL 1.82] halo de l'élément survolé (par-dessus le reste)
 	_draw_hover(z)
@@ -1841,7 +1848,7 @@ func _hover_info(h: Dictionary) -> Array:
 				"finish":
 					lines.append("Ligne d'arrivée (une seule par niveau)")
 				"checkpoint":
-					lines.append("Après une chute, on repart d'ici")
+					lines.append("Après une chute, on repart d'ici (élan %d px/s)" % int(o.props.get("speed", 400.0)))   # [COPIES DU JEU 1.92]
 				"bridge":
 					lines.append("Mode enfant : après 2 chutes au même trou, on repart d'ici")   # [RÈGLES 1.90]
 				"sign":
@@ -2148,7 +2155,11 @@ func _refresh_ui() -> void:
 	if isl.is_empty() and DrawnLevel.has_carved():
 		# [GROTTE 1.87] niveau tout en grotte
 		var gold0 := DrawnLevel.validated_gold()
-		_info.text = "Niveau tout en grotte  ·  %d grappin%s" % [n_hooks, "s" if n_hooks > 1 else ""]
+		# [COPIES DU JEU 1.92] une copie de L'Œuf / du Half-pipe n'a que des morceaux de glace
+		var in_cave := false
+		for o in DrawnLevel.objects:
+			in_cave = in_cave or str(o.type) in ["carved", "cave"]
+		_info.text = ("Niveau tout en grotte" if in_cave else "Niveau sans trait (blocs)") + "  ·  %d grappin%s" % [n_hooks, "s" if n_hooks > 1 else ""]
 		_info.text += ("  ·  ✔ validé, or " + RaceManager.format_time(gold0)) if gold0 > 0.0 else "  ·  pas encore validé"
 	elif isl.is_empty():
 		_info.text = "Pas encore de sol."
@@ -2246,6 +2257,8 @@ const PALETTE_TIPS := {
 	"pillars": "Le motif piliers du Gruyère : des piliers en vague séparés par des trous, avec des plafonds-guides lisses au-dessus.",
 	"bigegg": "Le grand œuf complet de L'Œuf : coquille de glace, fente sur le dessus, half-pipe dedans. Le grappin s'accroche partout.",
 	"endless": "Île + trou : une île en pente, puis un trou du type choisi (saut, grappin, plafond…) ou au hasard (🎲). Les mêmes trous que le mode Sans fin.",
+	# [COPIES DU JEU 1.92] (seulement dans les copies des niveaux du jeu, pas dans la palette)
+	"piece": "Un morceau de terrain copié d'un niveau du jeu, à sa forme exacte. On peut le déplacer, le dupliquer ou l'effacer.",
 }
 
 
@@ -2441,7 +2454,8 @@ const OBJ_NAMES := {"egg": "Œuf à grappiner", "boost": "Boost", "start": "Dép
 	"carved": "Caverne taillée",   # [TAILLÉE 1.85]
 	"balcony": "Balcon de glace", "stal": "Plateforme-stalactite", "cliff": "Falaise",   # [FORMES 2 1.86]
 	"void": "Zone de vide", "pillars": "Motif piliers", "bigegg": "Grand œuf", "endless": "Île + trou",   # [GROS BLOCS 1.89] (renommé en 1.90)
-	"bridge": "Pont magique"}   # [RÈGLES 1.90]
+	"bridge": "Pont magique",   # [RÈGLES 1.90]
+	"piece": "Morceau de glace"}   # [COPIES DU JEU 1.92]
 const EGG_STYLE_NAMES := ["", "glace", "tacheté", "craquelé", "bonnet de neige", "bébé Pinpouin"]
 ## Types qu'on peut tourner (les autres restent droits)
 const ROTATABLE := ["egg", "boost", "arch", "podium", "bush", "igloo", "colisee", "ice1", "ice2", "ice3",
@@ -2491,6 +2505,11 @@ func _object_settings(col: VBoxContainer, title: Label) -> void:
 			if expert:
 				_slider_row(col, "Dézoom max", 0.1, 1.0, 0.05, float(o.props.get("zoom", 0.25)), func(v): _set_obj("zoom", v, true))
 		"checkpoint", "finish", "bridge":
+			if t == "checkpoint":
+				# [COPIES DU JEU 1.92] élan à la reprise (le Gruyère et L'Œuf
+				# relancent Pinpouin avant un trou ; 400 px/s par défaut)
+				_slider_row(col, "Élan à la reprise", 0.0, 1200.0, 50.0, float(o.props.get("speed", 400.0)), func(v): _set_obj("speed", v, true),
+					func(v): return "%d px/s" % int(v))
 			var info := Label.new()
 			info.text = "Après une chute, on repart du dernier point atteint." if t == "checkpoint" else \
 				("Mode enfant : après 2 chutes au même trou, Pinpouin repart du premier pont magique devant lui. Pose-le sur le sol, là où il doit réapparaître." if t == "bridge" else "La ligne d'arrivée (une seule par niveau).")
@@ -2621,7 +2640,8 @@ const SHAPE_STRETCH := {"ramp": ["w", "h"], "halfpipe": ["w", "h"], "bowl": ["w"
 	"carved": ["w", "h"],   # [TAILLÉE 1.85] taille du bloc
 	"balcony": ["w", "h"], "stal": ["w", "h"], "cliff": ["w", "h"],   # [FORMES 2 1.86]
 	# [GROS BLOCS 1.89] (le tronçon du Sans fin se règle par sa longueur d'île)
-	"void": ["w", "h"], "pillars": ["w"], "bigegg": ["w", "h"], "endless": []}
+	"void": ["w", "h"], "pillars": ["w"], "bigegg": ["w", "h"], "endless": [],
+	"piece": []}   # [COPIES DU JEU 1.92] forme exacte : on ne l'étire pas
 ## Nom du réglage `h` selon la forme
 const SHAPE_H_NAME := {"halfpipe": "Profondeur", "bowl": "Profondeur", "ceiling": "Épaisseur", "floating": "Épaisseur",
 	"upipe": "Diamètre", "pillar": "Hauteur",
@@ -2688,9 +2708,18 @@ func _draw_shape(o: Dictionary, z: float) -> void:
 		return
 	var g := DrawnLevel.shape_geometry(o, _draw_bottom)
 	var fill := ICE_COLOR
-	if o.type == "ceiling" and DrawnLevel.shape_prop(o, "hook") < 0.5:
-		fill = ICE_COLOR.darkened(0.18)   # non accrochable
-	if g.poly.size() >= 3:
+	if o.type in ["ceiling", "piece"] and DrawnLevel.shape_prop(o, "hook") < 0.5:
+		fill = ICE_COLOR.darkened(0.18)   # non accrochable   # [COPIES DU JEU 1.92] + morceaux copiés
+	if o.type == "piece" and g.poly.size() >= 3:
+		# [COPIES DU JEU 1.92] gros contours copiés : triangles gardés en cache
+		# (DrawnLevel.piece_tris) et dessinés tels quels — draw_colored_polygon
+		# les recalculait à chaque image (~60 ms pour un morceau de 704)
+		var ptris := DrawnLevel.piece_tris(o)
+		if ptris.is_empty():
+			draw_polyline(g.poly, fill, 6.0 / z)
+		else:
+			RenderingServer.canvas_item_add_triangle_array(get_canvas_item(), ptris, g.poly, PackedColorArray([fill]))
+	elif g.poly.size() >= 3:
 		var tris := Geometry2D.triangulate_polygon(g.poly)
 		if tris.is_empty():
 			draw_polyline(g.poly, fill, 6.0 / z)
@@ -2802,6 +2831,11 @@ func _shape_stats(o: Dictionary) -> Array:
 			lines.append("Boosts : force %d %%" % int(round(DrawnLevel.shape_prop(o, "strength") * 100.0)))
 		"ceiling":
 			lines.append("Accrochable au grappin" if DrawnLevel.shape_prop(o, "hook") > 0.5 else "Lisse : le grappin ne s'y accroche pas")
+		"piece":
+			# [COPIES DU JEU 1.92]
+			var fr: Rect2 = DrawnLevel.shape_geometry(o).frame
+			lines.append("Copié d'un niveau du jeu   ·   %d × %d px" % [int(fr.size.x), int(fr.size.y)])
+			lines.append("Accrochable au grappin" if DrawnLevel.shape_prop(o, "hook") > 0.5 else "Lisse : le grappin ne s'y accroche pas")
 		# [FORMES 2 1.86]
 		"balcony":
 			lines.append("Dessous accrochable au grappin")
@@ -2845,6 +2879,9 @@ func _shape_settings(col: VBoxContainer, o: Dictionary) -> void:
 		return
 	if t in DrawnLevel.BIG_BLOCKS:
 		_big_settings(col, o)   # [GROS BLOCS 1.89]
+		return
+	if t == "piece":
+		_piece_settings(col, o)   # [COPIES DU JEU 1.92]
 		return
 	var dims: Array = SHAPE_STRETCH.get(t, [])
 	# tailles toutes faites (choix de l'équipe : surtout pour le mode Simple ;
@@ -3063,6 +3100,23 @@ func _set_cave(key: String, v) -> void:
 ## Grand (longueur), étages, sinuosité ; Expert : + étage d'entrée et de
 ## sortie, longueur des vagues, graine exacte, position.
 func _cave_settings(col: VBoxContainer, o: Dictionary) -> void:
+	# [COPIES DU JEU 1.92] caverne du Gruyère copiée : réglages d'origine
+	# (plusieurs entrées et sorties, virages…) que les curseurs ne savent pas
+	# montrer. Un bouton en fait une caverne réglable comme les autres.
+	if o.props.get("cfg") is Dictionary:
+		var info := Label.new()
+		info.text = "Caverne du Gruyère, avec ses réglages d'origine (plusieurs entrées et sorties)."
+		info.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		info.custom_minimum_size = Vector2(220, 0)
+		info.add_theme_color_override("font_color", Color.WHITE)
+		col.add_child(info)
+		var free_b := _icon_choice("de", _icon_row(col), "Caverne réglable", "Oublie les réglages d'origine : la caverne se règle comme les autres (graine, longueur, étages…).", false, "Réglable")
+		free_b.pressed.connect(func():
+			_push_undo()
+			DrawnLevel.objects[_sel.index].props.erase("cfg")
+			_changed()
+			_rebuild_settings())
+		return
 	var row := _icon_row(col)
 	var dice := _icon_choice("de", row, "Autre caverne", "Tire une autre graine : une nouvelle caverne de même taille.", false, "Autre")
 	dice.pressed.connect(func():
@@ -4205,3 +4259,21 @@ func _draw_bridge(p: Vector2, a: float, z: float) -> void:
 		var ang := -PI * 0.5 + TAU * i / 10.0
 		st.append(p + Vector2(0, -125) * k_sc + Vector2(cos(ang), sin(ang)) * r)
 	draw_colored_polygon(st, Color(1, 1, 1, a))
+
+
+
+## [COPIES DU JEU 1.92] Réglages d'un morceau de glace copié d'un niveau du
+## jeu : sa forme est exacte (pas de poignées) ; on choisit seulement si le
+## grappin s'y accroche (les autres gestes : déplacer, dupliquer, effacer).
+func _piece_settings(col: VBoxContainer, o: Dictionary) -> void:
+	_icon_toggle("accrochable", _icon_row(col), "Accrochable", "Le grappin s'accroche à ce morceau (sinon il est lisse).",
+		DrawnLevel.shape_prop(o, "hook") > 0.5, func(on): _set_obj("hook", on, true))
+	var info := Label.new()
+	info.text = "Morceau copié d'un niveau du jeu, à sa forme exacte. Déplace-le, duplique-le ou efface-le comme les autres objets."
+	info.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	info.custom_minimum_size = Vector2(220, 0)
+	info.add_theme_color_override("font_color", Color.WHITE)
+	col.add_child(info)
+	if expert:
+		_spin_row(col, "X", o.pos.x, func(v): _set_obj("pos", Vector2(v, DrawnLevel.objects[_sel.index].pos.y)))
+		_spin_row(col, "Y", o.pos.y, func(v): _set_obj("pos", Vector2(DrawnLevel.objects[_sel.index].pos.x, v)))

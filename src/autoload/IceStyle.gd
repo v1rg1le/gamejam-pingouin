@@ -296,7 +296,7 @@ func _add_snow_line(parent: CanvasItem, l: Line2D, line_pts: PackedVector2Array,
 		scales.append(m)
 	if any_thin and total > 0.0:
 		var curve := Curve.new()
-		curve.bake_resolution = clampi(int(total / 12.0), 100, 4096)
+		curve.bake_resolution = clampi(int(total / 12.0), 100, 1000)   # [1.92] Godot refuse plus de 1000 (traits très longs des copies 704 / 917)
 		var dist := 0.0
 		var last_m := -1.0
 		for i in scales.size():

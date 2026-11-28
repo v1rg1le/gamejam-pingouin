@@ -276,6 +276,77 @@ func _fill_list() -> void:
 		_button("Partager", row, 104).pressed.connect(func(): _open_share(entry))
 		var del := _button("Supprimer", row, 116)
 		del.pressed.connect(func(): _on_delete(id, del))
+	if community:
+		_fill_game_levels()   # [COPIES DU JEU 1.92]
+
+
+## [COPIES DU JEU 1.92] Sous la Communauté : « — Niveaux du jeu — ». Choix de
+## l'équipe : TOUS les niveaux du jeu se copient, même le Gruyère et L'Œuf.
+## ▶ lance le vrai niveau (record, médaille et fantôme du jeu) ; « Copier
+## pour modifier » met une copie dans « Mes niveaux » et l'ouvre dans le
+## créateur (le niveau du jeu ne change jamais).
+func _fill_game_levels() -> void:
+	var games := DrawnLevel.list_game_levels()
+	if games.is_empty():
+		return
+	var sep := Label.new()
+	sep.text = "—  Niveaux du jeu  —"
+	sep.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	sep.add_theme_font_size_override("font_size", 19)
+	sep.add_theme_color_override("font_color", Color(0.75, 0.88, 1.0))
+	sep.name = "NiveauxDuJeu"
+	_list.add_child(sep)
+	for g in games:
+		var row := HBoxContainer.new()
+		row.add_theme_constant_override("separation", 8)
+		_list.add_child(row)
+		var data := DrawnLevel.game_level_data(g.slug)
+		if not data.is_empty():
+			var th := TextureRect.new()
+			th.texture = DrawnLevel.thumbnail(data)   # (gardée en cache comme les autres)
+			th.custom_minimum_size = Vector2(DrawnLevel.THUMB_SIZE) * Vector2(1.05, 1.05)
+			th.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+			th.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+			th.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+			th.name = "Miniature"
+			row.add_child(th)
+		# record du VRAI niveau (même chemin que dans la sélection des niveaux)
+		var scene: String = g.scene
+		var text: String = "▶  " + str(g.name) + "  ·  niveau du jeu"
+		if g.type == "tricks":
+			text += "  ·  ✦ défi"
+			var pts: int = RaceManager.get_best_score(scene)
+			if pts > 0:
+				text += "  ·  %d pts" % pts
+		else:
+			var best: float = RaceManager.get_best_time(scene)
+			if best >= 0.0:
+				text += "  ·  " + RaceManager.format_time(best)
+		var play := _button(text, row, 0)
+		play.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		play.alignment = HORIZONTAL_ALIGNMENT_LEFT
+		play.clip_text = true
+		var badge = preload("res://src/ui/MedalBadge.gd").new()
+		badge.set_anchors_preset(Control.PRESET_CENTER_RIGHT)
+		badge.offset_left = -38
+		badge.offset_right = -8
+		badge.offset_top = -15
+		badge.offset_bottom = 15
+		badge.medal = RaceManager.get_best_medal(scene)
+		play.add_child(badge)
+		play.pressed.connect(func(): get_tree().change_scene_to_file(scene))
+		var slug: String = g.slug
+		var cp := _button("Copier pour modifier", row, 200)
+		cp.name = "Copier_" + slug
+		cp.tooltip_text = "Une copie de ce niveau du jeu dans « Mes niveaux », à modifier comme tu veux (le niveau du jeu ne change pas)."
+		cp.pressed.connect(func(): _on_copy_game(slug))
+
+
+## [COPIES DU JEU 1.92] copie d'un niveau du jeu, ouverte dans le créateur
+func _on_copy_game(slug: String) -> void:
+	var new_id := DrawnLevel.copy_game_level(slug)
+	if new_id != "" and DrawnLevel.open_level(new_id):
+		get_tree().change_scene_to_file(DrawnLevel.EDITOR_SCENE)
 
 
 func _button(text: String, parent: Node, min_w: float) -> Button:

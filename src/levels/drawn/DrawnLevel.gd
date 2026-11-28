@@ -474,7 +474,9 @@ static func is_playable() -> bool:
 ## [GROTTE 1.87] Le niveau a-t-il au moins une caverne taillée ?
 static func has_carved() -> bool:
 	for o in objects:
-		if str(o.get("type", "")) == "carved":
+		# [COPIES DU JEU 1.92] un niveau copié peut n'avoir que des morceaux de
+		# glace et des cavernes (L'Œuf, le Gruyère) : jouable aussi, sans trait
+		if str(o.get("type", "")) in ["carved", "piece", "cave"]:
 			return true
 	return false
 
@@ -965,7 +967,15 @@ static func _validate(data: Dictionary) -> String:
 	if not (data.get("strokes") is Array) or not (data.get("hooks") is Array):
 		return "Code abîmé (dessin illisible)."
 	var strokes_in: Array = data.strokes
-	if strokes_in.is_empty() or strokes_in.size() > MAX_STROKES:
+	# [COPIES DU JEU 1.92] un niveau sans trait est accepté s'il a des blocs
+	# (tout en grotte depuis la 1.87, copies de L'Œuf / du Gruyère) : avant, son
+	# code était refusé (« vide ») alors qu'il se jouait très bien
+	var has_blocks := false
+	if data.get("objects") is Array:
+		for o in data.objects:
+			if o is Dictionary and str(o.get("t", "")) in ["carved", "piece", "cave"]:
+				has_blocks = true
+	if (strokes_in.is_empty() and not has_blocks) or strokes_in.size() > MAX_STROKES:
 		return "Ce niveau est vide ou trop grand."
 	var n := 0
 	for flat in strokes_in:
@@ -1281,7 +1291,8 @@ const VALID_TYPES := ["egg", "boost", "start", "finish", "checkpoint", "sign", "
 	"carved",   # [TAILLÉE 1.85]
 	"balcony", "stal", "cliff",   # [FORMES 2 1.86]
 	"void", "pillars", "bigegg", "endless",   # [GROS BLOCS 1.89]
-	"bridge"]   # [RÈGLES 1.90] pont magique du mode enfant
+	"bridge",   # [RÈGLES 1.90] pont magique du mode enfant
+	"piece"]   # [COPIES DU JEU 1.92] morceau de glace copié d'un niveau du jeu
 ## Types dont il ne peut y avoir qu'un seul exemplaire
 const UNIQUE_TYPES := ["start", "finish"]
 
@@ -1464,7 +1475,8 @@ const SHAPE_TYPES := ["ramp", "halfpipe", "bowl", "slope", "bend", "upipe", "cei
 	# [FORMES 2 1.86] 2e partie des formes du terrain (voir la partie 13)
 	"balcony", "stal", "cliff",
 	# [GROS BLOCS 1.89] derniers gros blocs (voir la partie 15)
-	"void", "pillars", "bigegg", "endless"]
+	"void", "pillars", "bigegg", "endless",
+	"piece"]   # [COPIES DU JEU 1.92] morceau de glace copié d'un niveau du jeu (voir la partie 18)
 ## Réglages par défaut (taille « Moyen »)
 const SHAPE_DEFAULTS := {
 	"ramp": {"w": 640.0, "h": 240.0, "lip": 32.0},
@@ -1496,6 +1508,9 @@ const SHAPE_DEFAULTS := {
 	"pillars": {"w": 1350.0, "gap": 600.0, "count": 3.0, "guides": true},
 	"bigegg": {"w": 9000.0, "h": 5000.0},
 	"endless": {"type": -1.0, "seed": 1.0, "island": 3000.0},
+	# [COPIES DU JEU 1.92] morceau de glace copié : contour (x0, y0, x1, y1…
+	# en coordonnées locales, origine = coin haut-gauche) et accrochable ou non
+	"piece": {"pts": [], "hook": true},
 }
 ## Tailles toutes faites du mode Simple : facteur sur la largeur et la hauteur
 const SHAPE_PRESETS := {"Petit": 0.6, "Moyen": 1.0, "Grand": 1.6}
@@ -1617,6 +1632,22 @@ static func shape_geometry(o: Dictionary, bottom: float = INF) -> Dictionary:
 	var extra: Array = []     # [GROS BLOCS 1.89] autres morceaux {poly, top, hook} (locaux)
 	var eggs: Array = []      # [GROS BLOCS 1.89] œufs à grappiner (positions locales)
 	match t:
+		"piece":
+			# [COPIES DU JEU 1.92] morceau de glace copié d'un niveau du jeu
+			# (voir la partie 18) : contour tel quel ; la neige se pose sur les
+			# bords tournés vers le haut (la plus longue ligne = « top », les
+			# autres = morceaux sans contour, bordure seule)
+			poly = piece_points(o)
+			var chains: Array = _piece_cache_of(o).tops
+			if not chains.is_empty():
+				top = chains[0]
+				for k in range(1, chains.size()):
+					extra.append({"poly": PackedVector2Array(), "top": chains[k], "hook": true})
+			entry = Vector2.INF
+			var fr := Rect2(poly[0], Vector2.ZERO) if poly.size() > 0 else Rect2()
+			for q in poly:
+				fr = fr.expand(q)
+			frame = fr
 		"void", "pillars", "bigegg", "endless":
 			# [GROS BLOCS 1.89] voir la partie 15
 			var bg := big_block_geometry(o, SHAPE_DEPTH)
@@ -1980,6 +2011,7 @@ static func make_cave_generator(o: Dictionary) -> Node2D:
 	g.sinuous_amp = shape_prop(o, "amp")
 	g.sinuous_wave = shape_prop(o, "wave")
 	g.max_attempts = 500   # (voir CaveGenerator.max_attempts)
+	_apply_cave_cfg(g, o)   # [COPIES DU JEU 1.92] caverne du Gruyère copiée telle quelle
 	return g
 
 
@@ -1989,6 +2021,8 @@ static func make_cave_generator(o: Dictionary) -> Node2D:
 static func cave_data(o: Dictionary) -> Dictionary:
 	var key := "%d|%d|%d|%d|%d|%.0f|%.2f" % [int(shape_prop(o, "seed")), int(shape_prop(o, "columns")), int(shape_prop(o, "lanes")),
 		int(shape_prop(o, "entry")), int(shape_prop(o, "exit")), shape_prop(o, "amp"), shape_prop(o, "wave")]
+	if o.props.get("cfg") is Dictionary:
+		key += "|" + JSON.stringify(o.props.cfg)   # [COPIES DU JEU 1.92]
 	if _cave_cache.has(key):
 		return _cave_cache[key]
 	var g = make_cave_generator(o)
@@ -2619,6 +2653,13 @@ static func carved_default_ends() -> Array:
 			if str(o.get("type", "")) == "carved":
 				var g := shape_geometry(o)
 				return [g.entry + Vector2(0, -120), g.exit + Vector2(0, -120)]
+		# [COPIES DU JEU 1.92] seulement des morceaux / cavernes : départ au-dessus
+		# du bord gauche du niveau, arrivée au bord droit (sécurité : les copies
+		# ont toujours un objet Départ et un objet Arrivée)
+		var b := level_bounds()
+		if b.size != Vector2.ZERO:
+			return [b.position + Vector2(200, -200), Vector2(b.end.x - 200, b.position.y - 200)]
+		return [Vector2.ZERO, Vector2(2000, 0)]
 	return [first, last]
 
 
@@ -3045,6 +3086,11 @@ static func clean_rules(r) -> Dictionary:
 		f = clampf(snappedf(f, 15.0), TRICKS_TIME_MIN, TRICKS_TIME_MAX)
 		if f != TRICKS_TIME_DEFAULT:
 			out["time"] = f
+	# [COPIES DU JEU 1.92] pas de piste de freinage ni de murs aux bouts (les
+	# niveaux du jeu copiés ont leurs propres bouts : tremplin du départ,
+	# half-pipe de l'arrivée). Absent = comme avant (même empreinte).
+	if r.get("runout", true) is bool and r.get("runout", true) == false:
+		out["runout"] = false
 	return out
 
 
@@ -3513,3 +3559,214 @@ static func _dot(img: Image, p: Vector2, c: Color) -> void:
 			var y := int(p.y) + dy
 			if x >= 0 and y >= 0 and x < img.get_width() and y < img.get_height():
 				img.set_pixel(x, y, c)
+
+
+
+# --- 18. [COPIES DU JEU 1.92] Copier les niveaux officiels du jeu --------------------
+# Choix de l'équipe (28/11) : on peut copier TOUS les niveaux du jeu, même le
+# Gruyère et L'Œuf, pour les modifier dans le créateur. Le niveau d'origine
+# ne change jamais : on part d'une COPIE dans « Mes niveaux » (comme
+# « Copier pour modifier » de la Communauté, 1.91).
+#
+# Comment un niveau du jeu devient un niveau du créateur (LevelCopier.gd) :
+#  - les sols (sol.tscn, tremplin du départ) deviennent des TRAITS quand rien
+#    n'est dessous (un trait descend jusqu'au fond commun) ;
+#  - tout le reste du terrain (sols empilés, half-pipe de l'arrivée, roche de
+#    L'Œuf, piliers et balcons du Gruyère…) devient des MORCEAUX DE GLACE
+#    (type « piece ») : le contour exact, posé tel quel ;
+#  - les cavernes du Gruyère deviennent des objets « Caverne » avec leurs
+#    réglages d'origine (props.cfg : entrées, sorties, angles…) ;
+#  - prises (poissons, boules de glace) -> prises de grappin ; œufs du
+#    Gruyère -> objets « Œuf » ; boosts, décors, départ, arrivée, points de
+#    passage -> les objets du créateur.
+# Les copies sont calculées UNE fois (tools/copie_niveaux_jeu.gd) et rangées
+# dans GAME_COPY_DIR : copier un niveau dans le jeu est instantané.
+
+## Dossier des niveaux du jeu prêts à copier (un fichier JSON par niveau)
+const GAME_COPY_DIR := "res://src/levels/drawn/jeu"
+## Points au plus dans le contour d'un morceau copié (codes reçus compris)
+const PIECE_MAX_POINTS := 4000
+## Un bord est « un dessus » (neige) si sa normale vers l'extérieur monte
+## d'au moins ça (0,35 : pente de moins de ~70°)
+const PIECE_TOP_NORMAL := 0.35
+
+
+## Contour LOCAL d'un morceau copié (props.pts, x0, y0, x1, y1…), à sa taille.
+## Les nombres illisibles sont sautés ; trop de points = morceau vide.
+static func piece_points(o: Dictionary) -> PackedVector2Array:
+	return _piece_cache_of(o).poly
+
+
+## Cache d'un morceau copié, rangé DANS l'objet (clé "_c", jamais écrite dans
+## les fichiers : _drawing_data ne garde que t, x, y, r, s, p) : contour local,
+## lignes du dessus et triangles. Un gros morceau (704 : 1 700 points) coûtait
+## ~60 ms par image à trianguler dans l'éditeur. Valable tant que le contour
+## (même tableau) et la taille ne changent pas.
+static func _piece_cache_of(o: Dictionary) -> Dictionary:
+	var flat = o.props.get("pts", [])
+	var sc: float = float(o.get("scale", 1.0))
+	var c = o.get("_c")
+	if c is Dictionary and is_same(c.src, flat) and c.sc == sc:
+		return c
+	var poly := _piece_points_raw(o)
+	c = {"src": flat, "sc": sc, "poly": poly, "tops": piece_tops(poly),
+		"tris": Geometry2D.triangulate_polygon(poly) if poly.size() >= 3 else PackedInt32Array()}
+	o["_c"] = c
+	return c
+
+
+## Triangles du contour d'un morceau (indices dans piece_points / shape_geometry().poly)
+static func piece_tris(o: Dictionary) -> PackedInt32Array:
+	return _piece_cache_of(o).tris
+
+
+static func _piece_points_raw(o: Dictionary) -> PackedVector2Array:
+	var out := PackedVector2Array()
+	var flat = o.props.get("pts", [])
+	if not (flat is Array) or (flat as Array).size() < 6 or (flat as Array).size() > PIECE_MAX_POINTS * 2:
+		return out
+	var sc: float = clampf(float(o.get("scale", 1.0)), 0.1, 10.0)
+	for i in range(0, (flat as Array).size() - 1, 2):
+		var a = flat[i]
+		var b = flat[i + 1]
+		if typeof(a) in [TYPE_FLOAT, TYPE_INT] and typeof(b) in [TYPE_FLOAT, TYPE_INT]:
+			var x := float(a)
+			var y := float(b)
+			if is_finite(x) and is_finite(y) and absf(x) < COORD_MAX and absf(y) < COORD_MAX:
+				out.append(Vector2(x, y) * sc)
+	return out if out.size() >= 3 else PackedVector2Array()
+
+
+## Lignes « dessus » d'un contour fermé : suites de bords dont la normale
+## extérieure monte (neige d'IceStyle). La plus longue en premier.
+static func piece_tops(poly: PackedVector2Array) -> Array:
+	var n := poly.size()
+	if n < 3:
+		return []
+	# sens du contour (aire signée, y vers le bas) : > 0 = sens des aiguilles
+	# d'une montre à l'écran -> normale extérieure (d.y, -d.x)
+	var area := 0.0
+	for i in n:
+		var a: Vector2 = poly[i]
+		var b: Vector2 = poly[(i + 1) % n]
+		area += a.x * b.y - b.x * a.y
+	var up := PackedByteArray()
+	up.resize(n)
+	for i in n:
+		var d: Vector2 = poly[(i + 1) % n] - poly[i]
+		if d.length() < 0.01:
+			up[i] = 0
+			continue
+		d = d.normalized()
+		var nrm := Vector2(d.y, -d.x) if area > 0.0 else Vector2(-d.y, d.x)
+		up[i] = 1 if nrm.y < -PIECE_TOP_NORMAL else 0
+	# on démarre juste après un bord qui n'est pas un dessus (pour ne pas
+	# couper une ligne en deux au point n° 0)
+	var start := -1
+	for i in n:
+		if up[i] == 0:
+			start = (i + 1) % n
+			break
+	if start == -1:
+		var all := PackedVector2Array(poly)
+		all.append(poly[0])
+		return [all]
+	var chains: Array = []
+	var cur := PackedVector2Array()
+	for k in n:
+		var i := (start + k) % n
+		if up[i] == 1:
+			if cur.is_empty():
+				cur.append(poly[i])
+			cur.append(poly[(i + 1) % n])
+		elif not cur.is_empty():
+			chains.append(cur)
+			cur = PackedVector2Array()
+	if not cur.is_empty():
+		chains.append(cur)
+	chains.sort_custom(func(p, q): return (p as PackedVector2Array).size() > (q as PackedVector2Array).size())
+	return chains
+
+
+## Réglages d'origine d'une caverne du Gruyère copiée (props.cfg) : entrées,
+## sorties, angles et rayons des virages, style des balcons. Valeurs bornées
+## (un code reçu ne peut pas fabriquer une caverne folle).
+static func _apply_cave_cfg(g, o: Dictionary) -> void:
+	var cfg = o.props.get("cfg")
+	if not (cfg is Dictionary):
+		return
+	var ints := func(key: String, lo: int, hi: int) -> Array:
+		var out: Array = []
+		var v = cfg.get(key, [])
+		if v is Array:
+			for x in (v as Array).slice(0, 6):
+				if typeof(x) in [TYPE_FLOAT, TYPE_INT] and is_finite(float(x)):
+					out.append(clampi(int(x), lo, hi))
+		return out
+	var floats := func(key: String, lo: float, hi: float) -> Array:
+		var out: Array = []
+		var v = cfg.get(key, [])
+		if v is Array:
+			for x in (v as Array).slice(0, 6):
+				if typeof(x) in [TYPE_FLOAT, TYPE_INT] and is_finite(float(x)):
+					out.append(clampf(float(x), lo, hi))
+		return out
+	var e: Array = ints.call("entries", 0, 4)
+	var x: Array = ints.call("exits", 0, 4)
+	if e.is_empty() or x.is_empty():
+		return
+	g.entry_lanes.assign(e)
+	g.exit_lanes.assign(x)
+	g.entry_angles.assign(floats.call("theta", -90.0, 90.0))
+	g.exit_angles.assign(floats.call("phi", -90.0, 90.0))
+	g.entry_radii.assign(floats.call("theta_r", 0.0, 3000.0))
+	g.exit_radii.assign(floats.call("phi_r", 0.0, 3000.0))
+	var br = cfg.get("bend_r", 1400.0)
+	if typeof(br) in [TYPE_FLOAT, TYPE_INT] and is_finite(float(br)):
+		g.entry_bend_radius = clampf(float(br), 300.0, 3000.0)
+	var cols = cfg.get("columns", g.columns)
+	if typeof(cols) in [TYPE_FLOAT, TYPE_INT] and is_finite(float(cols)):
+		g.columns = clampi(int(cols), 3, 12)
+	var bs = cfg.get("balcony", 0)
+	if typeof(bs) in [TYPE_FLOAT, TYPE_INT] and is_finite(float(bs)):
+		g.balcony_style = clampi(int(bs), 0, 3)
+	g.sinuous_amp = 0.0   # (le Gruyère garde des cavernes plates)
+
+
+## Niveaux du jeu prêts à copier : [{slug, name, order, type, scene}]
+static func list_game_levels() -> Array:
+	var out: Array = []
+	var dir := DirAccess.open(GAME_COPY_DIR)
+	if dir == null:
+		return out
+	var seen := {}
+	for file in dir.get_files():
+		# (jeu exporté : « x.json.remap » / « .import » possibles, comme list_official)
+		var base := file.replace(".remap", "").replace(".import", "")
+		if not base.ends_with(".json") or seen.has(base):
+			continue
+		seen[base] = true
+		var data = _read_file(GAME_COPY_DIR.path_join(base))
+		if not (data is Dictionary):
+			continue
+		out.append({"slug": base.get_basename(), "name": str(data.get("name", base.get_basename())),
+			"order": int(data.get("order", 999)), "scene": str(data.get("scene", "")),
+			"type": str(clean_rules(data.get("rules", {})).get("type", "course"))})
+	out.sort_custom(func(a, b): return a.order < b.order or (a.order == b.order and a.name < b.name))
+	return out
+
+
+## Données d'un niveau du jeu prêt à copier ({} s'il n'existe pas)
+static func game_level_data(slug: String) -> Dictionary:
+	var d = _read_file(GAME_COPY_DIR.path_join(slug + ".json"))
+	return d if d is Dictionary else {}
+
+
+## Copie un niveau du jeu dans « Mes niveaux » (« d'après <nom> · Pinpouin ») ;
+## renvoie l'id de la copie ("" si le niveau n'existe pas)
+static func copy_game_level(slug: String) -> String:
+	var d := game_level_data(slug)
+	if d.is_empty():
+		return ""
+	d["based_on"] = {"name": str(d.get("name", slug)), "author": str(d.get("author", "Pinpouin"))}
+	return copy_to_mine(d)

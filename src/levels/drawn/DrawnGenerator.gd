@@ -68,15 +68,20 @@ func _ready() -> void:
 	# s'arrêtait sur la piste, au-dessus du trou). Elle part maintenant du bout
 	# de la dernière forme collée, en îlot à part.
 	var chain_p: Vector2 = DrawnLevel.chain_end(finish_pos)
+	# [COPIES DU JEU 1.92] règle « runout » à faux (niveaux du jeu copiés) :
+	# ni piste de freinage ni murs aux bouts, le niveau a ses propres bouts
+	# (tremplin du départ, half-pipe et podium de l'arrivée)
+	var open_ends: bool = DrawnLevel.rules.get("runout", true) == false
 	var runout := PackedVector2Array(last) if chain_p == finish_pos else PackedVector2Array([chain_p])
-	var steps: int = int(DrawnLevel.RUNOUT_LENGTH / DrawnLevel.RESAMPLE_STEP)
-	for k in range(1, steps + 1):
-		var dx: float = k * DrawnLevel.RESAMPLE_STEP
-		runout.append(chain_p + Vector2(dx, dx * RUNOUT_SLOPE))
-	if chain_p == finish_pos:
-		_islands[_islands.size() - 1] = runout
-	else:
-		_islands.append(runout)
+	if not open_ends:
+		var steps: int = int(DrawnLevel.RUNOUT_LENGTH / DrawnLevel.RESAMPLE_STEP)
+		for k in range(1, steps + 1):
+			var dx: float = k * DrawnLevel.RESAMPLE_STEP
+			runout.append(chain_p + Vector2(dx, dx * RUNOUT_SLOPE))
+		if chain_p == finish_pos:
+			_islands[_islands.size() - 1] = runout
+		else:
+			_islands.append(runout)
 
 	# 2. Un bloc de glace par îlot, jusqu'au fond commun
 	var bottom: float = DrawnLevel.floor_y(_islands)
@@ -98,9 +103,10 @@ func _ready() -> void:
 	# 4. Murs : avant le départ (on ne recule pas dans le vide) et au bout de
 	#    la piste de freinage
 	var first: PackedVector2Array = _islands[0]
-	_add_wall(Vector2(first[0].x - 80.0, first[0].y - 1500.0), Vector2(80, 3000))
-	var end_p: Vector2 = runout[runout.size() - 1]
-	_add_wall(Vector2(end_p.x, end_p.y - 1500.0), Vector2(80, 3000))
+	if not open_ends:   # [COPIES DU JEU 1.92] (voir plus haut)
+		_add_wall(Vector2(first[0].x - 80.0, first[0].y - 1500.0), Vector2(80, 3000))
+		var end_p: Vector2 = runout[runout.size() - 1]
+		_add_wall(Vector2(end_p.x, end_p.y - 1500.0), Vector2(80, 3000))
 
 	# 4b. [OBJETS 1.81] objets posés dans le créateur
 	_build_objects()
@@ -222,6 +228,7 @@ const EGG_RY = 170.0
 const EGG_COLOR := Color(0.86, 0.95, 1.0, 1)
 var boost_res = preload("res://src/levels/boost/BoostArea.tscn")
 var _checkpoints: Array = []   # positions des points de passage
+var _checkpoint_speed: Array = []   # [COPIES DU JEU 1.92] élan à la reprise de chacun
 var _cp := -1                  # dernier point de passage atteint (-1 = aucun)
 var _cameras: Array = []       # zones de caméra : [{rect: Rect2, zoom}]
 var _in_camera := false
@@ -242,6 +249,10 @@ func _build_objects() -> void:
 				add_child(b)
 			"checkpoint":
 				_checkpoints.append(o.pos)
+				# [COPIES DU JEU 1.92] élan à la reprise (px/s, vers la droite) :
+				# 400 par défaut comme avant ; le Gruyère et L'Œuf relancent plus
+				# vite avant un trou (sinon on ne repasse jamais le saut)
+				_checkpoint_speed.append(clampf(float(o.props.get("speed", 400.0)), 0.0, 1200.0))
 				_add_flag(o.pos)
 			"sign":
 				var spr := Sprite2D.new()
@@ -351,7 +362,8 @@ func _add_shape(o: Dictionary) -> void:
 		return
 	var g := DrawnLevel.shape_geometry(o, _bottom)
 	# plafond lisse = non accrochable (comme la roche des cavernes)
-	_shape_body(g.poly, g.top, not (o.type == "ceiling" and DrawnLevel.shape_prop(o, "hook") < 0.5))
+	# [COPIES DU JEU 1.92] un morceau copié peut aussi être non accrochable
+	_shape_body(g.poly, g.top, not (o.type in ["ceiling", "piece"] and DrawnLevel.shape_prop(o, "hook") < 0.5))
 	# [GROS BLOCS 1.89] autres morceaux du bloc (piliers, rampe d'accueil de la
 	# zone de vide, île d'arrivée du tronçon, plafonds-guides lisses…) :
 	# construits de la même façon ; un morceau sans contour (poly vide) n'est
@@ -554,7 +566,7 @@ func respawn_sample(_pos: Vector2):
 		return {"pos": _cave_cp.pos, "vel": Vector2(500, 0)}   # [CAVERNE 1.84] dernier carrefour
 	if _cp < 0:
 		return null
-	return {"pos": _checkpoints[_cp] + Vector2(0, -60), "vel": Vector2(400, 0)}
+	return {"pos": _checkpoints[_cp] + Vector2(0, -60), "vel": Vector2(_checkpoint_speed[_cp], 0)}
 
 
 ## [CRÉATEUR v2 1.80] Donne la vitesse de départ de « Tester d'ici » au
