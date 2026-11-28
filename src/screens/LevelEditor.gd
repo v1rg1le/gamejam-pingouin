@@ -384,6 +384,11 @@ func _draw_ghost(z: float) -> void:
 			poly = Transform2D(0.0, o.pos) * poly
 		if poly.size() >= 3 and not Geometry2D.triangulate_polygon(poly).is_empty():
 			draw_colored_polygon(poly, Color(ICE_COLOR, a))
+		if o.type in DrawnLevel.BIG_BLOCKS:   # [GROS BLOCS 1.89] autres morceaux
+			for ex in DrawnLevel.shape_geometry(o).extra:
+				var ep: PackedVector2Array = ex.poly
+				if ep.size() >= 3 and not Geometry2D.triangulate_polygon(ep).is_empty():
+					draw_colored_polygon(ep, Color(ICE_COLOR, a))
 		var closed := PackedVector2Array(poly)
 		if poly.size() > 0:
 			closed.append(poly[0])
@@ -1005,6 +1010,10 @@ func _drag_update(wp: Vector2) -> void:
 			if h.type == "carved":
 				# [GROTTE 1.87] un bloc à creuser s'étire jusqu'à la taille d'un niveau
 				h.props[_drag] = clampf(v, DrawnLevel.CARVED_MIN, DrawnLevel.CARVED_MAX_W if _drag == "w" else DrawnLevel.CARVED_MAX_H)
+			elif h.type in DrawnLevel.BIG_BLOCKS:
+				# [GROS BLOCS 1.89] bornes propres à chaque gros bloc (shape_prop)
+				h.props[_drag] = v
+				h.props[_drag] = DrawnLevel.shape_prop(h, _drag)
 			else:
 				h.props[_drag] = clampf(v, DrawnLevel.SHAPE_MIN, DrawnLevel.SHAPE_MAX)
 		"scale":
@@ -2180,8 +2189,8 @@ const PALETTE := [
 	# [CAVERNE 1.84] demande de l'équipe (28/11) : cavernes d'abord — caverne
 	# générée (sinueuse) en 1.84, caverne taillée à la main en 1.85 ; le reste
 	# est décalé (balcon, stalactite, falaise 1.86 ; autres gros blocs 1.87)
-	["Gros blocs", [["cave", "Caverne", ""], ["carved", "Caverne taillée", ""], ["void", "Zone de vide", "1.89"],
-		["pillars", "Motif piliers", "1.89"], ["bigegg", "Grand œuf", "1.89"], ["endless", "Tronçon du Sans fin", "1.89"]]],
+	["Gros blocs", [["cave", "Caverne", ""], ["carved", "Caverne taillée", ""], ["void", "Zone de vide", ""],
+		["pillars", "Motif piliers", ""], ["bigegg", "Grand œuf", ""], ["endless", "Tronçon du Sans fin", ""]]],   # [GROS BLOCS 1.89] tous prêts
 ]
 
 ## [ICÔNES PARTOUT 1.87] Icône et bulle de chaque onglet de la palette
@@ -2190,7 +2199,7 @@ const PALETTE_TAB_WORDS := ["Objets", "Terrain", "Décor", "Blocs"]   # [UX 1.88
 const PALETTE_TAB_TIPS := ["Prises, œufs, boosts, départ, arrivée, points de passage, panneaux, zones de caméra.",
 	"Sol et formes du terrain : tremplins, half-pipes, plafonds, balcons, falaises…",
 	"Décors : arche, podium, buisson, igloo, Colisée, blocs de glace.",
-	"Gros blocs : cavernes générées et cavernes taillées à la main."]
+	"Gros blocs : cavernes générées ou taillées, zone de vide, piliers, grand œuf, tronçons du Sans fin."]
 
 
 ## [ICÔNES 1.82] Bulle de chaque case de la palette (ce que fait l'élément)
@@ -2217,8 +2226,11 @@ const PALETTE_TIPS := {
 	"arch": "L'arche de glace.", "podium": "Le podium FIN.", "bush": "Un buisson enneigé.", "igloo": "Un igloo.",
 	"colisee": "Le Colisée de glace.", "ice1": "Un bloc de glace.", "ice2": "Un autre bloc de glace.", "ice3": "Un petit bloc de glace.",
 	"cave": "Une caverne générée par une graine : galeries qui montent et descendent, routes qui se croisent, sans cul-de-sac. 🎲 pour en tirer une autre.",
-	"carved": "Un bloc de glace (rectangle, œuf, rond, montagne ou forme libre) à creuser toi-même : tracer la galerie, pioche, truelle.", "void": "Une zone de vide avec échelle d'œufs.",
-	"pillars": "Le motif piliers du Gruyère.", "bigegg": "Le grand œuf de L'Œuf.", "endless": "Un tronçon du Sans fin.",
+	"carved": "Un bloc de glace (rectangle, œuf, rond, montagne ou forme libre) à creuser toi-même : tracer la galerie, pioche, truelle.", # [GROS BLOCS 1.89]
+	"void": "Une zone de vide comme dans le Gruyère : tremplin, grand trou, rampe d'accueil plus bas, et une échelle d'œufs pour monter au balcon d'en face.",
+	"pillars": "Le motif piliers du Gruyère : des piliers en vague séparés par des trous, avec des plafonds-guides lisses au-dessus.",
+	"bigegg": "Le grand œuf complet de L'Œuf : coquille de glace, fente sur le dessus, half-pipe dedans. Le grappin s'accroche partout.",
+	"endless": "Un tronçon du Sans fin : île en pente, puis un trou du type choisi (saut, grappin, plafond…) ou au hasard (🎲).",
 }
 
 
@@ -2412,7 +2424,8 @@ const OBJ_NAMES := {"egg": "Œuf à grappiner", "boost": "Boost", "start": "Dép
 	"upipe": "Virage en U", "ceiling": "Plafond", "floating": "Plateforme flottante", "wall": "Mur", "pillar": "Pilier",
 	"cave": "Caverne",   # [CAVERNE 1.84]
 	"carved": "Caverne taillée",   # [TAILLÉE 1.85]
-	"balcony": "Balcon de glace", "stal": "Plateforme-stalactite", "cliff": "Falaise"}   # [FORMES 2 1.86]
+	"balcony": "Balcon de glace", "stal": "Plateforme-stalactite", "cliff": "Falaise",   # [FORMES 2 1.86]
+	"void": "Zone de vide", "pillars": "Motif piliers", "bigegg": "Grand œuf", "endless": "Tronçon du Sans fin"}   # [GROS BLOCS 1.89]
 const EGG_STYLE_NAMES := ["", "glace", "tacheté", "craquelé", "bonnet de neige", "bébé Pinpouin"]
 ## Types qu'on peut tourner (les autres restent droits)
 const ROTATABLE := ["egg", "boost", "arch", "podium", "bush", "igloo", "colisee", "ice1", "ice2", "ice3",
@@ -2580,23 +2593,28 @@ func _draw_objects(z: float, font: Font, fs: int) -> void:
 
 ## Formes dont la hauteur `h` se compte vers le BAS (creusées, ou qui pendent)
 const SHAPE_H_DOWN := ["halfpipe", "bowl", "ceiling", "floating", "pillar", "carved",
-	"balcony", "stal"]   # [FORMES 2 1.86] épaisseur comptée vers le bas
+	"balcony", "stal",   # [FORMES 2 1.86] épaisseur comptée vers le bas
+	"void", "bigegg"]   # [GROS BLOCS 1.89] chute de la zone de vide, hauteur de l'œuf
 ## Dimensions étirables de chaque forme
 const SHAPE_STRETCH := {"ramp": ["w", "h"], "halfpipe": ["w", "h"], "bowl": ["w", "h"], "slope": ["w", "h"],
 	"bend": ["w"], "upipe": ["h"], "ceiling": ["w", "h"], "floating": ["w", "h"], "wall": ["w", "h"], "pillar": ["w", "h"],
 	"cave": [],   # [CAVERNE 1.84] taille réglée par la longueur et les étages
 	"carved": ["w", "h"],   # [TAILLÉE 1.85] taille du bloc
-	"balcony": ["w", "h"], "stal": ["w", "h"], "cliff": ["w", "h"]}   # [FORMES 2 1.86]
+	"balcony": ["w", "h"], "stal": ["w", "h"], "cliff": ["w", "h"],   # [FORMES 2 1.86]
+	# [GROS BLOCS 1.89] (le tronçon du Sans fin se règle par sa longueur d'île)
+	"void": ["w", "h"], "pillars": ["w"], "bigegg": ["w", "h"], "endless": []}
 ## Nom du réglage `h` selon la forme
 const SHAPE_H_NAME := {"halfpipe": "Profondeur", "bowl": "Profondeur", "ceiling": "Épaisseur", "floating": "Épaisseur",
 	"upipe": "Diamètre", "pillar": "Hauteur",
-	"balcony": "Épaisseur", "stal": "Épaisseur", "cliff": "Hauteur"}   # [FORMES 2 1.86]
+	"balcony": "Épaisseur", "stal": "Épaisseur", "cliff": "Hauteur",   # [FORMES 2 1.86]
+	"void": "Chute"}   # [GROS BLOCS 1.89]
 ## [ICÔNES PARTOUT 1.87] Icône de chaque taille toute faite
 const PRESET_ICONS := {"Petit": "taille_petit", "Moyen": "taille_moyen", "Grand": "taille_grand",
 	"Petite": "taille_petit", "Moyenne": "taille_moyen", "Grosse": "taille_grand",
 	"Étroite": "galerie_etroite", "Normale": "galerie_normale", "Large": "galerie_large"}
 ## [FORMES 2 1.86] Nom du réglage `w` quand ce n'est pas une largeur
-const SHAPE_W_NAME := {"bend": "Rayon", "balcony": "Longueur", "stal": "Longueur", "cliff": "Sommet"}
+const SHAPE_W_NAME := {"bend": "Rayon", "balcony": "Longueur", "stal": "Longueur", "cliff": "Sommet",
+	"void": "Trou", "pillars": "Pilier"}   # [GROS BLOCS 1.89]
 ## [FORMES 2 1.86] Série de plateformes-stalactites (bouton « Série ») :
 ## nombre de plateformes et montée d'une marche à l'autre (retenus d'une
 ## série à l'autre pendant la séance)
@@ -2627,8 +2645,11 @@ func _shape_handles(o: Dictionary, z: float) -> Dictionary:
 	# pour ne pas se superposer au losange
 	var rx: float = f.get_center().x if down else f.position.x + f.size.x * 0.2
 	out.rotate = xf * Vector2(rx, f.position.y - 80.0 / z)
-	if o.type in ["cave", "carved"]:
-		out.rotate = Vector2.INF   # [CAVERNE 1.84] une caverne ne se tourne pas
+	if o.type in ["cave", "carved"] or not (o.type in ROTATABLE):
+		# [CAVERNE 1.84] une caverne ne se tourne pas ; [GROS BLOCS 1.89] ni
+		# les formes hors de ROTATABLE (balcon, falaise, gros blocs) : plus de
+		# rond « tourner » qui ne faisait rien
+		out.rotate = Vector2.INF
 	var dims: Array = SHAPE_STRETCH.get(o.type, [])
 	if "w" in dims:
 		out.w = xf * Vector2(f.end.x + 45.0 / z, f.get_center().y if o.type != "bend" else -12.0 / z)
@@ -2657,6 +2678,27 @@ func _draw_shape(o: Dictionary, z: float) -> void:
 		else:
 			draw_colored_polygon(g.poly, fill)
 	draw_polyline(g.top, EDGE_COLOR, maxf(24.0, 5.0 / z), true)
+	# [GROS BLOCS 1.89] autres morceaux (plafonds-guides lisses en plus foncé,
+	# comme le plafond lisse) et œufs de l'échelle
+	for ex in g.extra:
+		var ep: PackedVector2Array = ex.poly
+		if ep.size() >= 3:
+			var c: Color = ICE_COLOR if ex.hook else ICE_COLOR.darkened(0.18)
+			if Geometry2D.triangulate_polygon(ep).is_empty():
+				draw_polyline(ep, c, 6.0 / z)
+			else:
+				draw_colored_polygon(ep, c)
+		if (ex.top as PackedVector2Array).size() >= 2:
+			draw_polyline(ex.top, EDGE_COLOR, maxf(24.0, 5.0 / z), true)
+	if not g.eggs.is_empty():
+		var et: Texture2D = _tex("res://sprites/levels/gruyere/oeuf_%s.png" % Settings.EGG_STYLES[1])
+		for e in g.eggs:
+			draw_set_transform_matrix(Transform2D(0.0, Vector2.ONE * 4.0, 0.0, e))
+			draw_texture(et, -et.get_size() * 0.5)
+		draw_set_transform_matrix(Transform2D.IDENTITY)
+	for hp in g.holds:
+		if o.type != "cliff":   # (les prises de la falaise sont déjà dessinées à part)
+			draw_colored_polygon(_ellipse(hp, HOOK_RX, HOOK_RY), Color(HOOK_COLOR, 0.85))
 	# [FORMES 2 1.86] glaçons sous les plateformes-stalactites (décor : en jeu,
 	# les mêmes images que dans L'Œuf)
 	for ic in g.icicles:
@@ -2675,9 +2717,15 @@ func _draw_shape(o: Dictionary, z: float) -> void:
 
 ## Sélection d'une forme : contour jaune + poignées (rond = tourner, losanges = étirer)
 func _draw_shape_selection(o: Dictionary, z: float) -> void:
-	var pts: PackedVector2Array = DrawnLevel.shape_geometry(o, _draw_bottom).poly
+	var sg := DrawnLevel.shape_geometry(o, _draw_bottom)
+	var pts: PackedVector2Array = sg.poly
 	pts.append(pts[0])
 	draw_polyline(pts, SELECT_COLOR, 5.0 / z, true)
+	for ex in sg.extra:   # [GROS BLOCS 1.89] les autres morceaux aussi
+		var ep: PackedVector2Array = ex.poly
+		if ep.size() >= 3:
+			ep.append(ep[0])
+			draw_polyline(ep, SELECT_COLOR, 5.0 / z, true)
 	var hd := _shape_handles(o, z)
 	var f: Rect2 = DrawnLevel.shape_geometry(o).frame
 	if hd.rotate != Vector2.INF:
@@ -2724,7 +2772,8 @@ func _shape_stats(o: Dictionary) -> Array:
 		parts.append("%s %d px" % [SHAPE_W_NAME.get(o.type, "Largeur"), int(DrawnLevel.shape_prop(o, "w"))])
 	if "h" in dims:
 		parts.append("%s %d px" % [SHAPE_H_NAME.get(o.type, "Hauteur"), int(DrawnLevel.shape_prop(o, "h"))])
-	lines.append("   ·   ".join(parts))
+	if not parts.is_empty():   # [GROS BLOCS 1.89] (le tronçon n'a pas de largeur à étirer)
+		lines.append("   ·   ".join(parts))
 	match str(o.type):
 		"ramp":
 			lines.append("Angle de sortie %d°" % int(DrawnLevel.shape_prop(o, "lip")))
@@ -2739,6 +2788,20 @@ func _shape_stats(o: Dictionary) -> Array:
 			lines.append("Dessous accrochable au grappin")
 		"cliff":
 			lines.append("Prise automatique au-dessus de la paroi" if DrawnLevel.shape_prop(o, "holds") > 0.5 else "Sans prise automatique")
+		# [GROS BLOCS 1.89]
+		"void":
+			var n := int(DrawnLevel.shape_prop(o, "eggs"))
+			lines.append("Pas d'œufs : on retombe sur la rampe d'en bas" if n == 0 else "%d œuf%s jusqu'au balcon d'en face" % [n, "s" if n > 1 else ""])
+		"pillars":
+			lines.append("%d piliers   ·   trous de %d px" % [int(DrawnLevel.shape_prop(o, "count")), int(DrawnLevel.shape_prop(o, "gap"))])
+			lines.append("Plafonds-guides lisses au-dessus des trous" if DrawnLevel.shape_prop(o, "guides") > 0.5 else "Sans plafonds-guides")
+		"bigegg":
+			lines.append("Fente sur le dessus, half-pipe dedans, accrochable partout")
+		"endless":
+			var ty := int(DrawnLevel.shape_prop(o, "type"))
+			var name: String = DrawnLevel.ENDLESS_TYPES[DrawnLevel.endless_type(o)]
+			lines.append(("Au hasard (graine %d) : %s" % [int(DrawnLevel.shape_prop(o, "seed")), name.to_lower()]) if ty < 0 else "Type : %s (graine %d)" % [name.to_lower(), int(DrawnLevel.shape_prop(o, "seed"))])
+			lines.append("Île de %d px" % int(DrawnLevel.shape_prop(o, "island")))
 	if absf(float(o.rot)) > 0.01:
 		lines.append("Tournée de %d°" % int(round(rad_to_deg(float(o.rot)))))
 	var g := DrawnLevel.shape_geometry(o)
@@ -2760,6 +2823,9 @@ func _shape_settings(col: VBoxContainer, o: Dictionary) -> void:
 		return
 	if t == "carved":
 		_carved_settings(col, o)   # [TAILLÉE 1.85]
+		return
+	if t in DrawnLevel.BIG_BLOCKS:
+		_big_settings(col, o)   # [GROS BLOCS 1.89]
 		return
 	var dims: Array = SHAPE_STRETCH.get(t, [])
 	# tailles toutes faites (choix de l'équipe : surtout pour le mode Simple ;
@@ -2798,6 +2864,73 @@ func _shape_settings(col: VBoxContainer, o: Dictionary) -> void:
 				_icon_toggle("accrochable", _icon_row(col), "Accrochable", "Stalactites dessous : le grappin s'y accroche (sinon plafond lisse).",
 					DrawnLevel.shape_prop(o, "hook") > 0.5, func(on): _set_obj("hook", on, true))
 		_slider_row(col, "Angle", -180.0, 180.0, 15.0 if magnet else 1.0, wrapf(rad_to_deg(o.rot), -180.0, 180.0), func(v): _set_obj("rot", deg_to_rad(v)))
+		_spin_row(col, "X", o.pos.x, func(v): _set_obj("pos", Vector2(v, DrawnLevel.objects[_sel.index].pos.y)))
+		_spin_row(col, "Y", o.pos.y, func(v): _set_obj("pos", Vector2(DrawnLevel.objects[_sel.index].pos.x, v)))
+
+
+# --- [GROS BLOCS 1.89] Réglages des derniers gros blocs ------------------------------
+# Choix de l'équipe (28/11) :
+#  - zone de vide : tailles toutes faites ET nombre d'œufs, en Simple aussi ;
+#  - tronçon du Sans fin : type choisi ou « au hasard », 🎲 pour un autre tirage
+#    (la graine fige le tirage : le même tronçon à chaque partie).
+# Le reste (largeur, chute, piliers…) en Expert, comme les autres formes.
+
+## Tailles toutes faites des gros blocs : [nom, {réglage: valeur}]
+const BIG_PRESETS := {
+	"void": [["Petite", {"w": 1700.0, "h": 700.0}], ["Moyenne", {"w": 2500.0, "h": 1100.0}], ["Grosse", {"w": 3400.0, "h": 1600.0}]],
+	"pillars": [["Petit", {"w": 1000.0, "gap": 450.0}], ["Moyen", {"w": 1350.0, "gap": 600.0}], ["Grand", {"w": 1800.0, "gap": 800.0}]],
+	"bigegg": [["Petit", {"w": 6000.0, "h": 3400.0}], ["Moyen", {"w": 9000.0, "h": 5000.0}], ["Grand", {"w": 13000.0, "h": 7000.0}]],
+	"endless": [["Petit", {"island": 1800.0}], ["Moyen", {"island": 3000.0}], ["Grand", {"island": 5000.0}]],
+}
+
+
+func _big_settings(col: VBoxContainer, o: Dictionary) -> void:
+	var t: String = o.type
+	_legend(col, "Tailles toutes faites", "")
+	var row := _icon_row(col)
+	for preset in BIG_PRESETS[t]:
+		var vals: Dictionary = preset[1]
+		var b := _icon_choice(PRESET_ICONS[preset[0]], row, preset[0], "Taille toute faite (%s)." % str(preset[0]).to_lower())
+		b.pressed.connect(func():
+			_push_undo()
+			var it: Dictionary = DrawnLevel.objects[_sel.index]
+			for k in vals:
+				it.props[k] = vals[k]
+			_snap_flash(DrawnLevel.snap_shape(_sel.index))
+			_changed()
+			_rebuild_settings())
+	match t:
+		"void":
+			_slider_row(col, "Œufs", 0, 4, 1, DrawnLevel.shape_prop(o, "eggs"), func(v): _set_obj("eggs", float(v), true),
+				func(v): return "aucun" if int(v) == 0 else "%d" % int(v))
+			if expert:
+				_slider_row(col, "Trou", 1200.0, 4500.0, 50.0, DrawnLevel.shape_prop(o, "w"), func(v): _set_obj("w", v, true), func(v): return "%d px" % int(v))
+				_slider_row(col, "Chute", 0.0, 2500.0, 50.0, DrawnLevel.shape_prop(o, "h"), func(v): _set_obj("h", v, true), func(v): return "%d px" % int(v))
+		"pillars":
+			_slider_row(col, "Piliers", 1, 6, 1, DrawnLevel.shape_prop(o, "count"), func(v): _set_obj("count", float(v), true), func(v): return "%d" % int(v))
+			_icon_toggle("accrochable", _icon_row(col), "Plafonds-guides", "Plafonds lisses au-dessus des trous : si Pinpouin arrive trop vite, il glisse dessous au lieu de rater le pilier.",
+				DrawnLevel.shape_prop(o, "guides") > 0.5, func(on): _set_obj("guides", on, true))
+			if expert:
+				_slider_row(col, "Pilier", 700.0, 3000.0, 50.0, DrawnLevel.shape_prop(o, "w"), func(v): _set_obj("w", v, true), func(v): return "%d px" % int(v))
+				_slider_row(col, "Trou", 250.0, 1400.0, 25.0, DrawnLevel.shape_prop(o, "gap"), func(v): _set_obj("gap", v, true), func(v): return "%d px" % int(v))
+		"bigegg":
+			if expert:
+				_slider_row(col, "Largeur", 3000.0, 20000.0, 250.0, DrawnLevel.shape_prop(o, "w"), func(v): _set_obj("w", v, true), func(v): return "%d px" % int(v))
+				_slider_row(col, "Hauteur", 2000.0, 9000.0, 250.0, DrawnLevel.shape_prop(o, "h"), func(v): _set_obj("h", v, true), func(v): return "%d px" % int(v))
+		"endless":
+			_slider_row(col, "Type", -1, DrawnLevel.ENDLESS_TYPES.size() - 1, 1, DrawnLevel.shape_prop(o, "type"), func(v): _set_obj("type", float(v), true),
+				func(v): return "Au hasard 🎲" if int(v) < 0 else DrawnLevel.ENDLESS_TYPES[int(v)])
+			var r2 := _icon_row(col)
+			var dice := _icon_choice("de", r2, "Autre tirage", "Tire une autre graine : d'autres mesures (et un autre type si « Au hasard »).", false, "Autre")
+			dice.pressed.connect(func():
+				_push_undo()
+				var it: Dictionary = DrawnLevel.objects[_sel.index]
+				it.props.seed = float(randi_range(1, 99999))
+				_snap_flash(DrawnLevel.snap_shape(_sel.index))
+				_changed()
+				_rebuild_settings())
+			_slider_row(col, "Île", 1200.0, 8000.0, 100.0, DrawnLevel.shape_prop(o, "island"), func(v): _set_obj("island", v, true), func(v): return "%d px" % int(v))
+	if expert:
 		_spin_row(col, "X", o.pos.x, func(v): _set_obj("pos", Vector2(v, DrawnLevel.objects[_sel.index].pos.y)))
 		_spin_row(col, "Y", o.pos.y, func(v): _set_obj("pos", Vector2(DrawnLevel.objects[_sel.index].pos.x, v)))
 

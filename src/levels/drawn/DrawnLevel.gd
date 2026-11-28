@@ -428,7 +428,7 @@ static func hook_list(isl: Array) -> Array:
 	# [FORMES 2 1.86] prise automatique de chaque falaise (désactivable dans
 	# ses réglages, ou « détachée » en prise normale qu'on déplace à la main)
 	for o in objects:
-		if str(o.get("type", "")) == "cliff":
+		if str(o.get("type", "")) in ["cliff", "endless", "pillars"]:   # [GROS BLOCS 1.89] + tronçons du Sans fin
 			for hp in shape_geometry(o).holds:
 				out.append({"pos": hp, "auto": true, "rot": 0.0, "scale": 1.0})
 	for h in hooks:
@@ -1226,7 +1226,8 @@ const VALID_TYPES := ["egg", "boost", "start", "finish", "checkpoint", "sign", "
 	"ramp", "halfpipe", "bowl", "slope", "bend", "upipe", "ceiling", "floating", "wall", "pillar",
 	"cave",   # [CAVERNE 1.84]
 	"carved",   # [TAILLÉE 1.85]
-	"balcony", "stal", "cliff"]   # [FORMES 2 1.86]
+	"balcony", "stal", "cliff",   # [FORMES 2 1.86]
+	"void", "pillars", "bigegg", "endless"]   # [GROS BLOCS 1.89]
 ## Types dont il ne peut y avoir qu'un seul exemplaire
 const UNIQUE_TYPES := ["start", "finish"]
 
@@ -1398,7 +1399,9 @@ const SHAPE_TYPES := ["ramp", "halfpipe", "bowl", "slope", "bend", "upipe", "cei
 	"cave",   # [CAVERNE 1.84] caverne générée par une graine (voir la partie 11)
 	"carved",   # [TAILLÉE 1.85] caverne taillée à la main (voir la partie 12)
 	# [FORMES 2 1.86] 2e partie des formes du terrain (voir la partie 13)
-	"balcony", "stal", "cliff"]
+	"balcony", "stal", "cliff",
+	# [GROS BLOCS 1.89] derniers gros blocs (voir la partie 15)
+	"void", "pillars", "bigegg", "endless"]
 ## Réglages par défaut (taille « Moyen »)
 const SHAPE_DEFAULTS := {
 	"ramp": {"w": 640.0, "h": 240.0, "lip": 32.0},
@@ -1422,6 +1425,14 @@ const SHAPE_DEFAULTS := {
 	"balcony": {"w": 1100.0, "h": 130.0},
 	"stal": {"w": 1400.0, "h": 180.0},
 	"cliff": {"w": 1400.0, "h": 1100.0, "holds": true},
+	# [GROS BLOCS 1.89] zone de vide (w = trou du tremplin à l'entrée d'en
+	# face, h = chute, eggs = œufs de l'échelle), motif piliers (w = largeur
+	# d'un pilier, gap = trou, count = piliers, guides = plafonds-guides),
+	# grand œuf (w, h), tronçon du Sans fin (type -1 = au hasard, seed, island)
+	"void": {"w": 2500.0, "h": 1100.0, "eggs": 2.0},
+	"pillars": {"w": 1350.0, "gap": 600.0, "count": 3.0, "guides": true},
+	"bigegg": {"w": 9000.0, "h": 5000.0},
+	"endless": {"type": -1.0, "seed": 1.0, "island": 3000.0},
 }
 ## Tailles toutes faites du mode Simple : facteur sur la largeur et la hauteur
 const SHAPE_PRESETS := {"Petit": 0.6, "Moyen": 1.0, "Grand": 1.6}
@@ -1430,7 +1441,8 @@ const SHAPE_MIN := 60.0
 const SHAPE_MAX := 4000.0
 ## Formes qui s'aimantent au sol (entrée au bout d'un trait / posées dessus)
 const SHAPE_GROUNDED := ["ramp", "halfpipe", "bowl", "slope", "bend", "upipe", "wall", "cave", "carved",
-	"balcony", "cliff"]   # [FORMES 2 1.86] le balcon part du bout d'un sol, la falaise monte du sol
+	"balcony", "cliff",
+	"void", "pillars", "endless"]   # [GROS BLOCS 1.89] ils commencent au bout d'un sol   # [FORMES 2 1.86] le balcon part du bout d'un sol, la falaise monte du sol
 ## Formes creusées (sous le niveau du sol) : seulement aimantées par les
 ## bouts (posées au milieu d'un sol, le sol les remplirait)
 const SHAPE_DUG := ["halfpipe", "bowl"]
@@ -1466,6 +1478,30 @@ static func shape_prop(o: Dictionary, key: String) -> float:
 	var f := float(v) if typeof(v) in [TYPE_FLOAT, TYPE_INT] else float(d)
 	if not is_finite(f):
 		f = float(d)
+	# [GROS BLOCS 1.89] bornes des derniers gros blocs
+	match o.type + ":" + key:
+		"bigegg:w":
+			return clampf(f, 3000.0, 20000.0)
+		"bigegg:h":
+			return clampf(f, 2000.0, 9000.0)
+		"void:w":
+			return clampf(f, 1200.0, 4500.0)
+		"void:h":
+			return clampf(f, 0.0, 2500.0)
+		"void:eggs":
+			return float(clampi(int(f), 0, 4))
+		"pillars:w":
+			return clampf(f, 700.0, 3000.0)
+		"pillars:gap":
+			return clampf(f, 250.0, 1400.0)
+		"pillars:count":
+			return float(clampi(int(f), 1, 6))
+		"endless:type":
+			return float(clampi(int(f), -1, ENDLESS_TYPES.size() - 1))
+		"endless:island":
+			return clampf(f, 1200.0, 8000.0)
+		"endless:seed":
+			return float(clampi(int(f), 1, 99999))
 	match key:
 		# [CAVERNE 1.84] réglages de la caverne
 		"seed":
@@ -1515,7 +1551,20 @@ static func shape_geometry(o: Dictionary, bottom: float = INF) -> Dictionary:
 	var boosts: Array = []
 	var icicles: Array = []   # [FORMES 2 1.86] glaçons décoratifs [pos locale, longueur]
 	var holds: Array = []     # [FORMES 2 1.86] prises automatiques (positions locales)
+	var extra: Array = []     # [GROS BLOCS 1.89] autres morceaux {poly, top, hook} (locaux)
+	var eggs: Array = []      # [GROS BLOCS 1.89] œufs à grappiner (positions locales)
 	match t:
+		"void", "pillars", "bigegg", "endless":
+			# [GROS BLOCS 1.89] voir la partie 15
+			var bg := big_block_geometry(o, SHAPE_DEPTH)
+			top = bg.top
+			poly = bg.poly
+			entry = bg.entry
+			exit = bg.exit
+			frame = bg.frame
+			extra = bg.extra
+			eggs = bg.eggs
+			holds = bg.holds
 		"balcony":
 			# [FORMES 2 1.86] balcon de glace à stalactites (comme ceux du
 			# Gruyère, CaveGenerator._balcony_shape style 2) : dalle qui sort du
@@ -1703,7 +1752,7 @@ static func shape_geometry(o: Dictionary, bottom: float = INF) -> Dictionary:
 			entry = Vector2.INF
 			frame = Rect2(0, 0, w, h)
 	var xf := Transform2D(0.0 if t in ["cave", "carved"] else float(o.get("rot", 0.0)), o.pos)   # (une caverne ne se tourne pas)
-	var out := {"poly": xf * poly, "top": xf * top, "frame": frame, "boosts": [], "icicles": [], "holds": [],
+	var out := {"poly": xf * poly, "top": xf * top, "frame": frame, "boosts": [], "icicles": [], "holds": [], "extra": [], "eggs": [],
 		"entry": xf * entry if entry != Vector2.INF else Vector2.INF,
 		"exit": xf * exit if exit != Vector2.INF else Vector2.INF}
 	for b in boosts:
@@ -1712,12 +1761,21 @@ static func shape_geometry(o: Dictionary, bottom: float = INF) -> Dictionary:
 		out.icicles.append([xf * (ic[0] as Vector2), ic[1]])
 	for hp in holds:
 		out.holds.append(xf * (hp as Vector2))
+	for ex in extra:
+		out.extra.append({"poly": xf * (ex.poly as PackedVector2Array), "top": xf * (ex.top as PackedVector2Array), "hook": ex.get("hook", true)})
+	for ep in eggs:
+		out.eggs.append(xf * (ep as Vector2))
 	return out
 
 
 ## Le point touche-t-il la forme ? (dedans, ou à moins de `radius` / 2 du bord)
 static func shape_hit(o: Dictionary, pos: Vector2, radius: float) -> bool:
-	var poly: PackedVector2Array = shape_geometry(o).poly
+	var g := shape_geometry(o)
+	# [GROS BLOCS 1.89] les autres morceaux (piliers, rampe d'accueil, îles…)
+	for ex in g.extra:
+		if (ex.poly as PackedVector2Array).size() >= 3 and Geometry2D.is_point_in_polygon(pos, ex.poly):
+			return true
+	var poly: PackedVector2Array = g.poly
 	if Geometry2D.is_point_in_polygon(pos, poly):
 		return true
 	for i in poly.size():
@@ -2545,3 +2603,333 @@ static func _tri_mesh(polys: Array) -> Array:
 		for t in tri:
 			idx.append(base + t)
 	return [pts, idx]
+
+
+# =============================================================================
+#  Partie 15 — [GROS BLOCS 1.89] zone de vide, motif piliers, grand œuf,
+#  tronçon du Sans fin
+# =============================================================================
+# Derniers gros blocs du plan du créateur. Choix de l'équipe (28/11) :
+#  - zone de vide : tailles toutes faites + nombre d'œufs de l'échelle ;
+#  - grand œuf COMPLET : coquille, fente sur le dessus, half-pipe dedans ;
+#  - tronçon du Sans fin : type choisi ou « au hasard », tirage figé par une
+#    graine (🎲) : le même à chaque partie (validation et médailles possibles).
+# Chaque bloc rend un morceau principal (poly / top) et d'autres morceaux
+# (extra : {poly, top, hook}), des œufs et des prises : le jeu construit
+# EXACTEMENT ce que l'éditeur dessine.
+
+## Les quatre gros blocs de la 1.89
+const BIG_BLOCKS := ["void", "pillars", "bigegg", "endless"]
+## Tronçons du Sans fin (EndlessGenerator.TYPE_NAMES, même ordre)
+const ENDLESS_TYPES := ["Saut", "Grand saut", "Grappin", "Grappin double", "Grappin montée", "Plafond"]
+## Zone de vide (GruyereGenerator : KICK_*, CATCH_*, LADDER_EGG)
+const VOID_KICK_R := 900.0          # tremplin : arc de 0° à -15°
+const VOID_KICK_DEG := 15.0
+const VOID_CATCH_R := 1000.0        # rampe d'accueil : de 55° à 8°
+const VOID_LADDER := Vector2(0.5, -470.0)   # 1er œuf : au milieu du trou, 470 px au-dessus du tremplin
+const VOID_LEVEL := 950.0           # un « étage » (comme les étages des cavernes)
+## Motif piliers (GruyereGenerator : WAVE_*, LIP_DEG, NEXT_DROP)
+const PILLAR_DIP := 340.0
+const PILLAR_RISE := 190.0
+const PILLAR_LIP_DEG := 24.0
+const PILLAR_NEXT_DROP := 120.0
+## Grand œuf
+const BIGEGG_SHELL := 320.0         # épaisseur de la coquille
+const BIGEGG_SLOT := 900.0          # largeur de la fente du dessus
+const BIGEGG_SLOT_AT := 0.10        # la fente est un peu à droite du sommet (fraction de la largeur)
+
+
+## Courbe d'Hermite de p0 à p1, angles de départ / d'arrivée en degrés
+## (même recette que GruyereGenerator._hermite)
+static func _hermite(p0: Vector2, p1: Vector2, a0: float, a1: float, steps := 16) -> PackedVector2Array:
+	var l := p0.distance_to(p1)
+	var t0 := Vector2.from_angle(deg_to_rad(a0)) * l
+	var t1 := Vector2.from_angle(deg_to_rad(a1)) * l
+	var out := PackedVector2Array()
+	for i in steps + 1:
+		var u := float(i) / steps
+		var u2 := u * u
+		var u3 := u2 * u
+		out.append(p0 * (2 * u3 - 3 * u2 + 1) + t0 * (u3 - 2 * u2 + u) + p1 * (-2 * u3 + 3 * u2) + t1 * (u3 - u2))
+	return out
+
+
+## Arc de cercle : départ `p0`, cap de départ `a0` (degrés, 0 = droite, + =
+## vers le bas), on tourne de `turn` degrés sur un rayon `r`
+static func _arc(p0: Vector2, a0: float, turn: float, r: float, steps := 16) -> PackedVector2Array:
+	var out := PackedVector2Array([p0])
+	var p := p0
+	var ds: float = absf(deg_to_rad(turn)) * r / steps
+	for i in steps:
+		var a := deg_to_rad(a0 + turn * (i + 0.5) / steps)
+		p += Vector2(cos(a), sin(a)) * ds
+		out.append(p)
+	return out
+
+
+## Bloc de glace sous une ligne de sol, jusqu'à `depth` (y local)
+static func _slab_to(top: PackedVector2Array, depth: float) -> PackedVector2Array:
+	var poly := PackedVector2Array(top)
+	var low := -INF
+	for q in top:
+		low = maxf(low, q.y)
+	var bottom := maxf(depth, low + 200.0)
+	poly.append(Vector2(top[top.size() - 1].x, bottom))
+	poly.append(Vector2(top[0].x, bottom))
+	return poly
+
+
+static func big_block_geometry(o: Dictionary, depth: float) -> Dictionary:
+	match str(o.type):
+		"void":
+			return _void_geometry(o, depth)
+		"pillars":
+			return _pillars_geometry(o, depth)
+		"bigegg":
+			return _bigegg_geometry(o)
+		"endless":
+			return _endless_geometry(o, depth)
+	return {}
+
+
+## Zone de vide : tremplin au bout du sol, trou de `w`, rampe d'accueil `h`
+## plus bas, sol de sortie ; échelle de `eggs` œufs au-dessus du trou et, avec
+## des œufs, un balcon un étage plus haut en face (on y monte en lâchant
+## l'œuf ; sans l'œuf on retombe sur la rampe d'en bas)
+static func _void_geometry(o: Dictionary, depth: float) -> Dictionary:
+	var w := shape_prop(o, "w")
+	var h := shape_prop(o, "h")
+	var n := int(shape_prop(o, "eggs"))
+	var kick := _arc(Vector2.ZERO, 0.0, -VOID_KICK_DEG, VOID_KICK_R, 10)
+	var lip: Vector2 = kick[kick.size() - 1]
+	var mouth := lip + Vector2(w, h)
+	var catch := _arc(Vector2.ZERO, 55.0, 8.0 - 55.0, VOID_CATCH_R, 14)
+	var shift: Vector2 = mouth - catch[catch.size() - 1]
+	var land := PackedVector2Array()
+	for q in catch:
+		land.append(q + shift)
+	for k in range(1, 13):
+		land.append(mouth + Vector2(75.0 * k, 75.0 * k * 0.14))
+	var extra: Array = [{"poly": _slab_to(land, depth), "top": land, "hook": true}]
+	var eggs: Array = []
+	if n > 0:
+		# balcon un étage au-dessus du tremplin, côté arrivée : bien AU-DESSUS
+		# du vol normal (sinon Pinpouin s'y cogne en plein saut) ; on y monte
+		# par l'échelle d'œufs, sans l'œuf on passe dessous et on retombe sur
+		# la rampe d'en bas
+		var ledge_y: float = lip.y - VOID_LEVEL
+		var lx: float = land[0].x - 150.0
+		var ledge := PackedVector2Array([Vector2(lx, ledge_y), Vector2(lx + 950.0, ledge_y + 30.0)])
+		var lp := PackedVector2Array(ledge)
+		lp.append(ledge[1] + Vector2(-40, 220))
+		lp.append(ledge[0] + Vector2(60, 220))
+		extra.append({"poly": lp, "top": ledge, "hook": true})
+		# échelle : le 1er œuf au milieu du trou, 470 px au-dessus du tremplin
+		# (LADDER_EGG du Gruyère), les suivants montent vers le balcon ; le
+		# dernier est 350 px au-dessus du balcon (on lâche, on retombe dessus)
+		var e0 := lip + Vector2(w * VOID_LADDER.x, VOID_LADDER.y)
+		var e1 := Vector2(lx - 250.0, ledge_y - 350.0)
+		for k in n:
+			var u := 0.0 if n == 1 else float(k) / float(n - 1)
+			if n > 1 and e1.y > e0.y:
+				e1.y = e0.y
+			eggs.append(e0.lerp(e1, u) if n > 1 else e0)
+	var ex: Vector2 = land[land.size() - 1]
+	var all := Rect2(Vector2(0, lip.y - 900.0), Vector2(ex.x, maxf(ex.y, 200.0) - lip.y + 900.0))
+	return {"top": kick, "poly": _slab_to(kick, depth), "entry": Vector2.ZERO, "exit": ex,
+		"frame": all, "extra": extra, "eggs": eggs, "holds": []}
+
+
+## Motif piliers du Gruyère : `count` piliers « vague » (creux puis lèvre qui
+## remonte à 24°) séparés par des trous ; plafonds-guides au-dessus des trous
+## (lisses : on glisse dessus en arrivant trop vite, le grappin ne s'y prend pas)
+static func _pillars_geometry(o: Dictionary, depth: float) -> Dictionary:
+	var w := shape_prop(o, "w")
+	var gap := shape_prop(o, "gap")
+	var n := int(shape_prop(o, "count"))
+	var guides := shape_prop(o, "guides") > 0.5
+	var cur := Vector2.ZERO
+	var parts: Array = []
+	var top_y := 0.0
+	for k in n:
+		var valley := cur + Vector2(w * 0.5, PILLAR_DIP)
+		var lip := cur + Vector2(w, PILLAR_DIP - PILLAR_RISE)
+		var a := _hermite(cur, valley, 28.0, 0.0)
+		var b := _hermite(valley, lip, 0.0, -PILLAR_LIP_DEG)
+		var top := PackedVector2Array(a)
+		for i in range(1, b.size()):
+			top.append(b[i])
+		parts.append({"poly": _slab_to(top, depth), "top": top, "hook": true})
+		var nxt := Vector2(lip.x + gap, lip.y + PILLAR_NEXT_DROP)
+		if guides and k < n - 1:
+			var ga := Vector2(lip.x - 260.0, lip.y - 330.0)
+			var gb := Vector2(lip.x + gap * 0.45, lip.y - 380.0)
+			var gc := Vector2(nxt.x + 380.0, nxt.y - 150.0)
+			var under := _hermite(ga, gb, -18.0, 0.0, 12)
+			var u2 := _hermite(gb, gc, 0.0, 34.0, 14)
+			for i in range(1, u2.size()):
+				under.append(u2[i])
+			var cp := PackedVector2Array([Vector2(ga.x, ga.y - 420.0), Vector2(gc.x, gc.y - 650.0)])
+			var rev := under.duplicate()
+			rev.reverse()
+			cp.append_array(rev)
+			parts.append({"poly": cp, "top": PackedVector2Array(), "hook": false})
+			top_y = minf(top_y, ga.y - 420.0)
+		cur = nxt if k < n - 1 else lip
+	var first: Dictionary = parts[0]
+	var rest: Array = parts.slice(1)
+	return {"top": first.top, "poly": first.poly, "entry": Vector2.ZERO, "exit": cur,
+		"frame": Rect2(0, top_y - 100.0, cur.x, PILLAR_DIP + 300.0 - top_y), "extra": rest, "eggs": [], "holds": []}
+
+
+## Grand œuf complet (L'Œuf) : coquille de glace, fente sur le dessus, le fond
+## de l'intérieur sert de half-pipe. On arrive par le dessus (glisser sur la
+## coquille jusqu'à la fente), on s'accroche partout.
+static func _bigegg_geometry(o: Dictionary) -> Dictionary:
+	var w := shape_prop(o, "w")
+	var h := shape_prop(o, "h")
+	var c := Vector2(w * 0.5, h * 0.5)
+	var outer := PackedVector2Array()
+	var inner := PackedVector2Array()
+	var slot_x: float = c.x + w * BIGEGG_SLOT_AT
+	var n := 96
+	# on part du bord droit de la fente, on fait le tour par la droite, le bas,
+	# la gauche, et on revient au bord gauche de la fente
+	var pts_o: Array = []
+	var pts_i: Array = []
+	for i in n:   # (pas de point en double : sinon le contour ne se remplit pas)
+		var t := -PI * 0.5 + TAU * i / n
+		var sn := sin(t)
+		var k := 1.0 + 0.10 * (-sn)   # œuf : un peu plus large en bas (y vers le bas)
+		var po := c + Vector2(c.x * cos(t) / k, c.y * sn)
+		var pi := c + Vector2((c.x - BIGEGG_SHELL) * cos(t) / k, (c.y - BIGEGG_SHELL) * sn)
+		pts_o.append(po)
+		pts_i.append(pi)
+	# découpe de la fente : on garde les points du dessus hors de la fente
+	for i in pts_o.size():
+		var po: Vector2 = pts_o[i]
+		if po.y < c.y and absf(po.x - slot_x) < BIGEGG_SLOT * 0.5:
+			continue
+		outer.append(po)
+	for i in pts_i.size():
+		var pi: Vector2 = pts_i[i]
+		if pi.y < c.y and absf(pi.x - slot_x) < BIGEGG_SLOT * 0.5 + BIGEGG_SHELL * 0.6:
+			continue
+		inner.append(pi)
+	# outer et inner vont du bord droit de la fente au bord gauche (sens horaire
+	# à l'écran) : on les tourne pour commencer juste après la fente
+	outer = _start_after_slot(outer, slot_x)
+	inner = _start_after_slot(inner, slot_x)
+	var poly := PackedVector2Array(outer)
+	var rin := inner.duplicate()
+	rin.reverse()
+	poly.append_array(rin)
+	# lignes de neige : toute la coquille dehors, et le fond intérieur (half-pipe)
+	# (neige seulement sur les dessus : le haut droit et le haut gauche de la
+	# coquille, de part et d'autre de la fente, et le fond intérieur)
+	var floor_in := PackedVector2Array()
+	for q in inner:
+		if q.y > c.y + h * 0.05:
+			floor_in.append(q)
+	var right := PackedVector2Array()
+	for q in outer:
+		if q.y > c.y - h * 0.08:
+			break
+		right.append(q)
+	var left := PackedVector2Array()
+	for i in range(outer.size() - 1, -1, -1):
+		if outer[i].y > c.y - h * 0.08:
+			break
+		left.insert(0, outer[i])
+	return {"top": right, "poly": poly, "entry": Vector2.INF, "exit": Vector2.INF,
+		"frame": Rect2(0, 0, w, h), "eggs": [], "holds": [],
+		"extra": [{"poly": PackedVector2Array(), "top": left, "hook": true},
+			{"poly": PackedVector2Array(), "top": floor_in, "hook": true}]}
+
+
+## Remet la liste de points dans l'ordre « juste à droite de la fente, puis
+## le tour, jusqu'à juste à gauche » (le plus grand saut entre deux points
+## voisins est la fente)
+static func _start_after_slot(pts: PackedVector2Array, _slot_x: float) -> PackedVector2Array:
+	var best := 0
+	var best_d := -1.0
+	for i in pts.size():
+		var d := pts[i].distance_to(pts[(i + 1) % pts.size()])
+		if d > best_d:
+			best_d = d
+			best = i
+	var out := PackedVector2Array()
+	for k in pts.size():
+		out.append(pts[(best + 1 + k) % pts.size()])
+	return out
+
+
+## Type d'un tronçon du Sans fin (le hasard est figé par la graine)
+static func endless_type(o: Dictionary) -> int:
+	var t := int(shape_prop(o, "type"))
+	if t >= 0:
+		return t
+	var rng := RandomNumberGenerator.new()
+	rng.seed = int(shape_prop(o, "seed")) * 7919 + 17
+	return rng.randi_range(0, ENDLESS_TYPES.size() - 1)
+
+
+## Tronçon du Sans fin (EndlessGenerator._add_chunk) : une île en pente
+## douce avec des bosses, le trou du type choisi (prises, plafond) et le début
+## de l'île d'arrivée. Mesures tirées par la graine (mêmes fourchettes que le
+## Sans fin, difficulté du milieu de partie).
+static func _endless_geometry(o: Dictionary, depth: float) -> Dictionary:
+	var typ := endless_type(o)
+	var L := shape_prop(o, "island")
+	var rng := RandomNumberGenerator.new()
+	rng.seed = int(shape_prop(o, "seed")) * 104729 + typ
+	var p1 := rng.randf() * TAU
+	var p2 := rng.randf() * TAU
+	var island := PackedVector2Array()
+	var steps := int(L / 40.0)
+	var n0 := 0.7 * sin(p1) + 0.3 * sin(p2)
+	for i in steps + 1:
+		var x := L * i / steps
+		var nz := 0.7 * sin(x / 2600.0 * TAU + p1) + 0.3 * sin(x / 900.0 * TAU + p2) - n0
+		island.append(Vector2(x, 0.10 * x + 110.0 * nz * minf(1.0, x / 600.0)))
+	var end: Vector2 = island[island.size() - 1]
+	var gap := 0.0
+	var dy := 0.0
+	var holds: Array = []
+	var extra: Array = []
+	match typ:
+		0:   # saut
+			gap = rng.randf_range(450.0, 700.0)
+			dy = rng.randf_range(80.0, 220.0)
+		1:   # grand saut
+			gap = rng.randf_range(950.0, 1250.0)
+			dy = rng.randf_range(200.0, 380.0)
+		2:   # grappin
+			gap = rng.randf_range(2300.0, 2700.0)
+			dy = -rng.randf_range(150.0, 250.0)
+			holds.append(Vector2(end.x + gap * 0.5, end.y - 600.0))
+		3:   # grappin double
+			gap = rng.randf_range(4000.0, 4500.0)
+			dy = rng.randf_range(0.0, 120.0)
+			holds.append(Vector2(end.x + gap * 0.3, end.y - 600.0))
+			holds.append(Vector2(end.x + gap * 0.74, end.y - 600.0))
+		4:   # grappin montée
+			gap = rng.randf_range(1600.0, 1900.0)
+			dy = -rng.randf_range(420.0, 520.0)
+			holds.append(Vector2(end.x + gap * 0.55, end.y + dy - 400.0))
+		5:   # plafond (on s'y accroche au grappin)
+			gap = rng.randf_range(3800.0, 4400.0)
+			dy = -rng.randf_range(100.0, 200.0)
+			var cy := end.y - 640.0
+			var ctop := PackedVector2Array([Vector2(end.x - 300.0, cy), Vector2(end.x + gap + 300.0, cy)])
+			var cpoly := PackedVector2Array([ctop[0], ctop[1], ctop[1] + Vector2(0, 90), ctop[0] + Vector2(0, 90)])
+			extra.append({"poly": cpoly, "top": PackedVector2Array(), "hook": true})
+	var land := PackedVector2Array()
+	var ls := Vector2(end.x + gap, end.y + dy)
+	for i in 31:
+		land.append(ls + Vector2(40.0 * i, 40.0 * i * 0.10))
+	extra.append({"poly": _slab_to(land, depth), "top": land, "hook": true})
+	var ex: Vector2 = land[land.size() - 1]
+	var top_y := minf(0.0, end.y - 800.0)
+	return {"top": island, "poly": _slab_to(island, depth), "entry": Vector2.ZERO, "exit": ex,
+		"frame": Rect2(0, top_y, ex.x, maxf(ex.y, end.y) - top_y + 200.0), "extra": extra, "eggs": [], "holds": holds}

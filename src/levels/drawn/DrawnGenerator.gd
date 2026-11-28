@@ -60,12 +60,21 @@ func _ready() -> void:
 	# 1. Piste de freinage : le dernier îlot est prolongé après l'arrivée
 	var last: PackedVector2Array = _islands[_islands.size() - 1]
 	var finish_pos: Vector2 = last[last.size() - 1]
-	var runout := PackedVector2Array(last)
+	# [GROS BLOCS 1.89] correctif : si des formes sont collées au bout du
+	# dernier sol (zone de vide, half-pipe, tronçon…), la piste de freinage
+	# partait quand même du bout du TRAIT et bouchait la forme (Pinpouin
+	# s'arrêtait sur la piste, au-dessus du trou). Elle part maintenant du bout
+	# de la dernière forme collée, en îlot à part.
+	var chain_p: Vector2 = DrawnLevel.chain_end(finish_pos)
+	var runout := PackedVector2Array(last) if chain_p == finish_pos else PackedVector2Array([chain_p])
 	var steps: int = int(DrawnLevel.RUNOUT_LENGTH / DrawnLevel.RESAMPLE_STEP)
 	for k in range(1, steps + 1):
 		var dx: float = k * DrawnLevel.RESAMPLE_STEP
-		runout.append(finish_pos + Vector2(dx, dx * RUNOUT_SLOPE))
-	_islands[_islands.size() - 1] = runout
+		runout.append(chain_p + Vector2(dx, dx * RUNOUT_SLOPE))
+	if chain_p == finish_pos:
+		_islands[_islands.size() - 1] = runout
+	else:
+		_islands.append(runout)
 
 	# 2. Un bloc de glace par îlot, jusqu'au fond commun
 	var bottom: float = DrawnLevel.floor_y(_islands)
@@ -253,6 +262,37 @@ func _add_egg(o: Dictionary) -> void:
 ## bordure — à partir de la géométrie commune DrawnLevel.shape_geometry (ce
 ## que l'éditeur a dessiné). IceStyle l'habille ensuite (glace, neige sur les
 ## dessus) et fond son contour avec le sol qu'elle touche.
+## [GROS BLOCS 1.89] Un morceau de forme : corps du calque 2 (collision en
+## segments lissée par SmoothCurve, remplissage de glace) + bordure de neige.
+## Sorti de _add_shape pour servir aussi aux autres morceaux des gros blocs.
+## `poly` vide = bordure seule (posée sur un autre morceau) ; `hook` faux =
+## groupe « no_hook » (le grappin ne s'y prend pas)
+func _shape_body(poly: PackedVector2Array, top: PackedVector2Array, hook: bool) -> void:
+	var body := StaticBody2D.new()
+	body.collision_layer = 2
+	if poly.size() >= 3:
+		var col := CollisionPolygon2D.new()
+		col.build_mode = CollisionPolygon2D.BUILD_SEGMENTS   # [FIX VITESSE -> 0] contour seul
+		col.polygon = SmoothCurve.smooth_closed(poly)
+		body.add_child(col)
+		var fill := Polygon2D.new()
+		fill.color = ICE_COLOR
+		fill.polygon = poly
+		body.add_child(fill)
+	if top.size() >= 2:
+		var edge := Line2D.new()
+		edge.texture = edge_texture
+		edge.texture_mode = Line2D.LINE_TEXTURE_TILE
+		edge.texture_repeat = CanvasItem.TEXTURE_REPEAT_ENABLED
+		edge.width = 64.0
+		edge.position = Vector2(0, 28)
+		edge.points = top
+		body.add_child(edge)
+	if not hook:
+		body.add_to_group("no_hook")
+	add_child(body)
+
+
 ## [FORMES 2 1.86] Glaçons des plateformes-stalactites (images de L'Œuf)
 const ICICLE_TEXTURES := [
 	preload("res://sprites/levels/egg/stalactite_0.png"),
@@ -270,28 +310,18 @@ func _add_shape(o: Dictionary) -> void:
 		_add_carved(o)   # [TAILLÉE 1.85] caverne taillée à la main
 		return
 	var g := DrawnLevel.shape_geometry(o, _bottom)
-	var body := StaticBody2D.new()
-	body.collision_layer = 2
-	var col := CollisionPolygon2D.new()
-	col.build_mode = CollisionPolygon2D.BUILD_SEGMENTS   # [FIX VITESSE -> 0] contour seul
-	col.polygon = SmoothCurve.smooth_closed(g.poly)
-	body.add_child(col)
-	var fill := Polygon2D.new()
-	fill.color = ICE_COLOR
-	fill.polygon = g.poly
-	body.add_child(fill)
-	var edge := Line2D.new()
-	edge.texture = edge_texture
-	edge.texture_mode = Line2D.LINE_TEXTURE_TILE
-	edge.texture_repeat = CanvasItem.TEXTURE_REPEAT_ENABLED
-	edge.width = 64.0
-	edge.position = Vector2(0, 28)
-	edge.points = g.top
-	body.add_child(edge)
 	# plafond lisse = non accrochable (comme la roche des cavernes)
-	if o.type == "ceiling" and DrawnLevel.shape_prop(o, "hook") < 0.5:
-		body.add_to_group("no_hook")
-	add_child(body)
+	_shape_body(g.poly, g.top, not (o.type == "ceiling" and DrawnLevel.shape_prop(o, "hook") < 0.5))
+	# [GROS BLOCS 1.89] autres morceaux du bloc (piliers, rampe d'accueil de la
+	# zone de vide, île d'arrivée du tronçon, plafonds-guides lisses…) :
+	# construits de la même façon ; un morceau sans contour (poly vide) n'est
+	# qu'une ligne de neige posée sur le morceau principal (grand œuf)
+	for ex in g.extra:
+		_shape_body(ex.poly, ex.top, bool(ex.hook))
+	# [GROS BLOCS 1.89] œufs de l'échelle de la zone de vide : les mêmes œufs
+	# à grappiner que l'objet « Œuf » (_add_egg), dessin n°1 (doré)
+	for ep in g.eggs:
+		_add_egg({"type": "egg", "pos": ep, "rot": 0.0, "scale": 1.0, "props": {"style": 1}})
 	# [FORMES 2 1.86] glaçons sous les plateformes-stalactites : les mêmes
 	# images que dans L'Œuf (EggGenerator._add_icicles), décor seul (pas de
 	# collision) ; choix de l'image fixe selon la place (même niveau = mêmes
