@@ -105,6 +105,16 @@ const ZOOM_FACTOR_MAX := 1.8
 ## frottement du sol (coefficients + freinage en cours, en gras quand le jeu
 ## les applique). Onglet « Développeur » des options. Coupé par défaut.
 var show_coefs: bool = false
+## [SORTIE 1.93] Afficher les images par seconde (en bas au milieu de l'écran, dans
+## tout le jeu : menus, éditeur, niveaux). Onglet « Développeur ». Sert aux
+## tests sur téléphone : « 60 i/s » = parfait, en dessous de 30 ça saccade.
+## Coupé par défaut.
+var show_fps: bool = false
+var _fps_layer: CanvasLayer = null   # calque tout en haut (créé au 1er affichage)
+var _fps_label: Label = null
+var _fps_timer := 0.0
+var _fps_frames := 0
+var _fps_worst := 0.0                # image la plus longue de la demi-seconde (ms)
 ## [DEV 1.72] Figure de la touche FIGURE : -1 = au hasard (comme avant),
 ## sinon l'indice dans TRICKS. Onglet « Développeur ».
 var fixed_trick: int = -1
@@ -228,6 +238,7 @@ func _load_options() -> void:
 		fullscreen = bool(cfg.get_value("options", "fullscreen", false))
 		free_zoom = bool(cfg.get_value("options", "free_zoom", false))
 		show_coefs = bool(cfg.get_value("options", "show_coefs", false))
+		show_fps = bool(cfg.get_value("options", "show_fps", false))   # [SORTIE 1.93]
 		fixed_trick = clampi(int(cfg.get_value("options", "fixed_trick", -1)), -1, TRICKS.size() - 1)
 		# [FOND 1.75] thèmes du fond (par défaut : falaise sans fond + nuit étoilée)
 		bg_glacier_theme = clampi(int(cfg.get_value("options", "bg_glacier_theme", 1)), 0, BG_GLACIER_THEMES.size() - 1)
@@ -373,6 +384,7 @@ var _last_scene_path := "?"
 var _menu_check_timer := 0.0
 
 func _process(delta: float) -> void:
+	_update_fps(delta)   # [SORTIE 1.93] compteur d'images par seconde (option)
 	var scene = get_tree().current_scene
 	var path: String = scene.scene_file_path if scene != null else ""
 	var is_menu: bool = path.begins_with("res://src/screens/")
@@ -534,3 +546,46 @@ func _add_symbol_font_fallback() -> void:
 			fb.append(symbols)
 		f.set("fallbacks", fb)
 		_patched_fonts.append(f)
+
+
+
+## [SORTIE 1.93] Compteur d'images par seconde (option « Afficher les images
+## par seconde », onglet Développeur). Mis à jour 2 fois par seconde :
+## « 58 i/s · pire image 21 ms ». La pire image montre les à-coups qu'une
+## moyenne cache (chargement d'un morceau de niveau, gros décor…). Vert à
+## 55 i/s et plus, orange de 30 à 55, rouge en dessous.
+func _update_fps(delta: float) -> void:
+	if not show_fps:
+		if _fps_layer != null:
+			_fps_layer.visible = false
+		return
+	if _fps_layer == null:
+		_fps_layer = CanvasLayer.new()
+		_fps_layer.name = "CompteurImages"
+		_fps_layer.layer = 128   # au-dessus de tout (menus, HUD, pause)
+		_fps_label = Label.new()
+		_fps_label.position = Vector2(8, 4)
+		_fps_label.add_theme_font_size_override("font_size", 18)
+		_fps_label.add_theme_color_override("font_outline_color", Color(0, 0, 0))
+		_fps_label.add_theme_constant_override("outline_size", 5)
+		_fps_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		_fps_layer.add_child(_fps_label)
+		add_child(_fps_layer)
+	_fps_layer.visible = true
+	_fps_frames += 1
+	_fps_timer += delta
+	_fps_worst = maxf(_fps_worst, delta * 1000.0)
+	if _fps_timer < 0.5:
+		return
+	var fps := _fps_frames / _fps_timer
+	_fps_label.text = "%d i/s · pire image %d ms" % [roundi(fps), roundi(_fps_worst)]
+	_fps_label.add_theme_color_override("font_color",
+		Color(0.55, 1.0, 0.55) if fps >= 55.0 else (Color(1.0, 0.75, 0.3) if fps >= 30.0 else Color(1.0, 0.4, 0.35)))
+	# en bas au milieu : en haut à gauche, il cachait le chrono des courses ;
+	# en bas à gauche et à droite sont les boutons tactiles
+	var vp: Vector2 = get_viewport().get_visible_rect().size
+	_fps_label.reset_size()
+	_fps_label.position = Vector2((vp.x - _fps_label.size.x) * 0.5, vp.y - _fps_label.size.y - 6.0)
+	_fps_timer = 0.0
+	_fps_frames = 0
+	_fps_worst = 0.0

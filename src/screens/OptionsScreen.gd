@@ -283,6 +283,10 @@ func _build_tabs() -> void:
 	var coefs := _new_switch("ShowCoefs", "Afficher l'air et le frottement sous la vitesse", Settings.show_coefs,
 		func(v): Settings.set_option("show_coefs", v),
 		"Coefficients de la résistance de l'air (k) et du frottement de la glace (μ),\navec le freinage en cours. En gras quand le jeu l'applique.")
+	# [SORTIE 1.93] compteur d'images par seconde, pour les tests sur téléphone
+	var fps := _new_switch("ShowFps", "Afficher les images par seconde", Settings.show_fps,
+		func(v): Settings.set_option("show_fps", v),
+		"En haut à gauche, partout dans le jeu. 60 i/s = parfait ;\nen dessous de 30, ça saccade : note le niveau et l'endroit.")
 	var trick_title: Label = game_box.get_node("MusicTitle").duplicate()
 	trick_title.name = "TrickTitle"
 	trick_title.text = "Touche FIGURE"
@@ -376,6 +380,7 @@ func _build_tabs() -> void:
 	_pages["dev"].add_child(_hint("Pour régler et tester le jeu. Tout est coupé par défaut."))
 	_move(["PhysicsPanel", "ShowSpeed"], game_box, _pages["dev"])
 	_pages["dev"].add_child(coefs)
+	_pages["dev"].add_child(fps)   # [SORTIE 1.93]
 	_pages["dev"].add_child(trick_title)
 	_pages["dev"].add_child(trick_choice)
 
