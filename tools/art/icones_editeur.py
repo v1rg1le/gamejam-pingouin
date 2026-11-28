@@ -368,6 +368,16 @@ def v_cave():
     return im
 
 
+def v_carved():
+    # [CAVERNE 1.85] bloc de glace creusé à la main : galerie sinueuse + pioche
+    im, d = v_new()
+    d.rectangle([1, 4, 22, 21], fill=DEEP)
+    d.line([(1, 9), (6, 13), (11, 10), (16, 15), (22, 12)], fill=T, width=4)
+    d.line([(14, 1), (20, 7)], fill=ORANGE, width=2)
+    d.arc([10, 0, 22, 8], 200, 340, fill=GREY, width=2)
+    return im
+
+
 def v_void():
     im, d = v_new()
     ground(d, [(1, 10), (6, 11)], bottom=22)
@@ -433,7 +443,7 @@ THUMBS = {
     "draw": v_draw, "ramp": v_ramp, "halfpipe": v_halfpipe, "bowl": v_bowl, "slope": v_slope,
     "bend": v_bend, "upipe": v_upipe, "ceiling": v_ceiling, "floating": v_floating, "wall": v_wall,
     "pillar": v_pillar, "balcony": v_balcony, "stal": v_stal, "cliff": v_cliff,
-    "cave": v_cave, "void": v_void, "pillars": v_pillars, "bigegg": v_bigegg, "endless": v_endless,
+    "cave": v_cave, "carved": v_carved, "void": v_void, "pillars": v_pillars, "bigegg": v_bigegg, "endless": v_endless,
     "camera": v_camera, "checkpoint": v_checkpoint, "hook": v_hook,
 }
 

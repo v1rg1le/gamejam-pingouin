@@ -626,6 +626,9 @@ func _make_cave(i: int, origin: Vector2) -> CaveGenerator:
 	g.exit_radii.assign(cfg.get("phi_r", []))
 	g.columns = CAVE_COLUMNS
 	g.balcony_style = Settings.gruyere_balcony_style   # [BALCONS 1.79]
+	# [SINUEUX 1.84] le Gruyère garde des cavernes plates (choix de l'équipe) ;
+	# Settings.cave_sinuous_test (0 par défaut) sert seulement aux essais au bot
+	g.sinuous_amp = Settings.cave_sinuous_test
 	g.position = origin
 	add_child(g)
 	caves.append(g)
@@ -974,7 +977,7 @@ func _cave_focus(pos: Vector2) -> Array:
 		if lp.x < 0.0 or lp.x >= g.columns * CaveGenerator.COL_W:
 			continue
 		var c := int(lp.x / CaveGenerator.COL_W)
-		var base: float = lp.x * CaveGenerator.DROP / CaveGenerator.COL_W
+		var base: float = g._top_lane_y_at(lp.x)   # [SINUEUX 1.84] suit la vague (= pente générale si plat)
 		var l := clampi(roundi((lp.y - base + 150.0) / CaveGenerator.LANE_GAP), 0, g.lanes_n - 1)
 		var up = null
 		var down = null

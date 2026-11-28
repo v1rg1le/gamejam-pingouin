@@ -1079,6 +1079,12 @@ func _keep_selection_visible() -> void:
 	var wp: Vector2
 	if _sel.kind in ["hook", "obj"]:
 		wp = _item().pos
+		# [FORMES 1.84] forme : c'est le losange de largeur (à droite) qui doit
+		# rester visible (il se cachait sous le panneau sur les formes larges)
+		if _sel.kind == "obj" and DrawnLevel.is_shape(_item()):
+			var hw: Vector2 = _handles().get("w", Vector2.INF)
+			if hw != Vector2.INF:
+				wp = hw
 	else:
 		var st: PackedVector2Array = DrawnLevel.strokes[_sel.index]
 		wp = st[st.size() / 2]
@@ -1882,12 +1888,15 @@ const PALETTE := [
 	["Terrain", [["draw", "Sol (outil Dessiner)", ""], ["ramp", "Tremplin", ""], ["halfpipe", "Half-pipe", ""],
 		["bowl", "Bol", ""], ["slope", "Rampe", ""], ["bend", "Virage en pipe", ""], ["upipe", "Virage en U", ""],
 		["ceiling", "Plafond", ""], ["floating", "Plateforme flottante", ""], ["wall", "Mur", ""],
-		["pillar", "Pilier", ""], ["balcony", "Balcon de glace", "1.84"], ["stal", "Plateforme-stalactite", "1.84"],
-		["cliff", "Falaise", "1.84"]]],
+		["pillar", "Pilier", ""], ["balcony", "Balcon de glace", "1.86"], ["stal", "Plateforme-stalactite", "1.86"],
+		["cliff", "Falaise", "1.86"]]],
 	["Décor", [["arch", "Arche", ""], ["podium", "Podium FIN", ""], ["bush", "Buisson", ""], ["igloo", "Igloo", ""],
 		["colisee", "Colisée", ""], ["ice1", "Bloc de glace 1", ""], ["ice2", "Bloc de glace 2", ""], ["ice3", "Petit bloc de glace", ""]]],
-	["Gros blocs", [["cave", "Caverne", "1.85"], ["void", "Zone de vide", "1.85"], ["pillars", "Motif piliers", "1.85"],
-		["bigegg", "Grand œuf", "1.85"], ["endless", "Tronçon du Sans fin", "1.85"]]],
+	# [CAVERNE 1.84] demande de l'équipe (28/11) : cavernes d'abord — caverne
+	# générée (sinueuse) en 1.84, caverne taillée à la main en 1.85 ; le reste
+	# est décalé (balcon, stalactite, falaise 1.86 ; autres gros blocs 1.87)
+	["Gros blocs", [["cave", "Caverne", ""], ["carved", "Caverne taillée", "1.85"], ["void", "Zone de vide", "1.87"],
+		["pillars", "Motif piliers", "1.87"], ["bigegg", "Grand œuf", "1.87"], ["endless", "Tronçon du Sans fin", "1.87"]]],
 ]
 
 ## [ICÔNES 1.82] Bulle de chaque case de la palette (ce que fait l'élément)
@@ -1911,7 +1920,8 @@ const PALETTE_TIPS := {
 	"cliff": "Une falaise en forme de montagne.",
 	"arch": "L'arche de glace.", "podium": "Le podium FIN.", "bush": "Un buisson enneigé.", "igloo": "Un igloo.",
 	"colisee": "Le Colisée de glace.", "ice1": "Un bloc de glace.", "ice2": "Un autre bloc de glace.", "ice3": "Un petit bloc de glace.",
-	"cave": "Une caverne générée (graine, entrées, sorties).", "void": "Une zone de vide avec échelle d'œufs.",
+	"cave": "Une caverne générée par une graine : galeries qui montent et descendent, routes qui se croisent, sans cul-de-sac. 🎲 pour en tirer une autre.",
+	"carved": "Un bloc de glace (rectangle, œuf, rond, montagne ou forme libre) à creuser toi-même : tracer la galerie, pioche, truelle.", "void": "Une zone de vide avec échelle d'œufs.",
 	"pillars": "Le motif piliers du Gruyère.", "bigegg": "Le grand œuf de L'Œuf.", "endless": "Un tronçon du Sans fin.",
 }
 
@@ -2099,7 +2109,8 @@ const OBJ_NAMES := {"egg": "Œuf à grappiner", "boost": "Boost", "start": "Dép
 	"ice1": "Bloc de glace 1", "ice2": "Bloc de glace 2", "ice3": "Petit bloc de glace",
 	# [FORMES 1.83]
 	"ramp": "Tremplin", "halfpipe": "Half-pipe", "bowl": "Bol", "slope": "Rampe à boosts", "bend": "Virage en pipe",
-	"upipe": "Virage en U", "ceiling": "Plafond", "floating": "Plateforme flottante", "wall": "Mur", "pillar": "Pilier"}
+	"upipe": "Virage en U", "ceiling": "Plafond", "floating": "Plateforme flottante", "wall": "Mur", "pillar": "Pilier",
+	"cave": "Caverne"}   # [CAVERNE 1.84]
 const EGG_STYLE_NAMES := ["", "glace", "tacheté", "craquelé", "bonnet de neige", "bébé Pinpouin"]
 ## Types qu'on peut tourner (les autres restent droits)
 const ROTATABLE := ["egg", "boost", "arch", "podium", "bush", "igloo", "colisee", "ice1", "ice2", "ice3",
@@ -2274,7 +2285,8 @@ func _draw_objects(z: float, font: Font, fs: int) -> void:
 const SHAPE_H_DOWN := ["halfpipe", "bowl", "ceiling", "floating", "pillar"]
 ## Dimensions étirables de chaque forme
 const SHAPE_STRETCH := {"ramp": ["w", "h"], "halfpipe": ["w", "h"], "bowl": ["w", "h"], "slope": ["w", "h"],
-	"bend": ["w"], "upipe": ["h"], "ceiling": ["w", "h"], "floating": ["w", "h"], "wall": ["w", "h"], "pillar": ["w", "h"]}
+	"bend": ["w"], "upipe": ["h"], "ceiling": ["w", "h"], "floating": ["w", "h"], "wall": ["w", "h"], "pillar": ["w", "h"],
+	"cave": []}   # [CAVERNE 1.84] taille réglée par la longueur et les étages
 ## Nom du réglage `h` selon la forme
 const SHAPE_H_NAME := {"halfpipe": "Profondeur", "bowl": "Profondeur", "ceiling": "Épaisseur", "floating": "Épaisseur",
 	"upipe": "Diamètre", "pillar": "Hauteur"}
@@ -2303,6 +2315,8 @@ func _shape_handles(o: Dictionary, z: float) -> Dictionary:
 	# pour ne pas se superposer au losange
 	var rx: float = f.get_center().x if down else f.position.x + f.size.x * 0.2
 	out.rotate = xf * Vector2(rx, f.position.y - 80.0 / z)
+	if o.type == "cave":
+		out.rotate = Vector2.INF   # [CAVERNE 1.84] une caverne ne se tourne pas
 	var dims: Array = SHAPE_STRETCH.get(o.type, [])
 	if "w" in dims:
 		out.w = xf * Vector2(f.end.x + 45.0 / z, f.get_center().y if o.type != "bend" else -12.0 / z)
@@ -2314,6 +2328,9 @@ func _shape_handles(o: Dictionary, z: float) -> Dictionary:
 ## Aperçu d'une forme : la même glace que les îlots (remplissage + trait bleu
 ## sur la ligne de glisse) ; boosts de la rampe ; plafond lisse en plus foncé
 func _draw_shape(o: Dictionary, z: float) -> void:
+	if o.type == "cave":
+		_draw_cave(o, z)   # [CAVERNE 1.84]
+		return
 	var g := DrawnLevel.shape_geometry(o, _draw_bottom)
 	var fill := ICE_COLOR
 	if o.type == "ceiling" and DrawnLevel.shape_prop(o, "hook") < 0.5:
@@ -2342,10 +2359,11 @@ func _draw_shape_selection(o: Dictionary, z: float) -> void:
 	draw_polyline(pts, SELECT_COLOR, 5.0 / z, true)
 	var hd := _shape_handles(o, z)
 	var f: Rect2 = DrawnLevel.shape_geometry(o).frame
-	var anchor: Vector2 = Transform2D(float(o.rot), o.pos) * Vector2(_hd_x_of(hd, o), f.position.y)
-	draw_line(anchor, hd.rotate, SELECT_COLOR, 3.0 / z)
-	draw_circle(hd.rotate, 14.0 / z, SELECT_COLOR)
-	draw_circle(hd.rotate, 8.0 / z, Color(0.1, 0.15, 0.3))
+	if hd.rotate != Vector2.INF:
+		var anchor: Vector2 = Transform2D(float(o.rot), o.pos) * Vector2(_hd_x_of(hd, o), f.position.y)
+		draw_line(anchor, hd.rotate, SELECT_COLOR, 3.0 / z)
+		draw_circle(hd.rotate, 14.0 / z, SELECT_COLOR)
+		draw_circle(hd.rotate, 8.0 / z, Color(0.1, 0.15, 0.3))
 	for k in ["w", "h"]:
 		var p: Vector2 = hd[k]
 		if p == Vector2.INF:
@@ -2363,6 +2381,15 @@ func _hd_x_of(hd: Dictionary, o: Dictionary) -> float:
 ## Lignes de stats d'une forme (fiche de survol)
 func _shape_stats(o: Dictionary) -> Array:
 	var lines: Array = []
+	if o.type == "cave":
+		# [CAVERNE 1.84]
+		var cd := DrawnLevel.cave_data(o)
+		lines.append("Graine %d   ·   %d colonnes   ·   %d étages" % [int(DrawnLevel.shape_prop(o, "seed")), int(DrawnLevel.shape_prop(o, "columns")), int(DrawnLevel.shape_prop(o, "lanes"))])
+		var amp := DrawnLevel.shape_prop(o, "amp")
+		lines.append("Plate" if amp < 1.0 else "Sinuosité %d px (vagues de %.1f colonnes)" % [int(amp), DrawnLevel.shape_prop(o, "wave")])
+		lines.append("Entrée : étage %d   ·   sortie : étage %d" % [int(DrawnLevel.shape_prop(o, "entry")) + 1, int(DrawnLevel.shape_prop(o, "exit")) + 1])
+		lines.append("Plan vérifié : aucun cul-de-sac" if cd.ok else "Attention : plan non vérifié, essaie une autre graine")
+		return lines
 	var dims: Array = SHAPE_STRETCH.get(o.type, [])
 	var parts: Array = []
 	if "w" in dims:
@@ -2395,6 +2422,9 @@ func _shape_stats(o: Dictionary) -> Array:
 ## angle de la forme, position exacte.
 func _shape_settings(col: VBoxContainer, o: Dictionary) -> void:
 	var t: String = o.type
+	if t == "cave":
+		_cave_settings(col, o)   # [CAVERNE 1.84]
+		return
 	var dims: Array = SHAPE_STRETCH.get(t, [])
 	# tailles toutes faites (choix de l'équipe : surtout pour le mode Simple ;
 	# gardées en Expert, elles servent aussi)
@@ -2435,6 +2465,96 @@ func _shape_settings(col: VBoxContainer, o: Dictionary) -> void:
 				hk.toggled.connect(func(on): _set_obj("hook", on, true))
 				col.add_child(hk)
 		_slider_row(col, "Angle", -180.0, 180.0, 15.0 if magnet else 1.0, wrapf(rad_to_deg(o.rot), -180.0, 180.0), func(v): _set_obj("rot", deg_to_rad(v)))
+		_spin_row(col, "X", o.pos.x, func(v): _set_obj("pos", Vector2(v, DrawnLevel.objects[_sel.index].pos.y)))
+		_spin_row(col, "Y", o.pos.y, func(v): _set_obj("pos", Vector2(DrawnLevel.objects[_sel.index].pos.x, v)))
+
+
+# --- [CAVERNE 1.84] Caverne générée dans l'éditeur ----------------------------------
+
+const CAVE_ROCK := Color(0.33, 0.47, 0.64)      # roche (aperçu)
+const CAVE_GALLERY := Color(0.80, 0.90, 0.97)   # galeries creusées (aperçu)
+
+
+## Aperçu d'une caverne : montagne, galeries creusées, sols (trait bleu),
+## prises (ronds gris), entrée et sortie
+func _draw_cave(o: Dictionary, z: float) -> void:
+	var cd := DrawnLevel.cave_data(o)
+	draw_set_transform(o.pos)
+	_safe_polygon(cd.mountain, CAVE_ROCK)
+	for poly in cd.outer:
+		_safe_polygon(poly, CAVE_ROCK)
+	for poly in cd.galleries:
+		_safe_polygon(poly, CAVE_GALLERY)
+	for fl in cd.floors:
+		if (fl as PackedVector2Array).size() >= 2:
+			draw_polyline(fl, EDGE_COLOR, maxf(14.0, 4.0 / z), true)
+	for hp in cd.holds:
+		draw_circle(hp, maxf(55.0, 9.0 / z), HOOK_COLOR)
+	draw_set_transform_matrix(Transform2D.IDENTITY)
+
+
+## Polygone plein si on peut le trianguler (sinon son contour : pas d'erreur)
+func _safe_polygon(poly: PackedVector2Array, c: Color) -> void:
+	if poly.size() < 3:
+		return
+	if Geometry2D.triangulate_polygon(poly).is_empty():
+		var closed := PackedVector2Array(poly)
+		closed.append(poly[0])
+		draw_polyline(closed, c, 6.0)
+	else:
+		draw_colored_polygon(poly, c)
+
+
+## Change un réglage de la caverne, puis la recolle au sol (son entrée peut
+## avoir bougé : autre étage d'entrée, autre longueur…)
+func _set_cave(key: String, v) -> void:
+	_set_obj(key, v, true)
+	DrawnLevel.snap_shape(_sel.index)
+	queue_redraw()
+
+
+## Réglages d'une caverne. Simple : nouvelle graine (🎲), Petit / Moyen /
+## Grand (longueur), étages, sinuosité ; Expert : + étage d'entrée et de
+## sortie, longueur des vagues, graine exacte, position.
+func _cave_settings(col: VBoxContainer, o: Dictionary) -> void:
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 4)
+	col.add_child(row)
+	var dice := _button("🎲 Autre caverne", row, 150)
+	dice.add_theme_font_size_override("font_size", 15)
+	dice.pressed.connect(func():
+		_push_undo()
+		DrawnLevel.objects[_sel.index].props.seed = float(randi_range(1, 99999))
+		DrawnLevel.snap_shape(_sel.index)
+		_changed()
+		_rebuild_settings())
+	var row2 := HBoxContainer.new()
+	row2.add_theme_constant_override("separation", 4)
+	col.add_child(row2)
+	for preset in [["Petit", 3], ["Moyen", 5], ["Grand", 8]]:
+		var b := _button(preset[0], row2, 72)
+		b.add_theme_font_size_override("font_size", 15)
+		var n: int = preset[1]
+		b.pressed.connect(func():
+			_push_undo()
+			DrawnLevel.objects[_sel.index].props.columns = float(n)
+			DrawnLevel.snap_shape(_sel.index)
+			_changed()
+			_rebuild_settings())
+	_slider_row(col, "Longueur", 3, 10, 1, DrawnLevel.shape_prop(o, "columns"), func(v): _set_cave("columns", float(v)), func(v): return "%d colonnes" % int(v))
+	_slider_row(col, "Étages", 2, 4, 1, DrawnLevel.shape_prop(o, "lanes"), func(v):
+		_set_cave("lanes", float(v))
+		# la sortie suit l'étage du bas (réglage Simple : on entre en haut, on sort en bas)
+		if not expert:
+			_set_cave("exit", float(v) - 1.0), func(v): return "%d" % int(v))
+	_slider_row(col, "Sinuosité", 0.0, 1800.0, 100.0, DrawnLevel.shape_prop(o, "amp"), func(v): _set_cave("amp", v),
+		func(v): return "plate" if v < 1.0 else ("douce" if v < 600.0 else ("forte" if v < 1200.0 else "montagnes russes")))
+	if expert:
+		var lanes := int(DrawnLevel.shape_prop(o, "lanes"))
+		_slider_row(col, "Étage d'entrée", 1, lanes, 1, DrawnLevel.shape_prop(o, "entry") + 1.0, func(v): _set_cave("entry", float(v) - 1.0), func(v): return "%d" % int(v))
+		_slider_row(col, "Étage de sortie", 1, lanes, 1, DrawnLevel.shape_prop(o, "exit") + 1.0, func(v): _set_cave("exit", float(v) - 1.0), func(v): return "%d" % int(v))
+		_slider_row(col, "Vagues", 1.0, 6.0, 0.5, DrawnLevel.shape_prop(o, "wave"), func(v): _set_cave("wave", v), func(v): return "%.1f colonnes" % v)
+		_spin_row(col, "Graine", DrawnLevel.shape_prop(o, "seed"), func(v): _set_cave("seed", float(clampi(int(v), 1, 99999))))
 		_spin_row(col, "X", o.pos.x, func(v): _set_obj("pos", Vector2(v, DrawnLevel.objects[_sel.index].pos.y)))
 		_spin_row(col, "Y", o.pos.y, func(v): _set_obj("pos", Vector2(DrawnLevel.objects[_sel.index].pos.x, v)))
 

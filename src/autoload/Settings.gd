@@ -150,6 +150,10 @@ var ground_style: int = 1
 ## d'origine, 1 = console, 2 = stalactites rondes (CHOIX DE L'ÉQUIPE, 27/11),
 ## 3 = grosse goutte, 4 = corniche.
 var gruyere_balcony_style: int = 2
+## [SINUEUX 1.84] Outil d'essai (développeurs) : amplitude de la vague des
+## cavernes du Gruyère, pour vérifier au bot que les cavernes sinueuses se
+## traversent. 0 = Gruyère normal (plat) ; jamais enregistré.
+var cave_sinuous_test := 0.0
 ## [ŒUFS 1.79] Dessin des œufs à grappiner du Gruyère : -1 = MÉLANGE (choix
 ## de l'équipe, 27/11 : « tous ») — chaque œuf garde toujours le même dessin,
 ## les 5 dessins reviennent à tour de rôle dans l'ordre du niveau ; 0 = d'origine

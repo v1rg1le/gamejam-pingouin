@@ -110,6 +110,20 @@ signal player_reached_node(c: int, l: int)
 @export var pits_only_bottom: bool = true
 ## [1.65] Plafonds des couloirs accrochables au grappin.
 @export var hookable_ceilings: bool = true
+## [SINUEUX 1.84] Demande de l'équipe (28/11) : « des trajectoires générales
+## plus sinueuses, avec des hauts, des bas, des galeries qui se suivent ».
+## Amplitude (px) de la vague qui fait monter et descendre TOUTES les galeries
+## d'une colonne ensemble (les salles de croisement restent cohérentes) ;
+## 0 = caverne plate comme avant (le Gruyère de glace garde 0 : choix de
+## l'équipe, ses cavernes et ses médailles ne changent pas).
+@export var sinuous_amp: float = 0.0
+## [SINUEUX 1.84] Longueur d'une vague, en colonnes (petite = virages serrés).
+@export var sinuous_wave: float = 2.5
+## [CAVERNE 1.84] Nombre de tirages (même graine) pour trouver un plan qui
+## passe tous les contrôles. 60 = Gruyère (inchangé) ; le créateur en autorise
+## plus (cavernes courtes qui descendent de plusieurs étages : peu de tirages
+## y arrivent).
+@export var max_attempts: int = 60
 
 # --- Dimensions -----------------------------------------------------------------
 const COL_W := 2600.0          # largeur d'une colonne (un couloir ou une salle)
@@ -256,7 +270,77 @@ func _ready() -> void:
 #  Outils
 # =============================================================================
 func node_pos(c: int, l: int) -> Vector2:
-	return Vector2(c * COL_W, l * LANE_GAP + c * DROP)
+	return Vector2(c * COL_W, l * LANE_GAP + c * DROP + _wave_at(c))
+
+
+# --- [SINUEUX 1.84] La vague ---------------------------------------------------
+# Un bruit lisse tiré de la GRAINE (même caverne pour tout le monde) donne un
+# décalage vertical par colonne, multiplié par une enveloppe sin² nulle aux
+# deux bouts (entrées et sorties à leur place habituelle, raccords plats).
+# D'une colonne à la suivante, l'écart est plafonné (WAVE_STEP_MAX) : les
+# montées restent faisables avec l'élan (vérifié au bot, gruyere_bot.gd avec
+# Settings.cave_sinuous_test) et les ouvertures des salles se recouvrent.
+const WAVE_STEP_MAX := 900.0   # (520 en 1re version : vague invisible à l'échelle d'une caverne)
+var _wave: PackedFloat32Array = PackedFloat32Array()
+var _wave_key := ""
+
+
+func _wave_at(c: int) -> float:
+	var key := "%d|%d|%.1f|%.2f" % [cave_seed, columns, sinuous_amp, sinuous_wave]
+	if key != _wave_key:
+		_compute_wave()
+		_wave_key = key
+	return _wave[clampi(c, 0, _wave.size() - 1)] if _wave.size() > 0 else 0.0
+
+
+func _compute_wave() -> void:
+	_wave = PackedFloat32Array()
+	_wave.resize(columns + 1)
+	_wave.fill(0.0)
+	if sinuous_amp <= 0.0 or columns < 2:
+		return
+	# vraie ondulation : une sinusoïde (une vague tous les `sinuous_wave`
+	# colonnes), phase tirée de la graine, + un peu de bruit (vagues
+	# irrégulières) ; enveloppe seulement sur la 1re et la dernière colonne
+	# (entrée et sortie à leur place). (1re version : bruit seul, ±20 % de
+	# l'amplitude en pratique : on ne voyait presque pas la différence.)
+	var nz := FastNoiseLite.new()
+	nz.seed = cave_seed * 13 + 5
+	nz.noise_type = FastNoiseLite.TYPE_SIMPLEX_SMOOTH
+	nz.frequency = 0.35
+	var rng := RandomNumberGenerator.new()
+	rng.seed = cave_seed * 31 + 7
+	var phase := rng.randf() * TAU
+	for c in columns + 1:
+		var env := minf(1.0, minf(float(c), float(columns - c)))
+		var v := sin(TAU * float(c) / maxf(0.8, sinuous_wave) + phase) * 0.8 + nz.get_noise_1d(float(c) * 3.0) * 0.6
+		_wave[c] = sinuous_amp * clampf(v, -1.0, 1.0) * env
+	for c in range(1, columns + 1):
+		_wave[c] = _wave[c - 1] + clampf(_wave[c] - _wave[c - 1], -WAVE_STEP_MAX, WAVE_STEP_MAX)
+
+
+## [SINUEUX 1.84] Angle du sol au nœud de la colonne c : pente générale +
+## pente locale de la vague (les sols se raccordent sans cassure)
+func _joint_deg_at(c: int) -> float:
+	var a := clampi(c - 1, 0, columns)
+	var b := clampi(c + 1, 0, columns)
+	var dw: float = (_wave_at(b) - _wave_at(a)) / maxf(1.0, float(b - a))
+	return rad_to_deg(atan2(DROP + dw, COL_W))
+
+
+## [SINUEUX 1.84] y du sol de l'étage le plus bas, au point le plus bas de la caverne
+func _lowest_lane_y() -> float:
+	var y := -INF
+	for c in columns + 1:
+		y = maxf(y, node_pos(c, lanes_n - 1).y)
+	return y
+
+
+## [SINUEUX 1.84] y du sol de l'étage du haut en x (interpolé entre colonnes)
+func _top_lane_y_at(x: float) -> float:
+	var c := clampi(int(floor(x / COL_W)), 0, columns - 1)
+	var t := clampf((x - c * COL_W) / COL_W, 0.0, 1.0)
+	return lerpf(node_pos(c, 0).y, node_pos(c + 1, 0).y, t)
 
 
 func _k(c: int, l: int) -> String:
@@ -396,7 +480,7 @@ func generate() -> void:
 	lanes_n = 1
 	for l in entry_lanes + exit_lanes:
 		lanes_n = maxi(lanes_n, l + 1)
-	for attempt in 60:
+	for attempt in max_attempts:
 		attempts = attempt + 1
 		_rng.seed = hash([cave_seed, attempt])
 		_draw_plan()
@@ -678,7 +762,8 @@ func _build_tube(c: int, l: int) -> void:
 		kind = "cuvette"
 	var p0 := node_pos(c, l)
 	var p1 := node_pos(c + 1, l)
-	var aj := _joint_deg()
+	var aj := _joint_deg_at(c)       # [SINUEUX 1.84] angle au nœud de départ
+	var aj1 := _joint_deg_at(c + 1)  # [SINUEUX 1.84] angle au nœud d'arrivée
 	var base := func(x: float) -> float: return lerpf(p0.y, p1.y, (x - p0.x) / (p1.x - p0.x))
 	var floor_pts := PackedVector2Array()
 	var t := {"c": c, "l": l, "kind": kind, "holds": [], "deadly": false}
@@ -690,7 +775,7 @@ func _build_tube(c: int, l: int) -> void:
 			# un creux puis une bosse : on prend de l'élan au PUMP
 			var d1 := Vector2(p0.x + COL_W * 0.40, base.call(p0.x + COL_W * 0.40) + 200.0)
 			var d2 := Vector2(p0.x + COL_W * 0.75, base.call(p0.x + COL_W * 0.75) + 20.0)
-			floor_pts = _join(_join(_hermite(p0, d1, aj, 0.0), _hermite(d1, d2, 0.0, -8.0)), _hermite(d2, p1, -8.0, aj))
+			floor_pts = _join(_join(_hermite(p0, d1, aj, 0.0), _hermite(d1, d2, 0.0, -8.0)), _hermite(d2, p1, -8.0, aj1))
 			# [1.65] « petit rappel » : un boost jaune sur la remontée, dans la
 			# moitié basse de la caverne (là où l'on va le moins vite), une
 			# glissade sur deux environ
@@ -709,13 +794,19 @@ func _build_tube(c: int, l: int) -> void:
 			var xa := p0.x + (COL_W - gap) * (0.42 if (kind == "trou" or kind == "cuvette") else 0.5)
 			var lip := Vector2(xa, base.call(xa) - 30.0)
 			var land := Vector2(xa + gap, base.call(xa + gap) + 70.0)
+			# [SINUEUX 1.84] trou sur le vide dans une galerie qui MONTE : la
+			# réception ne doit pas être plus haute que le bord de départ (au
+			# bot, le saut ratait). Toujours au moins 100 px plus bas — déjà le
+			# cas dans une caverne plate (rien ne change pour le Gruyère).
+			if deadly:
+				land.y = maxf(land.y, lip.y + 100.0)
 			var a := _hermite(p0, lip, aj, -14.0)           # petit tremplin au bord
-			var b := _hermite(land, p1, 12.0, aj)
+			var b := _hermite(land, p1, 12.0, aj1)
 			if deadly:
 				# [1.65] étage du bas : le trou traverse la montagne et donne
 				# sur le VIDE. Le sol descend le long des bords jusque sous la
 				# montagne ; la fente est creusée dans la roche (sans voile).
-				var deep := node_pos(columns, lanes_n - 1).y + MOUNTAIN_BOTTOM + 400.0
+				var deep := _lowest_lane_y() + MOUNTAIN_BOTTOM + 400.0   # [SINUEUX 1.84] sous le point le plus bas
 				side_a = a
 				side_b = b
 				floor_pts = a.duplicate()
@@ -770,6 +861,16 @@ func _build_tube(c: int, l: int) -> void:
 		ceil_pts.append(Vector2(da, ya))
 		ceil_pts = _join(ceil_pts, _join(_hermite(Vector2(da, ya), dm, -40.0, 0.0, 10), _hermite(dm, Vector2(db, yb), 0.0, 40.0, 10)))
 	ceil_pts.append(p1 + Vector2(0, -TUNNEL_H))
+	# [SINUEUX 1.84] galerie qui MONTE nettement (vague) : boosts au sol pour
+	# gravir la côte avec l'élan (jamais au-dessus d'un trou)
+	var rise: float = p0.y - p1.y
+	if sinuous_amp > 0.0 and rise > 250.0:
+		var k_s: float = clampf(0.25 + rise / 1800.0, 0.3, 0.8)
+		for fx in [0.22, 0.55]:
+			var bx: float = p0.x + COL_W * fx
+			if t.has("lip") and bx > t.lip.x - 150.0 and bx < t.land.x + 150.0:
+				continue
+			_add_boost(Vector2(bx, _sample_y(floor_pts, bx)), _slope_deg(floor_pts, bx), k_s, 2.0)
 	_add_chain(ceil_pts, true)      # [1.65] plafond accrochable
 	_add_chain(floor_pts)
 	if t.deadly:
@@ -826,7 +927,8 @@ func _build_room(r: Dictionary) -> void:
 	var yll := node_pos(c, a + 1).y
 	var ylr := node_pos(c + 1, a + 1).y
 	var H := TUNNEL_H
-	var aj := _joint_deg()
+	var aj := _joint_deg_at(c)       # [SINUEUX 1.84]
+	var aj1 := _joint_deg_at(c + 1)
 	# [1.65] RAMPE : la galerie du bas ne continue pas (lr fermé) mais celle du
 	# haut, oui -> au lieu de monter au grappin, le sol remonte en pente douce
 	# (~21°) jusqu'à la sortie haute, avec des boosts (voir plus bas)
@@ -834,7 +936,7 @@ func _build_room(r: Dictionary) -> void:
 	r["ramp"] = ramp
 	# sol du bas : un creux léger
 	var mid := Vector2((x0 + x1) * 0.5, (yll + ylr) * 0.5 + 150.0)
-	var floor_line := _join(_hermite(Vector2(x0, yll), mid, aj, 0.0), _hermite(mid, Vector2(x1, ylr), 0.0, aj))
+	var floor_line := _join(_hermite(Vector2(x0, yll), mid, aj, 0.0), _hermite(mid, Vector2(x1, ylr), 0.0, aj1))
 	var ramp_a := Vector2.ZERO
 	var ramp_e := Vector2.ZERO
 	if ramp:
@@ -844,7 +946,7 @@ func _build_room(r: Dictionary) -> void:
 		ramp_e = Vector2(x1 - 200.0, yur + 30.0)
 		var alpha := rad_to_deg(atan2(ramp_a.y - ramp_e.y, ramp_e.x - ramp_a.x))
 		floor_line = _join(_join(_hermite(Vector2(x0, yll), ramp_a, aj, -alpha, 10),
-			_hermite(ramp_a, ramp_e, -alpha, -alpha, 12)), _hermite(ramp_e, Vector2(x1, yur), -alpha, aj, 8))
+			_hermite(ramp_a, ramp_e, -alpha, -alpha, 12)), _hermite(ramp_e, Vector2(x1, yur), -alpha, aj1, 8))
 	var floor_y := func(x: float) -> float:
 		for i in floor_line.size() - 1:
 			if floor_line[i].x <= x and floor_line[i + 1].x >= x:
@@ -944,6 +1046,10 @@ func _build_room(r: Dictionary) -> void:
 		floor_chains.append(PackedVector2Array([Vector2(x0, yul), Vector2(x0 + LEDGE_L, yul)]))
 	if r.ur and not ramp:
 		floor_chains.append(PackedVector2Array([Vector2(x1 - LEDGE_R, yur), Vector2(x1, yur)]))
+	# [SINUEUX 1.84] fond de salle qui remonte (vague) : un boost au creux
+	if sinuous_amp > 0.0 and not ramp and yll - ylr > 250.0:
+		var bxr: float = (x0 + x1) * 0.5 + 150.0
+		_add_boost(Vector2(bxr, floor_y.call(bxr)), rad_to_deg(atan2(floor_y.call(bxr + 25.0) - floor_y.call(bxr - 25.0), 50.0)), clampf(0.25 + (yll - ylr) / 1800.0, 0.3, 0.8), 2.0)
 	# --- prises
 	var tag := "c%d_s%d" % [c, a]
 	if r.ul and r.ur:
@@ -1190,7 +1296,7 @@ func _build_mountain() -> void:
 	var xr := columns * COL_W + STUB
 	var top0 := node_pos(0, 0).y - TUNNEL_H - MOUNTAIN_TOP
 	var top1 := node_pos(columns, 0).y - TUNNEL_H - MOUNTAIN_TOP
-	var bottom := node_pos(columns, lanes_n - 1).y + MOUNTAIN_BOTTOM
+	var bottom := _lowest_lane_y() + MOUNTAIN_BOTTOM   # [SINUEUX 1.84] (= dernier étage si plat)
 	mountain = PackedVector2Array()
 	mountain.append(Vector2(xl, bottom))
 	mountain.append(Vector2(xl, top0))
@@ -1198,6 +1304,9 @@ func _build_mountain() -> void:
 	for i in range(1, n):
 		var x := lerpf(xl, xr, float(i) / n)
 		var y := lerpf(top0, top1, float(i) / n) - deco.randf_range(200.0, 1500.0) * sin(PI * float(i) / n)
+		# [SINUEUX 1.84] toujours au-dessus de l'étage du haut (qui monte et descend)
+		if sinuous_amp > 0.0:
+			y = minf(y, _top_lane_y_at(clampf(x, 0.0, columns * COL_W)) - DOME_H - 700.0)
 		mountain.append(Vector2(x, y))
 	mountain.append(Vector2(xr, top1))
 	mountain.append(Vector2(xr, bottom))

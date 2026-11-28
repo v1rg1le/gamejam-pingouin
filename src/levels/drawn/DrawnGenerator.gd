@@ -176,7 +176,7 @@ func _build_objects() -> void:
 					d.rotation = o.rot
 					d.scale = Vector2.ONE * float(o.scale)
 					add_child(d)
-	if not _checkpoints.is_empty():
+	if not _checkpoints.is_empty() or not _caves.is_empty():   # [CAVERNE 1.84] + carrefours des cavernes
 		add_to_group("course_checkpoints")   # Player._pick_respawn_sample nous demande où repartir
 
 
@@ -213,6 +213,9 @@ func _add_egg(o: Dictionary) -> void:
 ## que l'éditeur a dessiné). IceStyle l'habille ensuite (glace, neige sur les
 ## dessus) et fond son contour avec le sol qu'elle touche.
 func _add_shape(o: Dictionary) -> void:
+	if o.type == "cave":
+		_add_cave(o)   # [CAVERNE 1.84] gros bloc : le générateur du Gruyère
+		return
 	var g := DrawnLevel.shape_geometry(o, _bottom)
 	var body := StaticBody2D.new()
 	body.collision_layer = 2
@@ -247,6 +250,58 @@ func _add_shape(o: Dictionary) -> void:
 		add_child(ba)
 
 
+# --- [CAVERNE 1.84] Cavernes générées --------------------------------------------
+# Même générateur que le Gruyère (CaveGenerator), avec la vague du mode
+# sinueux. Comme dans le Gruyère (GruyereGenerator._cave_checkpoints,
+# _cave_focus), en plus simple :
+#  - tomber dans une fente qui donne sur le vide (étage du bas) = chute ;
+#  - après une chute, on repart du dernier CARREFOUR touché au sol ;
+#  - la caméra garde dans le cadre la galerie du dessus et celle du dessous.
+var _caves: Array = []            # les CaveGenerator du niveau
+var _cave_cp = null               # dernier carrefour touché {pos} (ou null)
+
+
+func _add_cave(o: Dictionary) -> void:
+	var g = DrawnLevel.make_cave_generator(o)
+	g.name = "Caverne%d" % (_caves.size() + 1)
+	g.position = o.pos
+	add_child(g)
+	_caves.append(g)
+
+
+## Appelé à chaque image (voir _physics_process) quand il y a des cavernes
+func _cave_tick(p) -> bool:
+	var pos: Vector2 = p.global_position
+	var inside := false
+	for g in _caves:
+		var lp: Vector2 = pos - g.position
+		if lp.x < -CaveGenerator.STUB - 50.0 or lp.x > g.columns * CaveGenerator.COL_W + CaveGenerator.STUB + 50.0:
+			continue
+		for r in g.pits:
+			if r.has_point(lp):
+				p.die()
+				return false
+		if lp.x < 0.0 or lp.x >= g.columns * CaveGenerator.COL_W:
+			continue
+		inside = true
+		# carrefour touché au sol : nouveau point de reprise
+		var c := int(lp.x / CaveGenerator.COL_W)
+		var l := clampi(roundi((lp.y - g._top_lane_y_at(lp.x) + 150.0) / CaveGenerator.LANE_GAP), 0, g.lanes_n - 1)
+		if p.is_on_ground:
+			var n: Vector2 = g.node_pos(c, l)
+			if lp.x > n.x - 100.0 and lp.x < n.x + 300.0 and absf(lp.y - n.y) < 160.0:
+				_cave_cp = {"pos": g.position + n + Vector2(200, -60)}
+				_cp = -1   # (le carrefour est plus récent que le dernier point de passage)
+		# caméra : galeries du dessus et du dessous de la colonne suivante
+		var mid := Vector2(0.0, -CaveGenerator.TUNNEL_H * 0.5)
+		var up: Vector2 = g.position + g.node_pos(c + 1, maxi(l - 1, 0)) + mid
+		var down: Vector2 = g.position + g.node_pos(c + 1, mini(l + 1, g.lanes_n - 1)) + Vector2(0, 260)
+		p.camera.focus_point = Vector2(minf(up.x, pos.x), minf(up.y, pos.y - 300.0))
+		p.camera.focus_point2 = Vector2(maxf(down.x, pos.x), maxf(down.y, pos.y + 200.0))
+		p.camera.focus_min_zoom = 0.3
+	return inside
+
+
 ## Petit drapeau de point de passage (décor : poteau + fanion jaune)
 func _add_flag(pos: Vector2) -> void:
 	var pole := Line2D.new()
@@ -263,7 +318,7 @@ func _add_flag(pos: Vector2) -> void:
 
 
 func _physics_process(_delta: float) -> void:
-	if _checkpoints.is_empty() and _cameras.is_empty():
+	if _checkpoints.is_empty() and _cameras.is_empty() and _caves.is_empty():
 		return
 	var p = get_tree().get_first_node_in_group("player")
 	if p == null:
@@ -272,6 +327,11 @@ func _physics_process(_delta: float) -> void:
 	for i in _checkpoints.size():
 		if i != _cp and p.global_position.distance_to(_checkpoints[i]) < 350.0:
 			_cp = i
+			_cave_cp = null   # [CAVERNE 1.84] le point de passage est plus récent
+	# [CAVERNE 1.84] cavernes (chutes dans le vide, carrefours, caméra)
+	if not _caves.is_empty() and _cave_tick(p):
+		_in_camera = true
+		return
 	# zones de caméra : toute la zone reste à l'écran tant qu'on est dedans
 	var zone = null
 	for z in _cameras:
@@ -292,7 +352,11 @@ func _physics_process(_delta: float) -> void:
 ## Player._pick_respawn_sample : après une chute, au dernier point de passage
 ## atteint (null = règle habituelle : un peu avant la chute)
 func respawn_sample(_pos: Vector2):
-	if _cp < 0 or RaceManager.bonus_active or RaceManager.free_ride:
+	if RaceManager.bonus_active or RaceManager.free_ride:
+		return null
+	if _cave_cp != null and _cp < 0:
+		return {"pos": _cave_cp.pos, "vel": Vector2(500, 0)}   # [CAVERNE 1.84] dernier carrefour
+	if _cp < 0:
 		return null
 	return {"pos": _checkpoints[_cp] + Vector2(0, -60), "vel": Vector2(400, 0)}
 

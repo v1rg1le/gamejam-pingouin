@@ -1209,7 +1209,8 @@ const OBJECT_HALF := {
 const VALID_TYPES := ["egg", "boost", "start", "finish", "checkpoint", "sign", "camera",
 	"arch", "podium", "bush", "igloo", "colisee", "ice1", "ice2", "ice3",
 	# [FORMES 1.83] formes du terrain (voir la partie 10)
-	"ramp", "halfpipe", "bowl", "slope", "bend", "upipe", "ceiling", "floating", "wall", "pillar"]
+	"ramp", "halfpipe", "bowl", "slope", "bend", "upipe", "ceiling", "floating", "wall", "pillar",
+	"cave"]   # [CAVERNE 1.84]
 ## Types dont il ne peut y avoir qu'un seul exemplaire
 const UNIQUE_TYPES := ["start", "finish"]
 
@@ -1372,7 +1373,8 @@ static func record_validation(time: float) -> void:
 #   wall     mur : bloc qui monte du sol, hauteur h, épaisseur w ;
 #   pillar   pilier : colonne qui descend dans le vide depuis son dessus (Gruyère).
 
-const SHAPE_TYPES := ["ramp", "halfpipe", "bowl", "slope", "bend", "upipe", "ceiling", "floating", "wall", "pillar"]
+const SHAPE_TYPES := ["ramp", "halfpipe", "bowl", "slope", "bend", "upipe", "ceiling", "floating", "wall", "pillar",
+	"cave"]   # [CAVERNE 1.84] caverne générée par une graine (voir la partie 11)
 ## Réglages par défaut (taille « Moyen »)
 const SHAPE_DEFAULTS := {
 	"ramp": {"w": 640.0, "h": 240.0, "lip": 32.0},
@@ -1385,6 +1387,9 @@ const SHAPE_DEFAULTS := {
 	"floating": {"w": 640.0, "h": 150.0},
 	"wall": {"w": 130.0, "h": 700.0},
 	"pillar": {"w": 240.0, "h": 1400.0},
+	# [CAVERNE 1.84] graine, longueur (colonnes), étages, étage d'entrée et de
+	# sortie, sinuosité (amplitude de la vague, px) et longueur des vagues
+	"cave": {"seed": 1.0, "columns": 5.0, "lanes": 3.0, "entry": 0.0, "exit": 2.0, "amp": 900.0, "wave": 2.5},
 }
 ## Tailles toutes faites du mode Simple : facteur sur la largeur et la hauteur
 const SHAPE_PRESETS := {"Petit": 0.6, "Moyen": 1.0, "Grand": 1.6}
@@ -1392,7 +1397,7 @@ const SHAPE_PRESETS := {"Petit": 0.6, "Moyen": 1.0, "Grand": 1.6}
 const SHAPE_MIN := 60.0
 const SHAPE_MAX := 4000.0
 ## Formes qui s'aimantent au sol (entrée au bout d'un trait / posées dessus)
-const SHAPE_GROUNDED := ["ramp", "halfpipe", "bowl", "slope", "bend", "upipe", "wall"]
+const SHAPE_GROUNDED := ["ramp", "halfpipe", "bowl", "slope", "bend", "upipe", "wall", "cave"]
 ## Formes creusées (sous le niveau du sol) : seulement aimantées par les
 ## bouts (posées au milieu d'un sol, le sol les remplirait)
 const SHAPE_DUG := ["halfpipe", "bowl"]
@@ -1423,6 +1428,21 @@ static func shape_prop(o: Dictionary, key: String) -> float:
 	if not is_finite(f):
 		f = float(d)
 	match key:
+		# [CAVERNE 1.84] réglages de la caverne
+		"seed":
+			return float(clampi(int(f), 1, 99999))
+		"columns":
+			# au moins 2 colonnes de plus que d'étages (pour descendre d'un étage
+			# à l'autre, il faut des salles de croisement)
+			return float(clampi(int(f), maxi(3, int(shape_prop(o, "lanes")) + 2), 10))
+		"lanes":
+			return float(clampi(int(f), 2, 4))
+		"entry", "exit":
+			return float(clampi(int(f), 0, int(shape_prop(o, "lanes")) - 1))
+		"amp":
+			return clampf(f, 0.0, 1800.0)
+		"wave":
+			return clampf(f, 1.0, 6.0)
 		"lip":
 			return clampf(f, 5.0, 70.0)
 		"angle":
@@ -1455,6 +1475,16 @@ static func shape_geometry(o: Dictionary, bottom: float = INF) -> Dictionary:
 	var frame := Rect2()
 	var boosts: Array = []
 	match t:
+		"cave":
+			# [CAVERNE 1.84] contour = la montagne ; entrée / sortie = début du
+			# couloir d'entrée et fin du couloir de sortie (sur les flancs)
+			var cd := cave_data(o)
+			poly = cd.mountain
+			for i in range(1, poly.size() - 1):
+				top.append(poly[i])
+			entry = cd.entry
+			exit = cd.exit
+			frame = cd.frame
 		"ramp":
 			# courbe y = -h * x^p : pente nulle au départ, angle `lip` à la lèvre
 			var lip := deg_to_rad(shape_prop(o, "lip"))
@@ -1584,7 +1614,7 @@ static func shape_geometry(o: Dictionary, bottom: float = INF) -> Dictionary:
 			poly = PackedVector2Array([Vector2(0, 0), Vector2(w, 0), Vector2(w, h), Vector2(0, h)])
 			entry = Vector2.INF
 			frame = Rect2(0, 0, w, h)
-	var xf := Transform2D(float(o.get("rot", 0.0)), o.pos)
+	var xf := Transform2D(0.0 if t == "cave" else float(o.get("rot", 0.0)), o.pos)   # (une caverne ne se tourne pas)
 	var out := {"poly": xf * poly, "top": xf * top, "frame": frame, "boosts": [],
 		"entry": xf * entry if entry != Vector2.INF else Vector2.INF,
 		"exit": xf * exit if exit != Vector2.INF else Vector2.INF}
@@ -1695,3 +1725,69 @@ static func chain_end(p: Vector2) -> Vector2:
 		if not moved:
 			break
 	return p
+
+
+
+# --- 11. [CAVERNE 1.84] Caverne générée (gros bloc du créateur) ----------------------
+# Demande de l'équipe (28/11) : des cavernes aux trajectoires plus sinueuses
+# (hauts, bas, galeries qui se suivent). Dans le créateur, la caverne est une
+# « forme » de plus (même aimantation, sélection, survol, Annuler) : c'est le
+# MÊME générateur que le Gruyère (CaveGenerator), avec la vague du mode
+# sinueux. Une entrée (en haut à gauche par défaut), une sortie (en bas à
+# droite par défaut) ; à l'intérieur, les routes se croisent (salles en X et
+# en Y), sans cul-de-sac (vérifié par CaveGenerator.check_plan).
+# La géométrie est calculée une fois par jeu de réglages (cache).
+
+static var _cave_cache := {}
+## Script du générateur, chargé seulement quand on s'en sert : DrawnLevel est
+## lu par RaceManager (chargé au démarrage AVANT l'autoload Sfx) ; citer
+## CaveGenerator directement faisait compiler trop tôt BoostArea.gd, qui
+## utilise Sfx (« Identifier not found: Sfx » : plus aucun boost dans le jeu)
+const CAVE_SCRIPT := "res://src/levels/cave/CaveGenerator.gd"
+
+
+## Générateur de caverne (CaveGenerator) prêt à générer, pas encore dans
+## l'arbre, avec les réglages de o
+static func make_cave_generator(o: Dictionary) -> Node2D:
+	var g = load(CAVE_SCRIPT).new()
+	g.cave_seed = int(shape_prop(o, "seed"))
+	g.columns = int(shape_prop(o, "columns"))
+	var lanes := int(shape_prop(o, "lanes"))
+	var e := int(shape_prop(o, "entry"))
+	var x := int(shape_prop(o, "exit"))
+	g.entry_lanes.assign([e])
+	# le nombre d'étages d'une caverne = l'étage le plus bas d'une entrée ou
+	# d'une sortie : si ni l'entrée ni la sortie choisies ne sont en bas, une
+	# 2e sortie est ouverte à l'étage du bas (sinon la caverne aurait moins
+	# d'étages que demandé)
+	if maxi(e, x) < lanes - 1:
+		g.exit_lanes.assign([x, lanes - 1])
+	else:
+		g.exit_lanes.assign([x])
+	g.sinuous_amp = shape_prop(o, "amp")
+	g.sinuous_wave = shape_prop(o, "wave")
+	g.max_attempts = 500   # (voir CaveGenerator.max_attempts)
+	return g
+
+
+## Données de dessin et d'aimantation d'une caverne (coordonnées LOCALES) :
+## mountain, galleries (polygones creusés), floors (lignes de sol), holds
+## (prises), entry, exit, frame, ok (plan vérifié : pas de cul-de-sac)
+static func cave_data(o: Dictionary) -> Dictionary:
+	var key := "%d|%d|%d|%d|%d|%.0f|%.2f" % [int(shape_prop(o, "seed")), int(shape_prop(o, "columns")), int(shape_prop(o, "lanes")),
+		int(shape_prop(o, "entry")), int(shape_prop(o, "exit")), shape_prop(o, "amp"), shape_prop(o, "wave")]
+	if _cave_cache.has(key):
+		return _cave_cache[key]
+	var g = make_cave_generator(o)
+	g.generate()
+	var fr := Rect2(g.mountain[0], Vector2.ZERO)
+	for p in g.mountain:
+		fr = fr.expand(p)
+	var d := {"mountain": PackedVector2Array(g.mountain), "galleries": g.carved.duplicate(), "floors": g.floor_chains.duplicate(),
+		"holds": g.holds.values(), "entry": g.flank_point(g.entry_lanes[0], true), "exit": g.flank_point(g.exit_lanes[0], false),
+		"frame": fr, "ok": bool(g.check.get("ok", false)), "outer": g.outer_polys.duplicate()}
+	g.free()
+	if _cave_cache.size() > 64:
+		_cave_cache.clear()
+	_cave_cache[key] = d
+	return d
