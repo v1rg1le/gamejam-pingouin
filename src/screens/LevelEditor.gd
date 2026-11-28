@@ -50,7 +50,7 @@ extends Node2D
 enum Tool { DRAW, HOOK, ERASE, MOVE, SELECT }
 
 ## Zoom de la vue (Camera2D.zoom) : petit = on voit plus loin
-const ZOOM_MIN = 0.06
+const ZOOM_MIN = 0.02   # [GROTTE 1.87] 0.06 -> 0.02 : voir une grotte grande comme un niveau
 const ZOOM_MAX = 0.9
 const ZOOM_DEFAULT = 0.22
 ## Tolérance (en px d'ÉCRAN) pour toucher un trait / un bloc avec la gomme ou le grappin
@@ -490,7 +490,7 @@ func _on_auto_toggled(on: bool) -> void:
 
 func _on_test() -> void:
 	if not DrawnLevel.is_playable():
-		_flash("Dessine d'abord un sol !")
+		_flash("Dessine d'abord un sol (ou creuse une caverne taillée) !")
 		return
 	DrawnLevel.save()
 	DrawnLevel.return_scene = DrawnLevel.EDITOR_SCENE   # après la course : retour ici
@@ -503,11 +503,15 @@ func _on_test() -> void:
 ## l'écran, à la vitesse choisie ; il ne compte pas pour les records.
 func _on_test_here() -> void:
 	if not DrawnLevel.is_playable():
-		_flash("Dessine d'abord un sol !")
+		_flash("Dessine d'abord un sol (ou creuse une caverne taillée) !")
 		return
 	var vp: Vector2 = get_viewport().get_visible_rect().size
-	var from := DrawnLevel.start_point_near(_to_world(vp * 0.5).x)
+	var center := _to_world(vp * 0.5)
+	# [GROTTE 1.87] milieu de l'écran dans une galerie d'une caverne taillée :
+	# on part de là (dans un niveau tout en grotte, il n'y a pas de sol dessiné)
+	var from := center if DrawnLevel.carved_air_at(center) else DrawnLevel.start_point_near(center.x)
 	if from == Vector2.INF:
+		_flash("Mets le milieu de l'écran dans une galerie pour partir d'ici.")
 		return
 	DrawnLevel.save()
 	DrawnLevel.return_scene = DrawnLevel.EDITOR_SCENE
@@ -576,8 +580,9 @@ func _open_rename() -> void:
 	row.add_theme_constant_override("separation", 8)
 	row.alignment = BoxContainer.ALIGNMENT_END
 	col.add_child(row)
-	_button("Annuler", row, 100).pressed.connect(func(): _rename_panel.queue_free())
-	_button("OK", row, 100).pressed.connect(_confirm_rename)
+	# [ICÔNES PARTOUT 1.87] croix = annuler, coche = garder le nouveau nom
+	_icon_choice("non", row, "Annuler", "Garder l'ancien nom.").pressed.connect(func(): _rename_panel.queue_free())
+	_icon_choice("ok", row, "OK", "Garder ce nom (Entrée marche aussi).").pressed.connect(_confirm_rename)
 	_ui_root.add_child(_rename_panel)   # dans le Control qui porte le thème du jeu
 	_rename_edit.grab_focus()
 
@@ -702,6 +707,13 @@ func _draw() -> void:
 
 	# e. départ (le pingouin, à sa vraie taille) et arrivée (faisceau jaune)
 	#    [OBJETS 1.81] à l'endroit des objets « Départ » / « Arrivée » s'il y en a
+	# [GROTTE 1.87] niveau tout en grotte : départ et arrivée dans les galeries
+	if isl.is_empty() and DrawnLevel.has_carved():
+		var ends := DrawnLevel.carved_default_ends()
+		var st_o := DrawnLevel.first_object("start")
+		var fi_o := DrawnLevel.first_object("finish")
+		_draw_start_finish(st_o.pos + Vector2(0, 80) if not st_o.is_empty() else ends[0] + Vector2(0, 80),
+			fi_o.pos if not fi_o.is_empty() else ends[1], z, font, fs)
 	if not isl.is_empty():
 		var first: PackedVector2Array = isl[0]
 		var sx: float = minf(first[0].x + 150.0, first[first.size() - 1].x)
@@ -730,6 +742,18 @@ func _draw() -> void:
 			var mid: float = (_raw[i].x + _raw[i + 1].x) * 0.5
 			var col: Color = DANGER_COLOR if DrawnLevel._x_is_taken(mid) else STROKE_COLOR
 			draw_line(_raw[i], _raw[i + 1], col, 6.0 / z, true)
+
+
+## [GROTTE 1.87] Départ (pingouin) et arrivée (faisceau) à ces endroits
+func _draw_start_finish(sp: Vector2, fp: Vector2, z: float, font: Font, fs: int) -> void:
+	if sp.is_finite():
+		var ps: float = maxf(120.0, 40.0 / z)
+		draw_texture_rect(_penguin_tex, Rect2(sp + Vector2(-ps * 0.5, -ps * 1.05), Vector2(ps, ps)), false)
+		draw_string(font, sp + Vector2(-2.0 * fs, -ps * 1.05 - fs * 0.6), "DÉPART", HORIZONTAL_ALIGNMENT_LEFT, -1, fs, Color.WHITE)
+	if fp.is_finite():
+		var beam := PackedVector2Array([fp + Vector2(-70, 0), fp + Vector2(70, 0), fp + Vector2(42, -1600), fp + Vector2(-42, -1600)])
+		draw_polygon(beam, PackedColorArray([Color(1, 0.95, 0.4, 0.6), Color(1, 0.95, 0.4, 0.6), Color(1, 0.95, 0.4, 0), Color(1, 0.95, 0.4, 0)]))
+		draw_string(font, fp + Vector2(-2.3 * fs, -160.0), "ARRIVÉE", HORIZONTAL_ALIGNMENT_LEFT, -1, fs, Color(1, 0.95, 0.4))
 
 
 ## Points d'une ellipse (pour dessiner les blocs de grappin)
@@ -870,7 +894,11 @@ func _drag_update(wp: Vector2) -> void:
 			var v: float = (lp.x if _drag == "w" else (lp.y if h.type in SHAPE_H_DOWN else -lp.y)) + _stretch_offset
 			if expert and magnet:
 				v = snappedf(v, SNAP_GRID)
-			h.props[_drag] = clampf(v, DrawnLevel.SHAPE_MIN, DrawnLevel.SHAPE_MAX)
+			if h.type == "carved":
+				# [GROTTE 1.87] un bloc à creuser s'étire jusqu'à la taille d'un niveau
+				h.props[_drag] = clampf(v, DrawnLevel.CARVED_MIN, DrawnLevel.CARVED_MAX_W if _drag == "w" else DrawnLevel.CARVED_MAX_H)
+			else:
+				h.props[_drag] = clampf(v, DrawnLevel.SHAPE_MIN, DrawnLevel.SHAPE_MAX)
 		"scale":
 			if h.get("type", "") == "camera":
 				# zone de caméra : le coin suit le doigt (largeur et hauteur)
@@ -1037,13 +1065,26 @@ func _rebuild_settings() -> void:
 	_settings.offset_right = -6
 	_settings.offset_top = _top_bar_h + 6
 	_settings.grow_horizontal = Control.GROW_DIRECTION_BEGIN
-	var col := VBoxContainer.new()
-	col.add_theme_constant_override("separation", 6)
-	_settings.add_child(col)
+	# [PANNEAU 1.87] le panneau dépassait en bas de l'écran (caverne taillée :
+	# Dupliquer / Supprimer coupés). Choix de l'équipe : les réglages défilent,
+	# les actions (Dupliquer, Supprimer, et l'action principale de l'objet
+	# comme « Tout reboucher ») restent toujours visibles en bas.
+	var outer := VBoxContainer.new()
+	outer.add_theme_constant_override("separation", 6)
+	_settings.add_child(outer)
 	var title := Label.new()
 	title.add_theme_font_size_override("font_size", 19)
 	title.add_theme_color_override("font_color", SELECT_COLOR)
-	col.add_child(title)
+	outer.add_child(title)
+	_settings_scroll = ScrollContainer.new()
+	_settings_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	outer.add_child(_settings_scroll)
+	var col := VBoxContainer.new()
+	col.add_theme_constant_override("separation", 6)
+	col.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_settings_scroll.add_child(col)
+	_settings_footer = _icon_row(outer)
+	_settings_footer.add_theme_constant_override("separation", 6)
 	if _sel.kind == "hook":
 		title.text = "Prise de grappin"
 		var h: Dictionary = DrawnLevel.hooks[_sel.index]
@@ -1077,15 +1118,33 @@ func _rebuild_settings() -> void:
 			# position du début du trait (tout le trait suit)
 			_spin_row(col, "Début X", st[0].x, func(v): _move_sel_stroke_to(Vector2(v, DrawnLevel.strokes[_sel.index][0].y)))
 			_spin_row(col, "Début Y", st[0].y, func(v): _move_sel_stroke_to(Vector2(DrawnLevel.strokes[_sel.index][0].x, v)))
-	var row := HBoxContainer.new()
-	row.add_theme_constant_override("separation", 6)
-	col.add_child(row)
-	_button("Dupliquer", row, 108).pressed.connect(_duplicate_sel)
-	_button("Supprimer", row, 108).pressed.connect(_delete_sel)
+	# [ICÔNES PARTOUT 1.87] actions fixes en icônes
+	_icon_choice("dupliquer", _settings_footer, "Dupliquer", "Fait une copie juste à côté (une forme se colle au bout de l'originale).").pressed.connect(_duplicate_sel)
+	_icon_choice("supprimer", _settings_footer, "Supprimer", "Enlève l'élément choisi (Annuler le fait revenir).").pressed.connect(_delete_sel)
 	_ui_root.add_child(_settings)
+	_fit_settings.call_deferred()
 	if _tip != null and is_instance_valid(_tip):
 		_ui_root.move_child(_tip, -1)   # [ICÔNES 1.82] la bulle reste au-dessus
 	_keep_selection_visible()
+
+
+var _settings_scroll: ScrollContainer = null   # [PANNEAU 1.87] réglages qui défilent
+var _settings_footer: HBoxContainer = null     # [PANNEAU 1.87] actions toujours visibles
+
+
+## [PANNEAU 1.87] Hauteur de la zone qui défile : tout le contenu s'il tient,
+## sinon la place entre la barre du haut et celle du bas (moins le titre et
+## les actions) ; on fait défiler le reste à la molette ou au doigt
+func _fit_settings() -> void:
+	if _settings == null or not is_instance_valid(_settings) or _settings_scroll == null or not is_instance_valid(_settings_scroll):
+		return
+	var content: Control = _settings_scroll.get_child(0)
+	var need: float = content.get_combined_minimum_size().y
+	var outer: Control = _settings.get_child(0)
+	var other: float = outer.get_combined_minimum_size().y - _settings_scroll.get_combined_minimum_size().y
+	var avail: float = _ui_root.size.y - _top_bar_h - _bottom_bar_h - 30.0 - other - 24.0
+	_settings_scroll.custom_minimum_size = Vector2(content.get_combined_minimum_size().x + 12.0, clampf(need, 40.0, maxf(80.0, avail)))
+	_settings.reset_size()
 
 
 ## Si le panneau de réglages (à droite) cache la sélection, la vue glisse
@@ -1274,18 +1333,56 @@ func _ibutton(id: String, parent: Node, toggle := false) -> Button:
 	b.focus_mode = Control.FOCUS_NONE
 	b.toggle_mode = toggle
 	b.icon_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	var tip: Array = TIPS.get(id, [id, "", "", id])
-	if expert:
-		b.custom_minimum_size = Vector2(50, 46)
-	else:
-		b.text = tip[3]
-		b.vertical_icon_alignment = VERTICAL_ALIGNMENT_TOP
-		b.add_theme_font_size_override("font_size", 13)
-		b.custom_minimum_size = Vector2(62, 58)
+	# [ICÔNES PARTOUT 1.87] demande de l'équipe : plus aucun texte sur les
+	# boutons, dans les deux modes ; le nom et le rôle sont dans la bulle
+	# (survol de la souris ou appui long au doigt). Le 4e champ de TIPS (mot
+	# de la 1.82) n'est plus affiché.
+	b.custom_minimum_size = ICON_BUTTON_SIZE
 	b.set_meta("tip", id)
 	_register_tip(b)
 	parent.add_child(b)
 	return b
+
+
+## [ICÔNES PARTOUT 1.87] Taille des boutons-icônes (assez grands pour le doigt)
+const ICON_BUTTON_SIZE := Vector2(50, 46)
+
+
+## [ICÔNES PARTOUT 1.87] Bouton-icône des panneaux (réglages, palette, fenêtre
+## du nom) : icône `id` de sprites/ui/editor/, bulle = [nom, ce qu'il fait].
+## `toggle` : bouton à bascule (choix parmi plusieurs, interrupteur).
+func _icon_choice(id: String, parent: Node, tip_name: String, tip_desc: String, toggle := false) -> Button:
+	var b := Button.new()
+	b.icon = _tex(ICON_DIR + id + ".png")
+	b.focus_mode = Control.FOCUS_NONE
+	b.toggle_mode = toggle
+	b.icon_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	b.expand_icon = false
+	b.custom_minimum_size = ICON_BUTTON_SIZE
+	b.set_meta("tip", [tip_name, tip_desc, ""])
+	_register_tip(b)
+	parent.add_child(b)
+	return b
+
+
+## [ICÔNES PARTOUT 1.87] Interrupteur en icône (remplace les cases à cocher
+## écrites) : icône pâle quand il est coupé, la bulle dit ce qu'il fait
+func _icon_toggle(id: String, parent: Node, tip_name: String, tip_desc: String, on: bool, cb: Callable) -> Button:
+	var b := _icon_choice(id, parent, tip_name, tip_desc + " Icône pâle = coupé.", true)
+	b.button_pressed = on
+	_dim_if_off(b)
+	b.toggled.connect(func(v):
+		_dim_if_off(b)
+		cb.call(v))
+	return b
+
+
+## Ligne de boutons-icônes (panneaux)
+func _icon_row(parent: Node) -> HBoxContainer:
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 4)
+	parent.add_child(row)
+	return row
 
 
 ## Bouton à bascule éteint (aimant coupé, grappins auto coupés…) : icône pâle
@@ -1790,13 +1887,12 @@ func _build_ui() -> void:
 	# [VALIDATION 1.81] « ✔ Valider » : finir le niveau depuis le départ (Score)
 	_ibutton("valider", brow).pressed.connect(_on_validate)
 	_ibutton("dici", brow).pressed.connect(_on_test_here)
-	# [ICÔNES 1.82] TESTER, le bouton principal, garde son mot dans les deux
-	# modes (icône à gauche du texte) : c'est lui qu'on cherche des yeux
-	_test_button = _button("TESTER", brow, 150)
-	_test_button.icon = _tex(ICON_DIR + "tester.png")
-	_test_button.add_theme_font_size_override("font_size", 22)
-	_test_button.set_meta("tip", "tester")
-	_register_tip(_test_button)
+	# [ICÔNES PARTOUT 1.87] TESTER, le bouton principal : icône seule comme les
+	# autres (demande de l'équipe), mais plus large et teinté de vert pour
+	# qu'on le trouve tout de suite
+	_test_button = _ibutton("tester", brow)
+	_test_button.custom_minimum_size = Vector2(84, 46)
+	_test_button.add_theme_color_override("icon_normal_color", Color(0.75, 1.0, 0.75))
 	_test_button.pressed.connect(_on_test)
 
 	# [ICÔNES 1.82] hauteur réelle des barres (plus hautes en mode Simple, à
@@ -1869,7 +1965,12 @@ func _refresh_ui() -> void:
 	var isl := DrawnLevel.islands()
 	var n_hooks: int = DrawnLevel.hook_list(isl).size()
 	var unsafe: int = DrawnLevel.unsafe_gaps(isl).size()
-	if isl.is_empty():
+	if isl.is_empty() and DrawnLevel.has_carved():
+		# [GROTTE 1.87] niveau tout en grotte
+		var gold0 := DrawnLevel.validated_gold()
+		_info.text = "Niveau tout en grotte  ·  %d grappin%s" % [n_hooks, "s" if n_hooks > 1 else ""]
+		_info.text += ("  ·  ✔ validé, or " + RaceManager.format_time(gold0)) if gold0 > 0.0 else "  ·  pas encore validé"
+	elif isl.is_empty():
 		_info.text = "Pas encore de sol."
 	else:
 		var length_m: int = int((isl[isl.size() - 1][isl[isl.size() - 1].size() - 1].x - isl[0][0].x) / 64.0)
@@ -1889,7 +1990,7 @@ func _refresh_ui() -> void:
 	_undo_button.disabled = _undo.is_empty()
 	_redo_button.disabled = _redo.is_empty()   # [CRÉATEUR v2 1.80]
 	_name_button.text = DrawnLevel.current_name   # [ICÔNES 1.82] le crayon est maintenant l'icône du bouton
-	_test_button.disabled = isl.is_empty()
+	_test_button.disabled = not DrawnLevel.is_playable()   # [GROTTE 1.87] tout en grotte aussi
 	if _auto_check.button_pressed != DrawnLevel.auto_hooks:
 		_auto_check.set_pressed_no_signal(DrawnLevel.auto_hooks)
 
@@ -1916,9 +2017,17 @@ const PALETTE := [
 	# [CAVERNE 1.84] demande de l'équipe (28/11) : cavernes d'abord — caverne
 	# générée (sinueuse) en 1.84, caverne taillée à la main en 1.85 ; le reste
 	# est décalé (balcon, stalactite, falaise 1.86 ; autres gros blocs 1.87)
-	["Gros blocs", [["cave", "Caverne", ""], ["carved", "Caverne taillée", ""], ["void", "Zone de vide", "1.87"],
-		["pillars", "Motif piliers", "1.87"], ["bigegg", "Grand œuf", "1.87"], ["endless", "Tronçon du Sans fin", "1.87"]]],
+	["Gros blocs", [["cave", "Caverne", ""], ["carved", "Caverne taillée", ""], ["void", "Zone de vide", "1.88"],
+		["pillars", "Motif piliers", "1.88"], ["bigegg", "Grand œuf", "1.88"], ["endless", "Tronçon du Sans fin", "1.88"]]],
 ]
+
+## [ICÔNES PARTOUT 1.87] Icône et bulle de chaque onglet de la palette
+const PALETTE_TAB_ICONS := ["onglet_objets", "onglet_terrain", "onglet_decor", "onglet_gros"]
+const PALETTE_TAB_TIPS := ["Prises, œufs, boosts, départ, arrivée, points de passage, panneaux, zones de caméra.",
+	"Sol et formes du terrain : tremplins, half-pipes, plafonds, balcons, falaises…",
+	"Décors : arche, podium, buisson, igloo, Colisée, blocs de glace.",
+	"Gros blocs : cavernes générées et cavernes taillées à la main."]
+
 
 ## [ICÔNES 1.82] Bulle de chaque case de la palette (ce que fait l'élément)
 const PALETTE_TIPS := {
@@ -2033,17 +2142,19 @@ func _build_palette() -> void:
 	var col := VBoxContainer.new()
 	col.add_theme_constant_override("separation", 6)
 	_palette.add_child(col)
-	var tabs := TabBar.new()
-	tabs.clip_tabs = false
-	for tab in PALETTE:
-		tabs.add_tab(tab[0])
-	tabs.current_tab = _palette_tab
-	tabs.focus_mode = Control.FOCUS_NONE
-	tabs.add_theme_font_size_override("font_size", 14)
-	tabs.tab_changed.connect(func(i):
-		_palette_tab = i
-		_build_palette.call_deferred())
-	col.add_child(tabs)
+	# [ICÔNES PARTOUT 1.87] onglets en icônes (plus de mots) : le nom de
+	# l'onglet est dans la bulle
+	var tabs := _icon_row(col)
+	var tgroup := ButtonGroup.new()
+	for ti in PALETTE.size():
+		var tb := _icon_choice(PALETTE_TAB_ICONS[ti], tabs, PALETTE[ti][0], PALETTE_TAB_TIPS[ti], true)
+		tb.button_group = tgroup
+		tb.button_pressed = ti == _palette_tab
+		var which := ti
+		tb.pressed.connect(func():
+			if _palette_tab != which:
+				_palette_tab = which
+				_build_palette.call_deferred())
 	var scroll := ScrollContainer.new()
 	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
@@ -2059,7 +2170,7 @@ func _build_palette() -> void:
 		var soon: String = item[2]
 		var b := Button.new()
 		b.focus_mode = Control.FOCUS_NONE
-		b.custom_minimum_size = Vector2(98, 100)
+		b.custom_minimum_size = Vector2(98, 78)   # [ICÔNES PARTOUT 1.87] vignette seule
 		b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		b.disabled = soon != ""
 		# vignette (en haut) et nom (en bas), posés sur le bouton ; ils
@@ -2080,14 +2191,8 @@ func _build_palette() -> void:
 		thumb.size_flags_vertical = Control.SIZE_EXPAND_FILL
 		thumb.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		inner.add_child(thumb)
-		var lbl := Label.new()
-		lbl.text = item[1] + ("  (" + soon + ")" if soon != "" else "")
-		lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-		lbl.add_theme_font_size_override("font_size", 12)
-		lbl.add_theme_color_override("font_color", Color.WHITE)
-		lbl.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		inner.add_child(lbl)
+		# [ICÔNES PARTOUT 1.87] plus de nom sous la vignette : il est dans la
+		# bulle (avec la version pour les éléments à venir, grisés)
 		if soon != "":
 			inner.modulate = Color(1, 1, 1, 0.45)   # à venir : grisé
 		b.toggle_mode = true
@@ -2171,14 +2276,8 @@ func _object_settings(col: VBoxContainer, title: Label) -> void:
 			_slider_row(col, "Force", 0.0, 1.0, 0.05, float(o.props.get("strength", 0.35)), func(v): _set_obj("strength", v, true),
 				func(v): return "%d %%" % int(round(v * 100.0)))
 			_slider_row(col, "Angle", -180.0, 180.0, 15.0 if magnet and expert else 1.0, wrapf(rad_to_deg(o.rot), -180.0, 180.0), func(v): _set_obj("rot", deg_to_rad(v)))
-			var air := CheckButton.new()
-			air.text = "Boost en l'air"
-			air.button_pressed = bool(o.props.get("in_air", false))
-			air.focus_mode = Control.FOCUS_NONE
-			for c in ["font_color", "font_hover_color", "font_pressed_color", "font_hover_pressed_color"]:
-				air.add_theme_color_override(c, Color.WHITE)
-			air.toggled.connect(func(on): _set_obj("in_air", on, true))
-			col.add_child(air)
+			_icon_toggle("en_l_air", _icon_row(col), "Boost en l'air", "Le boost pousse aussi Pinpouin en plein vol (sinon seulement au sol).",
+				bool(o.props.get("in_air", false)), func(on): _set_obj("in_air", on, true))
 		"start":
 			_slider_row(col, "Élan", 0.0, 2000.0, 50.0, float(o.props.get("speed", 0.0)), func(v): _set_obj("speed", v, true),
 				func(v): return "%d px/s" % int(v))
@@ -2320,6 +2419,10 @@ const SHAPE_STRETCH := {"ramp": ["w", "h"], "halfpipe": ["w", "h"], "bowl": ["w"
 const SHAPE_H_NAME := {"halfpipe": "Profondeur", "bowl": "Profondeur", "ceiling": "Épaisseur", "floating": "Épaisseur",
 	"upipe": "Diamètre", "pillar": "Hauteur",
 	"balcony": "Épaisseur", "stal": "Épaisseur", "cliff": "Hauteur"}   # [FORMES 2 1.86]
+## [ICÔNES PARTOUT 1.87] Icône de chaque taille toute faite
+const PRESET_ICONS := {"Petit": "taille_petit", "Moyen": "taille_moyen", "Grand": "taille_grand",
+	"Petite": "taille_petit", "Moyenne": "taille_moyen", "Grosse": "taille_grand",
+	"Étroite": "galerie_etroite", "Normale": "galerie_normale", "Large": "galerie_large"}
 ## [FORMES 2 1.86] Nom du réglage `w` quand ce n'est pas une largeur
 const SHAPE_W_NAME := {"bend": "Rayon", "balcony": "Longueur", "stal": "Longueur", "cliff": "Sommet"}
 ## [FORMES 2 1.86] Série de plateformes-stalactites (bouton « Série ») :
@@ -2489,13 +2592,10 @@ func _shape_settings(col: VBoxContainer, o: Dictionary) -> void:
 	var dims: Array = SHAPE_STRETCH.get(t, [])
 	# tailles toutes faites (choix de l'équipe : surtout pour le mode Simple ;
 	# gardées en Expert, elles servent aussi)
-	var row := HBoxContainer.new()
-	row.add_theme_constant_override("separation", 4)
-	col.add_child(row)
+	var row := _icon_row(col)
 	for preset in DrawnLevel.SHAPE_PRESETS:
 		var f: float = DrawnLevel.SHAPE_PRESETS[preset]
-		var b := _button(preset, row, 72)
-		b.add_theme_font_size_override("font_size", 15)
+		var b := _icon_choice(PRESET_ICONS[preset], row, preset, "Taille toute faite (%s)." % preset.to_lower())
 		b.pressed.connect(func():
 			_push_undo()
 			var it: Dictionary = DrawnLevel.objects[_sel.index]
@@ -2522,14 +2622,8 @@ func _shape_settings(col: VBoxContainer, o: Dictionary) -> void:
 			"slope":
 				_slider_row(col, "Force des boosts", 0.0, 1.0, 0.05, DrawnLevel.shape_prop(o, "strength"), func(v): _set_obj("strength", v, true), func(v): return "%d %%" % int(round(v * 100.0)))
 			"ceiling":
-				var hk := CheckButton.new()
-				hk.text = "Accrochable (stalactites)"
-				hk.button_pressed = DrawnLevel.shape_prop(o, "hook") > 0.5
-				hk.focus_mode = Control.FOCUS_NONE
-				for c in ["font_color", "font_hover_color", "font_pressed_color", "font_hover_pressed_color"]:
-					hk.add_theme_color_override(c, Color.WHITE)
-				hk.toggled.connect(func(on): _set_obj("hook", on, true))
-				col.add_child(hk)
+				_icon_toggle("accrochable", _icon_row(col), "Accrochable", "Stalactites dessous : le grappin s'y accroche (sinon plafond lisse).",
+					DrawnLevel.shape_prop(o, "hook") > 0.5, func(on): _set_obj("hook", on, true))
 		_slider_row(col, "Angle", -180.0, 180.0, 15.0 if magnet else 1.0, wrapf(rad_to_deg(o.rot), -180.0, 180.0), func(v): _set_obj("rot", deg_to_rad(v)))
 		_spin_row(col, "X", o.pos.x, func(v): _set_obj("pos", Vector2(v, DrawnLevel.objects[_sel.index].pos.y)))
 		_spin_row(col, "Y", o.pos.y, func(v): _set_obj("pos", Vector2(DrawnLevel.objects[_sel.index].pos.x, v)))
@@ -2555,11 +2649,11 @@ func _check_row(col: VBoxContainer, text: String, on: bool, cb: Callable) -> Che
 ## supprime à la main (la prise automatique est alors coupée).
 func _cliff_settings(col: VBoxContainer, o: Dictionary) -> void:
 	var on: bool = DrawnLevel.shape_prop(o, "holds") > 0.5
-	_check_row(col, "Prise automatique", on, func(v): _set_obj("holds", v, true); _rebuild_settings())
+	var row := _icon_row(col)
+	_icon_toggle("prise_auto", row, "Prise automatique", "Une prise de grappin au-dessus de la paroi pour grimper la falaise.",
+		on, func(v): _set_obj("holds", v, true); _rebuild_settings.call_deferred())
 	if on:
-		var b := _button("Détacher la prise (la déplacer à la main)", col)
-		b.add_theme_font_size_override("font_size", 15)
-		b.pressed.connect(_detach_cliff_holds)
+		_icon_choice("detacher", row, "Détacher la prise", "La prise devient une prise normale : touche-la ensuite pour la déplacer, la tourner ou la supprimer.").pressed.connect(_detach_cliff_holds)
 
 
 func _detach_cliff_holds() -> void:
@@ -2588,8 +2682,7 @@ func _stal_settings(col: VBoxContainer, o: Dictionary) -> void:
 	if expert:
 		_slider_row(col, "Série : montée", 400.0, 1200.0, 20.0, stal_rise,
 			func(v): stal_rise = v, func(v): return "%d px" % int(v))
-	var b := _button("Série (escalier + prises)", col)
-	b.add_theme_font_size_override("font_size", 15)
+	var b := _icon_choice("serie", _icon_row(col), "Série", "Ajoute un escalier de plateformes (une à droite, une à gauche, de plus en plus haut) avec une prise de grappin par marche.")
 	b.pressed.connect(func():
 		_push_undo()
 		var n := DrawnLevel.stal_series(_sel.index, stal_count, stal_rise)
@@ -2645,23 +2738,17 @@ func _set_cave(key: String, v) -> void:
 ## Grand (longueur), étages, sinuosité ; Expert : + étage d'entrée et de
 ## sortie, longueur des vagues, graine exacte, position.
 func _cave_settings(col: VBoxContainer, o: Dictionary) -> void:
-	var row := HBoxContainer.new()
-	row.add_theme_constant_override("separation", 4)
-	col.add_child(row)
-	var dice := _button("🎲 Autre caverne", row, 150)
-	dice.add_theme_font_size_override("font_size", 15)
+	var row := _icon_row(col)
+	var dice := _icon_choice("de", row, "Autre caverne", "Tire une autre graine : une nouvelle caverne de même taille.")
 	dice.pressed.connect(func():
 		_push_undo()
 		DrawnLevel.objects[_sel.index].props.seed = float(randi_range(1, 99999))
 		DrawnLevel.snap_shape(_sel.index)
 		_changed()
 		_rebuild_settings())
-	var row2 := HBoxContainer.new()
-	row2.add_theme_constant_override("separation", 4)
-	col.add_child(row2)
+	var row2 := row   # [ICÔNES PARTOUT 1.87] tailles sur la même ligne que le dé
 	for preset in [["Petit", 3], ["Moyen", 5], ["Grand", 8]]:
-		var b := _button(preset[0], row2, 72)
-		b.add_theme_font_size_override("font_size", 15)
+		var b := _icon_choice(PRESET_ICONS[preset[0]], row2, preset[0], "Caverne de %d colonnes." % preset[1])
 		var n: int = preset[1]
 		b.pressed.connect(func():
 			_push_undo()
@@ -2884,13 +2971,13 @@ func _finish_outline(i: int, local: PackedVector2Array) -> void:
 func _draw_carved(o: Dictionary, z: float) -> void:
 	var cd := DrawnLevel.carved_data(o)
 	draw_set_transform(o.pos)
-	for v in cd.veil:
-		_safe_polygon(v, CAVE_GALLERY)
-	for pc in cd.pieces:
-		_safe_polygon(pc, CAVE_ROCK)
+	# [GROTTE 1.87] voile et roche en un seul maillage chacun (calculés une
+	# fois dans carved_data) : une grotte grande comme un niveau reste fluide
+	_draw_mesh(cd.veil_mesh, CAVE_GALLERY)
+	_draw_mesh(cd.rock_mesh, CAVE_ROCK)
 	for ch in cd.chains:
 		if (ch as PackedVector2Array).size() >= 2:
-			draw_polyline(ch, EDGE_COLOR, maxf(8.0, 3.0 / z), true)
+			draw_polyline(ch, EDGE_COLOR, maxf(8.0, 3.0 / z), z > 0.08)   # [GROTTE 1.87] sans lissage de loin (rapide)
 	draw_set_transform_matrix(Transform2D.IDENTITY)
 	if _carving and _carve_pts.size() >= 1 and _carve_target() >= 0 and DrawnLevel.objects[_carve_target()] == o:
 		var col: Color = {"tunnel": Color(0.8, 0.95, 1.0, 0.6), "dig": Color(1.0, 0.6, 0.3, 0.5), "fill": Color(0.25, 0.35, 0.55, 0.7), "outline": Color(1, 0.9, 0.3, 0.9)}[carve_tool]
@@ -2899,6 +2986,84 @@ func _draw_carved(o: Dictionary, z: float) -> void:
 			draw_circle(_carve_pts[0], wdt * 0.5, col)
 		else:
 			draw_polyline(_carve_pts, col, wdt, true)
+
+
+## [GROTTE 1.87] « Remplir le niveau » : le bloc sélectionné grandit pour
+## couvrir tout le niveau (marges FILL_MARGIN), ou FILL_DEFAULT s'il est seul.
+## Les galeries déjà creusées restent à la même place. Sur un niveau sans sol
+## dessiné et sans départ, on pose un Départ et une Arrivée chacun dans une
+## petite salle creusée (à relier ensuite avec l'outil Tracer).
+func _fill_level_with_block() -> void:
+	if _sel.get("kind", "") != "obj":
+		return
+	var i: int = _sel.index
+	var o: Dictionary = DrawnLevel.objects[i]
+	var r := DrawnLevel.level_bounds(i)
+	var m: Array = DrawnLevel.FILL_MARGIN
+	if r.size == Vector2.ZERO and r.position == Vector2.ZERO:
+		r = Rect2(o.pos, DrawnLevel.FILL_DEFAULT)
+	else:
+		r = Rect2(r.position - Vector2(m[0], m[1]), r.size + Vector2(m[0] + m[2], m[1] + m[3]))
+		r.size = r.size.max(DrawnLevel.FILL_DEFAULT * 0.5)
+	r.size = r.size.min(Vector2(DrawnLevel.CARVED_MAX_W, DrawnLevel.CARVED_MAX_H))
+	_push_undo()
+	# les coups gardent leur place dans le monde : décalés de l'ancienne origine
+	var shift: Vector2 = o.pos - r.position
+	var ops: Array = []
+	for op in o.props.get("ops", []):
+		var q: Dictionary = (op as Dictionary).duplicate(true)
+		var pf: Array = q.get("p", [])
+		for k in range(0, pf.size() - 1, 2):
+			pf[k] = float(pf[k]) + shift.x
+			pf[k + 1] = float(pf[k + 1]) + shift.y
+		q.p = pf
+		ops.append(q)
+	o.pos = r.position
+	o.props.w = r.size.x
+	o.props.h = r.size.y
+	o.props.base = "rect"   # (un contour libre ou un œuf étiré ne voudraient plus rien dire)
+	var msg := "Le bloc couvre tout le niveau. Trace les galeries avec l'outil Tracer."
+	if DrawnLevel.strokes.is_empty() and DrawnLevel.first_object("start").is_empty():
+		# salles du départ (à gauche) et de l'arrivée (à droite), au milieu de la hauteur
+		var y: float = r.size.y * 0.5
+		var rooms := [Vector2(DrawnLevel.FILL_ROOM_R * 2.0, y), Vector2(r.size.x - DrawnLevel.FILL_ROOM_R * 2.0, y)]
+		for c in rooms:
+			ops.append({"k": "dig", "r": DrawnLevel.FILL_ROOM_R, "p": [c.x, c.y]})
+		DrawnLevel.add_object(DrawnLevel.make_object("start", r.position + rooms[0] + Vector2(0, DrawnLevel.FILL_ROOM_R - 90.0)))
+		if DrawnLevel.first_object("finish").is_empty():
+			DrawnLevel.add_object(DrawnLevel.make_object("finish", r.position + rooms[1] + Vector2(0, DrawnLevel.FILL_ROOM_R - 220.0)))
+		msg = "Départ à gauche, arrivée à droite : relie-les en traçant des galeries."
+	o.props.ops = ops
+	_changed()
+	_select({"kind": "obj", "index": i})
+	_set_carve_tool("tunnel")
+	_flash(msg)
+	_zoom_to_rect(Rect2(r.position, r.size))
+
+
+## [GROTTE 1.87] Cadre la vue sur un rectangle du monde
+func _zoom_to_rect(r: Rect2) -> void:
+	var vp: Vector2 = get_viewport().get_visible_rect().size
+	var z: float = clampf(minf(vp.x / maxf(r.size.x, 1.0), vp.y / maxf(r.size.y, 1.0)) * 0.8, ZOOM_MIN, ZOOM_MAX)
+	cam.zoom = Vector2(z, z)
+	cam.position = r.get_center()
+	queue_redraw()
+
+
+## [ICÔNES PARTOUT 1.87] Icône de chaque bloc de départ
+const CARVED_BASE_ICONS := {"rect": "bloc_rect", "egg": "bloc_oeuf", "round": "bloc_rond", "mountain": "bloc_montagne"}
+
+
+## [GROTTE 1.87] Dessine un maillage [points, indices] d'une seule couleur
+func _draw_mesh(mesh: Array, c: Color) -> void:
+	var pts: PackedVector2Array = mesh[0]
+	var idx: PackedInt32Array = mesh[1]
+	if idx.is_empty():
+		return
+	var cols := PackedColorArray()
+	cols.resize(pts.size())
+	cols.fill(c)
+	RenderingServer.canvas_item_add_triangle_array(get_canvas_item(), idx, pts, cols)
 
 
 ## Réglages d'une caverne taillée
@@ -2915,18 +3080,14 @@ func _carved_settings(col: VBoxContainer, o: Dictionary) -> void:
 	grid.add_theme_constant_override("v_separation", 4)
 	col.add_child(grid)
 	for bname in ["rect", "egg", "round", "mountain"]:
-		var b := _button(DrawnLevel.CARVED_BASE_NAMES[bname], grid, 72)
-		b.add_theme_font_size_override("font_size", 14)
-		b.toggle_mode = true
+		var b := _icon_choice(CARVED_BASE_ICONS[bname], grid, DrawnLevel.CARVED_BASE_NAMES[bname], "Repartir de ce bloc (les coups déjà faits restent).", true)
 		b.button_pressed = str(o.props.get("base", "rect")) == bname
 		b.pressed.connect(func():
 			_push_undo()
 			DrawnLevel.objects[_sel.index].props.base = bname
 			_changed()
 			_rebuild_settings())
-	var fb := _button("Forme libre", grid, 72)
-	fb.add_theme_font_size_override("font_size", 14)
-	fb.toggle_mode = true
+	var fb := _icon_choice("bloc_libre", grid, "Forme libre", "Dessine le contour du bloc d'un seul trait : il se ferme tout seul.", true)
 	fb.button_pressed = carve_tool == "outline" or str(o.props.get("base", "")) == "free"
 	fb.pressed.connect(func(): _set_carve_tool("outline"))
 	# outils de taille
@@ -2934,30 +3095,23 @@ func _carved_settings(col: VBoxContainer, o: Dictionary) -> void:
 	lt.text = "Tailler"
 	lt.add_theme_color_override("font_color", Color.WHITE)
 	col.add_child(lt)
-	var row := HBoxContainer.new()
-	row.add_theme_constant_override("separation", 4)
-	col.add_child(row)
-	for tt in [["tunnel", "✏ Tracer"], ["dig", "⛏ Pioche"], ["fill", "🧱 Truelle"]]:
-		var b := _button(tt[1], row, 72)
-		b.add_theme_font_size_override("font_size", 14)
-		b.toggle_mode = true
+	var row := _icon_row(col)
+	for tt in [["tunnel", "tracer", "Tracer", "La galerie suit ton doigt, avec un sol lisse."],
+			["dig", "pioche", "Pioche", "Frotte pour creuser la roche."],
+			["fill", "truelle", "Truelle", "Frotte pour reboucher (seulement dans le bloc)."]]:
+		var b := _icon_choice(tt[1], row, tt[2], tt[3] + " Deux doigts déplacent la vue.", true)
 		b.button_pressed = carve_tool == tt[0]
 		var which: String = tt[0]
 		b.pressed.connect(func(): _set_carve_tool("" if carve_tool == which else which))
 	if carve_tool != "":
-		var done := _button("✋ Fini (déplacer le bloc)", col, 220)
-		done.add_theme_font_size_override("font_size", 14)
-		done.pressed.connect(func(): _set_carve_tool(""))
+		_icon_choice("fini", row, "Fini", "Arrêter de tailler : le doigt déplace de nouveau le bloc.").pressed.connect(func(): _set_carve_tool(""))
 	# largeur de la galerie / taille de la pioche
-	var row2 := HBoxContainer.new()
-	row2.add_theme_constant_override("separation", 4)
-	col.add_child(row2)
+	var row2 := _icon_row(col)
 	var sizes: Dictionary = DrawnLevel.CARVE_WIDTHS if carve_tool != "dig" and carve_tool != "fill" else DrawnLevel.CARVE_BRUSHES
 	for nm in sizes:
 		var v: float = sizes[nm]
-		var b := _button(nm, row2, 72)
-		b.add_theme_font_size_override("font_size", 14)
-		b.toggle_mode = true
+		var what: String = "Galerie %s (%d px)" % [nm.to_lower(), int(v)] if sizes == DrawnLevel.CARVE_WIDTHS else "Pioche / truelle %s (%d px)" % [nm.to_lower(), int(v)]
+		var b := _icon_choice(PRESET_ICONS.get(nm, "taille_moyen"), row2, nm, what + ".", true)
 		b.button_pressed = is_equal_approx(v, carve_width if sizes == DrawnLevel.CARVE_WIDTHS else carve_brush)
 		b.pressed.connect(func():
 			if sizes == DrawnLevel.CARVE_WIDTHS:
@@ -2975,9 +3129,10 @@ func _carved_settings(col: VBoxContainer, o: Dictionary) -> void:
 	warn.text = "Une galerie traverse le bloc." if cd.crosses else "⚠ Aucune galerie ne traverse le bloc de part en part."
 	warn.add_theme_color_override("font_color", Color(0.7, 1.0, 0.7) if cd.crosses else Color(1.0, 0.8, 0.4))
 	col.add_child(warn)
+	# [PANNEAU 1.87] actions principales du bloc dans les actions fixes du bas
+	_icon_choice("remplir", _settings_footer, "Remplir le niveau", "Le bloc grandit pour couvrir tout le niveau : on peut faire un niveau entier dans la roche.").pressed.connect(_fill_level_with_block)
 	if cd.ops > 0:
-		var clr := _button("Tout reboucher", col, 160)
-		clr.add_theme_font_size_override("font_size", 14)
+		var clr := _icon_choice("reboucher", _settings_footer, "Tout reboucher", "Enlève toutes les galeries : le bloc redevient plein.")
 		clr.pressed.connect(func():
 			_push_undo()
 			DrawnLevel.objects[_sel.index].props.ops = []
@@ -2992,7 +3147,7 @@ func _carved_settings(col: VBoxContainer, o: Dictionary) -> void:
 ## le temps devient l'or du niveau (DrawnLevel.record_validation)
 func _on_validate() -> void:
 	if not DrawnLevel.is_playable():
-		_flash("Dessine d'abord un sol !")
+		_flash("Dessine d'abord un sol (ou creuse une caverne taillée) !")
 		return
 	DrawnLevel.save()
 	DrawnLevel.validating = true

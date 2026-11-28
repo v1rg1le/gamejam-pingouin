@@ -41,6 +41,14 @@ var _bottom: float = INF   # [FORMES 1.83] fond commun des îlots (y du monde)
 func _ready() -> void:
 	DrawnLevel.load_once()
 	_islands = DrawnLevel.islands()
+	# [GROTTE 1.87] niveau tout en grotte : aucun sol dessiné, seulement une
+	# (ou des) caverne(s) taillée(s) — demande de l'équipe : « faire un niveau
+	# uniquement dedans ». Pas d'îlots, pas de piste de freinage ni de murs :
+	# la roche fait tout ; départ et arrivée = objets posés, sinon dans la
+	# première galerie / la dernière galerie tracée.
+	if _islands.is_empty() and DrawnLevel.has_carved():
+		_ready_cave_only()
+		return
 	# Sécurité : niveau vide (ex. lancé directement depuis l'éditeur Godot) ->
 	# une petite piste en pente pour ne pas tomber dans le vide.
 	if _islands.is_empty():
@@ -117,6 +125,39 @@ func _ready() -> void:
 			get_parent()._set_spawn_position(Vector2(sx, DrawnLevel.surface_y_of(first, sx) - 80.0))
 
 	# 7. Bouton « ✏ Éditer » (pas sur un niveau de la communauté : lecture seule)
+	if not DrawnLevel.is_official:
+		_add_edit_button()
+
+
+## [GROTTE 1.87] Construction d'un niveau sans sol dessiné (tout en grotte)
+func _ready_cave_only() -> void:
+	# prises posées à la main et prises automatiques des falaises
+	for h in DrawnLevel.hook_list([]):
+		var fish = fish_res.instantiate()
+		fish.position = h.pos
+		fish.rotation = h.rot
+		fish.scale = Vector2.ONE * h.scale
+		add_child(fish)
+	_build_objects()
+	var ends := DrawnLevel.carved_default_ends()   # [départ, arrivée] dans les galeries
+	var gate = finish_gate_res.instantiate()
+	gate.next_scene_path = DrawnLevel.return_scene
+	var fin_obj := DrawnLevel.first_object("finish")
+	gate.position = fin_obj.pos if not fin_obj.is_empty() else ends[1]
+	add_child(gate)
+	if DrawnLevel.testing_from_here():
+		var from := DrawnLevel.test_from
+		DrawnLevel.test_from = Vector2.INF
+		get_parent()._set_spawn_position(from)
+		_launch_player.call_deferred(DrawnLevel.test_speed)
+	else:
+		var st_obj := DrawnLevel.first_object("start")
+		if not st_obj.is_empty():
+			get_parent()._set_spawn_position(st_obj.pos)
+			if float(st_obj.props.get("speed", 0.0)) > 0.0:
+				_launch_player.call_deferred(float(st_obj.props.speed))
+		else:
+			get_parent()._set_spawn_position(ends[0])
 	if not DrawnLevel.is_official:
 		_add_edit_button()
 

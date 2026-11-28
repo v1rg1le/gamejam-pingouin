@@ -233,6 +233,221 @@ ICONS = {
 }
 
 
+# --- [ICÔNES PARTOUT 1.87] Plus aucun texte sur les boutons du créateur --------
+# Demande de l'équipe (28/11) : « enlever le texte des boutons dans tout cet
+# éditeur, juste une bulle info au survol ». Choix : une icône pour CHAQUE
+# bouton, même les choix (formes de bloc, tailles, largeurs…).
+
+def i_dupliquer():
+    im, d = new()
+    d.rectangle([1, 1, 9, 9], fill=ICE)
+    d.rectangle([6, 6, 14, 14], fill=WHITE)
+    d.line([(10, 8), (10, 12)], fill=GREEN, width=2)
+    d.line([(8, 10), (12, 10)], fill=GREEN, width=2)
+    return im
+
+
+def i_supprimer():
+    im, d = new()
+    d.rectangle([2, 4, 13, 13], fill=ICE)
+    d.line([(3, 3), (13, 13)], fill=RED, width=3)
+    d.line([(13, 3), (3, 13)], fill=RED, width=3)
+    return im
+
+
+def i_taille(k):
+    # petit / moyen / grand : un carré de glace de 3 tailles, posé au sol
+    im, d = new()
+    s = (4, 8, 13)[k]
+    d.rectangle([8 - s // 2, 14 - s, 8 - s // 2 + s - 1, 14], fill=ICE)
+    d.line([(8 - s // 2, 14 - s), (8 - s // 2 + s - 1, 14 - s)], fill=SNOW, width=2)
+    d.line([(0, 15), (15, 15)], fill=MID)
+    return im
+
+
+def i_bloc(kind):
+    im, d = new()
+    if kind == "rect":
+        d.rounded_rectangle([1, 3, 14, 13], radius=2, fill=DEEP)
+    elif kind == "oeuf":
+        d.ellipse([3, 1, 12, 14], fill=DEEP)
+    elif kind == "rond":
+        d.ellipse([1, 1, 14, 14], fill=DEEP)
+    elif kind == "montagne":
+        d.polygon([(0, 14), (3, 7), (6, 3), (9, 2), (12, 5), (15, 14)], fill=DEEP)
+    else:   # forme libre : contour en pointillés + crayon
+        for x, y in ((2, 4), (5, 2), (9, 3), (12, 6), (13, 10), (10, 13), (5, 13), (2, 10)):
+            d.rectangle([x, y, x + 1, y + 1], fill=DEEP)
+        d.polygon([(8, 9), (13, 4), (15, 6), (10, 11)], fill=YEL)
+    return im
+
+
+def i_tracer():
+    # galerie claire qui serpente dans la roche, crayon au bout
+    im, d = new()
+    d.rectangle([0, 1, 15, 14], fill=DEEP)
+    d.line([(0, 9), (4, 6), (8, 9), (11, 7)], fill=SNOW, width=3)
+    d.polygon([(10, 7), (14, 2), (16, 4), (12, 9)], fill=YEL)
+    return im
+
+
+def i_pioche():
+    im, d = new()
+    d.line([(4, 14), (11, 5)], fill=ORANGE, width=2)
+    d.arc([2, 0, 15, 10], 200, 340, fill=GREY, width=2)
+    return im
+
+
+def i_truelle():
+    im, d = new()
+    d.polygon([(2, 13), (8, 5), (12, 9)], fill=GREY)
+    d.line([(10, 7), (14, 3)], fill=ORANGE, width=2)
+    d.rectangle([1, 14, 8, 15], fill=DEEP)
+    return im
+
+
+def i_galerie(k):
+    # étroite / normale / large : bande claire de 3 épaisseurs dans la roche
+    im, d = new()
+    d.rectangle([0, 1, 15, 14], fill=DEEP)
+    h = (2, 4, 7)[k]
+    d.rectangle([0, 8 - h // 2 - h % 2, 15, 8 + h // 2], fill=SNOW)
+    return im
+
+
+def i_fini():
+    # main ouverte : on arrête de tailler (le doigt déplace le bloc)
+    im, d = new()
+    d.rectangle([4, 7, 12, 14], fill=PINK)
+    for x in (4, 6, 8, 10):
+        d.rectangle([x, 2 + (x % 4), x + 1, 7], fill=PINK)
+    d.polygon([(12, 9), (15, 6), (15, 8), (12, 12)], fill=PINK)
+    return im
+
+
+def i_reboucher():
+    # bloc plein + flèche ronde (tout revient comme au début)
+    im, d = new()
+    d.rectangle([1, 5, 11, 14], fill=DEEP)
+    d.arc([6, 0, 15, 9], 180, 450, fill=YEL, width=2)
+    d.polygon([(5, 4), (9, 4), (7, 7)], fill=YEL)
+    return im
+
+
+def i_de():
+    im, d = new()
+    d.rounded_rectangle([2, 2, 13, 13], radius=2, fill=WHITE)
+    for x, y in ((5, 5), (10, 10), (7, 7), (5, 10), (10, 5)):
+        d.rectangle([x - 1 + (x > 7), y - 1 + (y > 7), x + (x > 7), y + (y > 7)], fill=INK)
+    return im
+
+
+def i_detacher():
+    # prise de grappin qui sort d'une falaise (flèche)
+    im, d = new()
+    d.polygon([(0, 15), (2, 4), (5, 2), (6, 15)], fill=DEEP)
+    d.ellipse([7, 3, 15, 8], fill=GREY)
+    d.polygon([(8, 10), (12, 10), (12, 8), (15, 12), (12, 15), (12, 13), (8, 13)], fill=YEL)
+    return im
+
+
+def i_serie():
+    # escalier de plateformes alternées
+    im, d = new()
+    for k, (x, y) in enumerate(((1, 13), (8, 9), (1, 5), (8, 1))):
+        d.rectangle([x, y, x + 6, y + 1], fill=SNOW)
+        d.point([(x + 2, y + 2), (x + 4, y + 2)], fill=ICE)
+    return im
+
+
+def i_remplir():
+    # bloc qui s'étire aux quatre coins (tout le niveau)
+    im, d = new()
+    d.rectangle([4, 4, 11, 11], fill=DEEP)
+    for (x, y, dx, dy) in ((0, 0, 1, 1), (15, 0, -1, 1), (0, 15, 1, -1), (15, 15, -1, -1)):
+        d.line([(x, y), (x + 3 * dx, y + 3 * dy)], fill=YEL, width=2)
+        d.line([(x, y), (x + 3 * dx, y)], fill=YEL)
+        d.line([(x, y), (x, y + 3 * dy)], fill=YEL)
+    return im
+
+
+def i_ok():
+    im, d = new()
+    d.line([(2, 8), (6, 12), (14, 3)], fill=GREEN, width=3)
+    return im
+
+
+def i_non():
+    im, d = new()
+    d.line([(3, 3), (12, 12)], fill=RED, width=3)
+    d.line([(12, 3), (3, 12)], fill=RED, width=3)
+    return im
+
+
+def i_accrochable():
+    # plafond à stalactites + crochet
+    im, d = new()
+    d.rectangle([0, 1, 15, 4], fill=ICE)
+    for x in (2, 7, 12):
+        d.polygon([(x - 1, 5), (x + 2, 5), (x, 8)], fill=ICE)
+    d.line([(6, 14), (9, 9)], fill=GREY, width=2)
+    d.arc([7, 8, 13, 14], 270, 90, fill=GREY, width=2)
+    return im
+
+
+def i_en_l_air():
+    # flèches de boost au-dessus d'un trou
+    im, d = new()
+    for x in (2, 7):
+        d.polygon([(x, 2), (x + 4, 6), (x, 10), (x + 2, 10), (x + 6, 6), (x + 2, 2)], fill=YEL)
+    d.rectangle([0, 13, 3, 15], fill=ICE)
+    d.rectangle([12, 13, 15, 15], fill=ICE)
+    return im
+
+
+def i_prise_auto():
+    # falaise + prise + éclair « auto »
+    im, d = new()
+    d.polygon([(0, 15), (2, 6), (5, 3), (8, 15)], fill=DEEP)
+    d.ellipse([7, 4, 13, 8], fill=GREY)
+    d.polygon([(13, 9), (11, 12), (12, 12), (11, 15), (15, 11), (13, 11)], fill=YEL)
+    return im
+
+
+def i_onglet(k):
+    im, d = new()
+    if k == 0:   # objets : drapeau
+        d.rectangle([4, 1, 5, 15], fill=DEEP)
+        d.polygon([(6, 1), (14, 4), (6, 7)], fill=YEL)
+    elif k == 1:   # terrain : tremplin
+        d.polygon([(0, 15), (0, 13), (8, 12), (13, 7), (15, 4), (15, 15)], fill=ICE)
+        d.line([(0, 13), (8, 12), (13, 7), (15, 4)], fill=SNOW, width=2)
+    elif k == 2:   # décor : sapin enneigé
+        d.polygon([(8, 1), (13, 8), (10, 8), (14, 13), (2, 13), (6, 8), (3, 8)], fill=GREEN)
+        d.rectangle([7, 13, 8, 15], fill=ORANGE)
+        d.point([(8, 1), (7, 4), (10, 9)], fill=WHITE)
+    else:   # gros blocs : caverne
+        d.rectangle([0, 1, 15, 14], fill=DEEP)
+        d.rectangle([2, 4, 13, 6], fill=T)
+        d.rectangle([2, 9, 13, 11], fill=T)
+    return im
+
+
+ICONS.update({
+    "dupliquer": i_dupliquer, "supprimer": i_supprimer,
+    "taille_petit": lambda: i_taille(0), "taille_moyen": lambda: i_taille(1), "taille_grand": lambda: i_taille(2),
+    "bloc_rect": lambda: i_bloc("rect"), "bloc_oeuf": lambda: i_bloc("oeuf"), "bloc_rond": lambda: i_bloc("rond"),
+    "bloc_montagne": lambda: i_bloc("montagne"), "bloc_libre": lambda: i_bloc("libre"),
+    "tracer": i_tracer, "pioche": i_pioche, "truelle": i_truelle,
+    "galerie_etroite": lambda: i_galerie(0), "galerie_normale": lambda: i_galerie(1), "galerie_large": lambda: i_galerie(2),
+    "fini": i_fini, "reboucher": i_reboucher, "de": i_de, "detacher": i_detacher, "serie": i_serie,
+    "remplir": i_remplir, "ok": i_ok, "non": i_non, "accrochable": i_accrochable, "en_l_air": i_en_l_air,
+    "prise_auto": i_prise_auto,
+    "onglet_objets": lambda: i_onglet(0), "onglet_terrain": lambda: i_onglet(1),
+    "onglet_decor": lambda: i_onglet(2), "onglet_gros": lambda: i_onglet(3),
+})
+
+
 # --- Vignettes de la palette (24 x 24) ----------------------------------------
 # Glace + neige du jeu : remplissage ICE, dessus SNOW, contour sombre.
 def ground(d, pts, bottom=22):

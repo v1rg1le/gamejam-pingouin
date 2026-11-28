@@ -468,7 +468,15 @@ static func floor_y(isl: Array) -> float:
 
 ## Le niveau est-il jouable ? (au moins un îlot)
 static func is_playable() -> bool:
-	return not strokes.is_empty()
+	return not strokes.is_empty() or has_carved()   # [GROTTE 1.87] ou tout en grotte
+
+
+## [GROTTE 1.87] Le niveau a-t-il au moins une caverne taillée ?
+static func has_carved() -> bool:
+	for o in objects:
+		if str(o.get("type", "")) == "carved":
+			return true
+	return false
 
 
 ## [CRÉATEUR v2 1.80] Taille d'un bloc de grappin posé à la main (réglage)
@@ -1260,6 +1268,8 @@ static func object_half(o: Dictionary) -> Vector2:
 ## une zone de caméra ne se touche que par son bord ou son centre, pour ne
 ## pas empêcher de toucher ce qu'elle contient)
 static func object_hit(o: Dictionary, pos: Vector2, radius: float) -> bool:
+	if str(o.get("type", "")) == "carved":
+		return carved_hit(o, pos, radius)   # [GROTTE 1.87] la roche, pas les galeries
 	if is_shape(o):
 		return shape_hit(o, pos, radius)   # [FORMES 1.83] la vraie forme, pas un rectangle
 	var local: Vector2 = (pos - o.pos).rotated(-float(o.get("rot", 0.0)))
@@ -1444,7 +1454,8 @@ static func shape_prop(o: Dictionary, key: String) -> float:
 		# [TAILLÉE 1.85] un bloc à creuser peut être bien plus grand qu'une forme
 		var vv = o.props.get(key, SHAPE_DEFAULTS.carved[key])
 		var ff := float(vv) if typeof(vv) in [TYPE_FLOAT, TYPE_INT] and is_finite(float(vv)) else float(SHAPE_DEFAULTS.carved[key])
-		return clampf(ff, CARVED_MIN, CARVED_MAX)
+		# [GROTTE 1.87] grand comme un niveau entier
+		return clampf(ff, CARVED_MIN, CARVED_MAX_W if key == "w" else CARVED_MAX_H)
 	var d = SHAPE_DEFAULTS.get(o.type, {}).get(key, 0.0)
 	var v = o.props.get(key, d)
 	if typeof(v) == TYPE_BOOL:
@@ -1900,6 +1911,10 @@ const CARVED_BASES := ["rect", "egg", "round", "mountain", "free"]
 const CARVED_BASE_NAMES := {"rect": "Rectangle", "egg": "Œuf", "round": "Rond", "mountain": "Montagne", "free": "Forme libre"}
 const CARVED_MIN := 600.0
 const CARVED_MAX := 9000.0
+## [GROTTE 1.87] taille maximale d'un bloc à creuser (demande de l'équipe :
+## « grand comme un niveau entier ») ; CARVED_MAX reste la taille Grand
+const CARVED_MAX_W := 60000.0
+const CARVED_MAX_H := 16000.0
 ## Largeur des tranches de roche (moins que le plus petit coup : 2 x CARVE_R_MIN)
 const CARVE_SLAB := 96.0
 ## Rayon des coups (px) : un coup plus petit pourrait laisser un trou dans une tranche
@@ -1910,7 +1925,7 @@ const CARVE_WIDTHS := {"Étroite": 300.0, "Normale": 520.0, "Large": 800.0}
 ## Rayons de la pioche / truelle
 const CARVE_BRUSHES := {"Petite": 90.0, "Moyenne": 160.0, "Grosse": 280.0}
 ## Limites (codes reçus : pas de calcul géant)
-const CARVE_MAX_OPS := 400
+const CARVE_MAX_OPS := 1500   # [GROTTE 1.87] 400 -> 1500 (grottes grandes comme un niveau)
 const CARVE_MAX_POINTS := 8000
 
 static var _carved_cache := {}
@@ -2034,7 +2049,10 @@ static func _x_span(poly: PackedVector2Array) -> Vector2:
 ##  chains : contours orientés (roche à droite) ; segs : collisions (paires de
 ##  points) ; frame ; crosses : une galerie traverse le bloc de part en part
 static func carved_data(o: Dictionary) -> Dictionary:
-	var key := JSON.stringify([o.props.get("base", "rect"), shape_prop(o, "w"), shape_prop(o, "h"), o.props.get("outline", []), o.props.get("ops", [])]).sha256_text()
+	# [GROTTE 1.87] clé du cache par hash() (calculé en C++) au lieu du JSON
+	# + sha256 : avec une grotte grande comme un niveau, la clé seule coûtait
+	# ~5 ms à chaque toucher / survol
+	var key := [str(o.props.get("base", "rect")), shape_prop(o, "w"), shape_prop(o, "h"), o.props.get("outline", []), o.props.get("ops", [])].hash()
 	if _carved_cache.has(key):
 		return _carved_cache[key]
 	var base := carved_base(o)
@@ -2196,8 +2214,30 @@ static func carved_data(o: Dictionary) -> Dictionary:
 		var sp := _x_span(m)
 		if sp.x <= fr.position.x + 10.0 and sp.y >= fr.end.x - 10.0:
 			crosses = true
+	# [GROTTE 1.87] index par tranche (x / CARVE_SLAB) : morceaux et segments
+	# qui touchent chaque tranche. Un toucher ne teste plus que sa tranche
+	# (grotte grande comme un niveau : des milliers de segments)
+	var grid := {}
+	for pi in pieces.size():
+		var gk := int(floor(float(pieces[pi][1]) / CARVE_SLAB))
+		if not grid.has(gk):
+			grid[gk] = [[], []]
+		grid[gk][0].append(pi)
+	for k in range(0, flat_segs.size() - 1, 2):
+		var sx0 := int(floor(minf(flat_segs[k].x, flat_segs[k + 1].x) / CARVE_SLAB))
+		var sx1 := int(floor(maxf(flat_segs[k].x, flat_segs[k + 1].x) / CARVE_SLAB))
+		for gk in range(sx0, sx1 + 1):
+			if not grid.has(gk):
+				grid[gk] = [[], []]
+			grid[gk][1].append(k)
+	# [GROTTE 1.87] toute la roche (et tout le voile) en UN maillage de
+	# triangles, calculé une fois : l'éditeur le dessine d'un seul appel (des
+	# centaines de morceaux à trianguler à chaque image faisaient ramer)
+	var rock_mesh := _tri_mesh(pieces.map(func(pc): return pc[0]))
+	var veil_mesh := _tri_mesh(veil)
 	var d := {"pieces": pieces.map(func(pc): return pc[0]), "veil": veil, "chains": chains, "segs": flat_segs,
-		"frame": fr, "crosses": crosses, "ops": raw_ops.size() if raw_ops is Array else 0}
+		"frame": fr, "crosses": crosses, "ops": raw_ops.size() if raw_ops is Array else 0, "grid": grid,
+		"rock_mesh": rock_mesh, "veil_mesh": veil_mesh}
 	if _carved_cache.size() > 32:
 		_carved_cache.clear()
 	_carved_cache[key] = d
@@ -2366,3 +2406,139 @@ static func stal_series(i: int, count: int, rise: float = STAL_RISE) -> int:
 		hooks.append(make_hook(hold))
 		added += 1
 	return added
+
+
+# =============================================================================
+#  Partie 14 — [GROTTE 1.87] grandes cavernes taillées, niveau tout en grotte
+# =============================================================================
+# Demande de l'équipe (28/11) : une caverne taillée grande comme un niveau,
+# pour faire un niveau uniquement dedans, avec boosts, déco… dans les
+# galeries. Choix de l'équipe : bouton « Remplir le niveau » ; un toucher
+# dans une galerie POSE l'objet choisi (on sélectionne le bloc en touchant sa
+# roche).
+
+## Taille du bloc « Remplir le niveau » sur un niveau vide
+const FILL_DEFAULT := Vector2(16000, 5000)
+## Marges autour du niveau quand on le remplit (gauche, haut, droite, bas)
+const FILL_MARGIN := [900.0, 1400.0, 900.0, 1000.0]
+## Chambre creusée autour du départ / de l'arrivée posés par « Remplir »
+const FILL_ROOM_R := 520.0
+
+
+## Le point (monde) est-il dans la roche d'une caverne taillée ? (dedans,
+## ou à moins de radius / 2 de sa paroi)
+static func carved_hit(o: Dictionary, pos: Vector2, radius: float) -> bool:
+	var lp: Vector2 = pos - o.pos
+	var fr := Rect2(0, 0, shape_prop(o, "w"), shape_prop(o, "h")).grow(minf(radius, 80.0))
+	if not fr.has_point(lp):
+		return false
+	var cd := carved_data(o)
+	var grid: Dictionary = cd.grid
+	var gk0 := int(floor((lp.x - 80.0) / CARVE_SLAB))
+	var gk1 := int(floor((lp.x + 80.0) / CARVE_SLAB))
+	for gk in range(gk0, gk1 + 1):
+		if grid.has(gk):
+			for pi in grid[gk][0]:
+				if Geometry2D.is_point_in_polygon(lp, cd.pieces[pi]):
+					return true
+	# près d'une paroi : seulement à 80 px au plus (une galerie fait ~500 px de
+	# haut : avec le rayon de toucher entier, tout toucher dans une galerie
+	# aurait pris le bloc au lieu de poser l'objet)
+	var near: float = minf(radius * 0.5, 80.0)
+	var segs: PackedVector2Array = cd.segs
+	for gk in range(gk0, gk1 + 1):
+		if grid.has(gk):
+			for k in grid[gk][1]:
+				if Geometry2D.get_closest_point_to_segment(lp, segs[k], segs[k + 1]).distance_to(lp) < near:
+					return true
+	return false
+
+
+## Le point (monde) est-il dans une galerie (de l'air DANS un bloc taillé) ?
+static func carved_air_at(pos: Vector2) -> bool:
+	for o in objects:
+		if str(o.get("type", "")) != "carved":
+			continue
+		var lp: Vector2 = pos - o.pos
+		if not Rect2(0, 0, shape_prop(o, "w"), shape_prop(o, "h")).has_point(lp):
+			continue
+		if not Geometry2D.is_point_in_polygon(lp, carved_base(o)):
+			continue
+		if not carved_hit(o, pos, 0.0):
+			return true
+	return false
+
+
+## Départ et arrivée par défaut d'un niveau tout en grotte : le bout le plus
+## à gauche des galeries creusées (tracer / pioche) et le bout le plus à
+## droite ; sans galerie, l'entrée et la sortie du premier bloc
+static func carved_default_ends() -> Array:
+	var first := Vector2.INF
+	var last := Vector2.INF
+	for o in objects:
+		if str(o.get("type", "")) != "carved":
+			continue
+		for op in o.props.get("ops", []):
+			if not (op is Dictionary) or str(op.get("k", "")) == "fill":
+				continue
+			var pf: Array = op.get("p", [])
+			for k in range(0, pf.size() - 1, 2):
+				var q: Vector2 = o.pos + Vector2(float(pf[k]), float(pf[k + 1]))
+				if not carved_air_at(q):
+					continue   # (bout de galerie hors du bloc ou rebouché)
+				if first == Vector2.INF or q.x < first.x:
+					first = q
+				if last == Vector2.INF or q.x > last.x:
+					last = q
+	if first == Vector2.INF:
+		for o in objects:
+			if str(o.get("type", "")) == "carved":
+				var g := shape_geometry(o)
+				return [g.entry + Vector2(0, -120), g.exit + Vector2(0, -120)]
+	return [first, last]
+
+
+## Rectangle (monde) de tout ce qui est dans le niveau, sauf l'objet n° skip
+## (Rect2() si le niveau est vide)
+static func level_bounds(skip: int = -1) -> Rect2:
+	var r := Rect2()
+	var any := false
+	var pts := PackedVector2Array()
+	for st in strokes:
+		pts.append_array(st)
+	for h in hooks:
+		pts.append(h.pos)
+	for i in objects.size():
+		if i == skip:
+			continue
+		var o: Dictionary = objects[i]
+		if is_shape(o):
+			pts.append_array(shape_geometry(o).poly)
+		else:
+			pts.append(o.pos)
+	for p in pts:
+		if not any:
+			r = Rect2(p, Vector2.ZERO)
+			any = true
+		else:
+			r = r.expand(p)
+	return r if any else Rect2()
+
+
+## [GROTTE 1.87] Maillage de triangles de plusieurs polygones :
+## [points, indices] (les polygones qui ne se triangulent pas sont sautés)
+static func _tri_mesh(polys: Array) -> Array:
+	var pts := PackedVector2Array()
+	var idx := PackedInt32Array()
+	for pl in polys:
+		var poly: PackedVector2Array = pl
+		if poly.size() < 3:
+			continue
+		var tri := Geometry2D.triangulate_polygon(poly)
+		if tri.is_empty():
+			continue
+		var base := pts.size()
+		pts.append_array(poly)
+		for t in tri:
+			idx.append(base + t)
+	return [pts, idx]
