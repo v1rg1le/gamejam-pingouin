@@ -492,7 +492,8 @@ static func snapshot() -> Dictionary:
 	for st in strokes:
 		s.append(PackedVector2Array(st))
 	# [CRÉATEUR v2 1.80] copie PROFONDE : les blocs sont des Dictionary
-	return {"strokes": s, "hooks": hooks.duplicate(true), "auto": auto_hooks, "objects": objects.duplicate(true)}
+	return {"strokes": s, "hooks": hooks.duplicate(true), "auto": auto_hooks, "objects": objects.duplicate(true),
+		"rules": rules.duplicate(true), "ambiance": ambiance.duplicate(true)}   # [RÈGLES 1.90]
 
 
 ## Remet un état copié par snapshot()
@@ -503,6 +504,8 @@ static func restore(snap: Dictionary) -> void:
 	hooks = (snap.hooks as Array).duplicate(true)
 	auto_hooks = snap.auto
 	objects = (snap.get("objects", []) as Array).duplicate(true)
+	rules = (snap.get("rules", {}) as Dictionary).duplicate(true)   # [RÈGLES 1.90]
+	ambiance = (snap.get("ambiance", {}) as Dictionary).duplicate(true)
 
 
 # --- 5. [MES NIVEAUX 1.46] Plusieurs niveaux nommés -------------------------------
@@ -570,6 +573,14 @@ static func _drawing_data() -> Dictionary:
 				"r": snappedf(o.get("rot", 0.0), 0.001), "s": snappedf(o.get("scale", 1.0), 0.01),
 				"p": o.get("props", {})})
 		data["objects"] = objs
+	# [RÈGLES 1.90] type de niveau et durée du défi : seulement s'ils ne sont
+	# pas ceux par défaut (une course garde la même empreinte qu'avant). Ils
+	# changent l'empreinte : passer d'une course à un défi figures repart de
+	# zéro (records, validation). L'ambiance (ciel, musique, fond), elle,
+	# n'entre PAS dans l'empreinte : changer de ciel ne fait rien perdre.
+	var r := _rules_data()
+	if not r.is_empty():
+		data["rules"] = r
 	return data
 
 
@@ -599,6 +610,8 @@ static func save() -> void:
 	data["name"] = current_name
 	data["hash"] = content_hash()
 	data["author"] = current_author   # [PARTAGE 1.47] "" = toi ; sinon l'auteur d'un niveau reçu
+	if not ambiance.is_empty():
+		data["ambiance"] = ambiance.duplicate()   # [RÈGLES 1.90] ciel, musique, fond
 	var old = _read_file(path)
 	data["created"] = old.get("created", Time.get_unix_time_from_system()) if old != null else Time.get_unix_time_from_system()
 	# [VALIDATION 1.81] la validation est gardée (elle ne vaut que pour son empreinte)
@@ -653,6 +666,9 @@ static func _apply(data: Dictionary) -> void:
 		if o is Dictionary:
 			objects.append({"type": str(o.get("t", "")), "pos": Vector2(float(o.get("x", 0)), float(o.get("y", 0))),
 				"rot": float(o.get("r", 0.0)), "scale": float(o.get("s", 1.0)), "props": o.get("p", {})})
+	# [RÈGLES 1.90] règles et ambiance (absentes = par défaut)
+	rules = clean_rules(data.get("rules", {}))
+	ambiance = clean_ambiance(data.get("ambiance", {}))
 
 
 ## Au 1er appel : reprise de l'ancien fichier 1.45, puis ouverture du dernier
@@ -691,7 +707,8 @@ static func list_levels() -> Array:
 			continue
 		out.append({"id": file.get_basename(), "name": str(data.get("name", "?")),
 			"modified": float(data.get("modified", 0)), "hash": str(data.get("hash", "")),
-			"author": str(data.get("author", ""))})
+			"author": str(data.get("author", "")),
+			"type": str(clean_rules(data.get("rules", {})).get("type", "course"))})   # [RÈGLES 1.90]
 	out.sort_custom(func(a, b): return a.modified > b.modified)
 	return out
 
@@ -713,6 +730,8 @@ static func new_level(level_name: String) -> void:
 	hooks = []
 	objects = []
 	auto_hooks = true
+	rules = {}      # [RÈGLES 1.90]
+	ambiance = {}
 
 
 ## Ouvre un niveau enregistré
@@ -859,9 +878,15 @@ static func share_code(level_id: String, with_ghost: bool) -> String:
 	var v2: bool = data.has("objects")
 	for h in data.get("hooks", []):
 		v2 = v2 or (h as Array).size() >= 4
+	# [RÈGLES 1.90] règles et ambiance voyagent avec le niveau (code v2)
+	v2 = v2 or data.has("rules") or data.has("ambiance")
 	if v2:
 		payload.v = CODE_VERSION_MAX
 		payload["objects"] = data.get("objects", [])
+		if data.has("rules"):
+			payload["rules"] = data.rules
+		if data.has("ambiance"):
+			payload["ambiance"] = data.ambiance
 	# [VALIDATION 1.81] le temps du créateur voyage avec le niveau validé :
 	# ceux qui le reçoivent ont les mêmes médailles
 	if str(data.get("validated_hash", "")) == str(data.get("hash", "")) and float(data.get("gold_time", 0.0)) > 0.0:
@@ -952,6 +977,10 @@ static func _validate(data: Dictionary) -> String:
 				return "Code abîmé (objet illisible)."
 		if not (o.get("p", {}) is Dictionary):
 			return "Code abîmé (objet illisible)."
+	# [RÈGLES 1.90] règles et ambiance : des dictionnaires (valeurs nettoyées à la lecture)
+	for k in ["rules", "ambiance"]:
+		if data.has(k) and not (data[k] is Dictionary):
+			return "Code abîmé (règles illisibles)."
 	return ""
 
 
@@ -964,7 +993,7 @@ static func import_level(data: Dictionary) -> String:
 	strokes = []
 	hooks = []
 	_apply({"strokes": data.strokes, "hooks": data.hooks, "auto_hooks": bool(data.get("auto_hooks", true)),
-		"objects": data.get("objects", [])})
+		"objects": data.get("objects", []), "rules": data.get("rules", {}), "ambiance": data.get("ambiance", {})})
 	var h := content_hash()
 	for e in list_levels():
 		if e.hash == h:
@@ -1218,6 +1247,7 @@ const OBJECT_HALF := {
 	"checkpoint": Vector2(50, 130), "sign": Vector2(110, 110), "arch": Vector2(220, 260), "podium": Vector2(200, 160),
 	"bush": Vector2(110, 80), "igloo": Vector2(200, 140), "colisee": Vector2(300, 220), "ice1": Vector2(120, 120),
 	"ice2": Vector2(120, 120), "ice3": Vector2(80, 80),
+	"bridge": Vector2(90, 70),   # [RÈGLES 1.90] pont magique
 }
 ## Tous les types connus (vérification des codes reçus)
 const VALID_TYPES := ["egg", "boost", "start", "finish", "checkpoint", "sign", "camera",
@@ -1227,7 +1257,8 @@ const VALID_TYPES := ["egg", "boost", "start", "finish", "checkpoint", "sign", "
 	"cave",   # [CAVERNE 1.84]
 	"carved",   # [TAILLÉE 1.85]
 	"balcony", "stal", "cliff",   # [FORMES 2 1.86]
-	"void", "pillars", "bigegg", "endless"]   # [GROS BLOCS 1.89]
+	"void", "pillars", "bigegg", "endless",   # [GROS BLOCS 1.89]
+	"bridge"]   # [RÈGLES 1.90] pont magique du mode enfant
 ## Types dont il ne peut y avoir qu'un seul exemplaire
 const UNIQUE_TYPES := ["start", "finish"]
 
@@ -1322,6 +1353,8 @@ static var last_validation_time := 0.0
 
 ## Vrai si le niveau ouvert est validé tel qu'il est maintenant
 static func is_validated() -> bool:
+	if level_type() == "free":
+		return is_playable()   # [RÈGLES 1.90] glisse libre : rien à finir, toujours prêt
 	var data = _read_file(LEVELS_DIR.path_join(current_id + ".json")) if current_id != "" else null
 	return data != null and str(data.get("validated_hash", "")) == content_hash() and float(data.get("gold_time", 0.0)) > 0.0
 
@@ -1336,6 +1369,8 @@ static func validated_gold() -> float:
 ## Vrai si le niveau `entry` de la liste est validé (bouton Partager)
 static func entry_validated(entry: Dictionary) -> bool:
 	var data = _read_file(LEVELS_DIR.path_join(str(entry.id) + ".json"))
+	if data != null and str(clean_rules(data.get("rules", {})).get("type", "course")) == "free":
+		return true   # [RÈGLES 1.90] glisse libre : rien à finir
 	return data != null and str(data.get("validated_hash", "")) == str(data.get("hash", "")) and float(data.get("gold_time", 0.0)) > 0.0
 
 
@@ -1353,7 +1388,12 @@ static func record_validation(time: float) -> void:
 	var h := content_hash()
 	var old: float = float(data.get("gold_time", 0.0)) if str(data.get("validated_hash", "")) == h else 0.0
 	data["validated_hash"] = h
-	data["gold_time"] = time if old <= 0.0 else minf(old, time)
+	# [RÈGLES 1.90] défi figures : `time` est un score en points (plus haut =
+	# meilleur) ; course : un temps (plus bas = meilleur)
+	if level_type() == "tricks":
+		data["gold_time"] = maxf(old, time)
+	else:
+		data["gold_time"] = time if old <= 0.0 else minf(old, time)
 	current_gold = data.gold_time
 	var f := FileAccess.open(path, FileAccess.WRITE)
 	if f != null:
@@ -2933,3 +2973,148 @@ static func _endless_geometry(o: Dictionary, depth: float) -> Dictionary:
 	var top_y := minf(0.0, end.y - 800.0)
 	return {"top": island, "poly": _slab_to(island, depth), "entry": Vector2.ZERO, "exit": ex,
 		"frame": Rect2(0, top_y, ex.x, maxf(ex.y, end.y) - top_y + 200.0), "extra": extra, "eggs": [], "holds": holds}
+
+
+# =============================================================================
+#  Partie 16 — [RÈGLES 1.90] Règles et ambiance du niveau
+# =============================================================================
+# Étape 1.90 du plan du créateur. Choix de l'équipe (28/11) :
+#  - tout se règle dans une fenêtre « Niveau » (bouton de la barre du haut) ;
+#  - les 3 types de niveau du jeu : course (arrivée, chrono, médailles au
+#    temps), glisse libre (pas d'arrivée, comme 704 / 917), défi figures
+#    (chrono, points ; en mode Chill = glisse libre, comme les niveaux du jeu) ;
+#  - ciel, musique et thèmes du fond IMPOSÉS par le créateur, sauf si le
+#    joueur coche « Toujours mon fond » dans les Options (Settings.keep_my_bg) ;
+#  - mode enfant : des « ponts magiques » qu'on pose (objet `bridge`) : après
+#    2 chutes au même trou, Pinpouin repart du pont suivant (KidAssist).
+# Deux dictionnaires, vides = tout par défaut :
+#  - rules    {type, time} : entrent dans l'empreinte (records, validation) ;
+#  - ambiance {sky, music, glacier, far} : n'y entrent pas.
+
+const LEVEL_TYPES := ["course", "free", "tricks"]
+const LEVEL_TYPE_NAMES := {"course": "Course", "free": "Glisse libre", "tricks": "Défi figures"}
+## Durée du défi figures (s) : par défaut 3 min, comme le Half-pipe
+const TRICKS_TIME_DEFAULT := 180.0
+const TRICKS_TIME_MIN := 60.0
+const TRICKS_TIME_MAX := 300.0
+## Ciel : [id, nom, position dans le cycle de SkyCycle (m), -1 = le temps passe]
+## « day » = les couleurs d'origine (pas de teinte du tout)
+const SKY_TIMES := [["day", "Jour", 1000.0], ["dawn", "Aube", 0.0], ["sunset", "Couchant", 3000.0],
+	["night", "Nuit", 5600.0], ["cycle", "Le temps passe", -1.0]]
+## Musiques : [id, nom] (MusicController.play_level)
+const MUSICS := [["surf", "Glisse"], ["hope", "Espoir"], ["none", "Sans musique"]]
+
+static var rules: Dictionary = {}
+static var ambiance: Dictionary = {}
+
+
+## Règles nettoyées (valeurs sûres ; seulement ce qui n'est pas par défaut)
+static func clean_rules(r) -> Dictionary:
+	var out := {}
+	if not (r is Dictionary):
+		return out
+	var t := str(r.get("type", "course"))
+	if t in LEVEL_TYPES and t != "course":
+		out["type"] = t
+	if t == "tricks":
+		var v = r.get("time", TRICKS_TIME_DEFAULT)
+		var f: float = float(v) if typeof(v) in [TYPE_FLOAT, TYPE_INT] and is_finite(float(v)) else TRICKS_TIME_DEFAULT
+		f = clampf(snappedf(f, 15.0), TRICKS_TIME_MIN, TRICKS_TIME_MAX)
+		if f != TRICKS_TIME_DEFAULT:
+			out["time"] = f
+	return out
+
+
+## Ambiance nettoyée (seulement ce qui n'est pas par défaut)
+static func clean_ambiance(a) -> Dictionary:
+	var out := {}
+	if not (a is Dictionary):
+		return out
+	var sky := str(a.get("sky", "day"))
+	for st in SKY_TIMES:
+		if st[0] == sky and sky != "day":
+			out["sky"] = sky
+	var mus := str(a.get("music", "surf"))
+	for m in MUSICS:
+		if m[0] == mus and mus != "surf":
+			out["music"] = mus
+	# thèmes du fond : -1 = celui du joueur (par défaut), sinon l'indice du thème
+	for k in [["glacier", 4], ["far", 4]]:
+		var v = a.get(k[0], -1)
+		if typeof(v) in [TYPE_FLOAT, TYPE_INT] and is_finite(float(v)):
+			var i := int(v)
+			if i >= 0 and i < int(k[1]):
+				out[k[0]] = i
+	return out
+
+
+static func _rules_data() -> Dictionary:
+	return clean_rules(rules)
+
+
+## Type du niveau ouvert : "course", "free" ou "tricks"
+static func level_type() -> String:
+	return str(rules.get("type", "course"))
+
+
+## Durée du défi figures (s)
+static func tricks_time() -> float:
+	return float(clean_rules({"type": "tricks", "time": rules.get("time", TRICKS_TIME_DEFAULT)}).get("time", TRICKS_TIME_DEFAULT))
+
+
+## Change une règle (type / time) en gardant le dictionnaire propre
+static func set_rule(key: String, value) -> void:
+	var r := rules.duplicate()
+	r[key] = value
+	if key == "type" and value != "tricks":
+		r.erase("time")
+	rules = clean_rules(r)
+
+
+## Réglage d'ambiance (valeur par défaut si absent)
+static func amb(key: String):
+	match key:
+		"sky":
+			return str(ambiance.get("sky", "day"))
+		"music":
+			return str(ambiance.get("music", "surf"))
+		_:
+			return int(ambiance.get(key, -1))
+
+
+static func set_ambiance(key: String, value) -> void:
+	var a := ambiance.duplicate()
+	a[key] = value
+	ambiance = clean_ambiance(a)
+
+
+## Position du ciel choisi dans le cycle de SkyCycle (m) ; -1 = le temps passe
+static func sky_position() -> float:
+	for st in SKY_TIMES:
+		if st[0] == amb("sky"):
+			return float(st[2])
+	return 1000.0
+
+
+static func sky_name(id: String) -> String:
+	for st in SKY_TIMES:
+		if st[0] == id:
+			return st[1]
+	return "Jour"
+
+
+static func music_name(id: String) -> String:
+	for m in MUSICS:
+		if m[0] == id:
+			return m[1]
+	return "Glisse"
+
+
+## Ponts magiques posés (positions), de gauche à droite
+static func bridge_points() -> Array:
+	var out: Array = []
+	for o in objects:
+		if str(o.get("type", "")) == "bridge":
+			out.append(o.pos)
+	out.sort_custom(func(a, b): return a.x < b.x)
+	return out

@@ -64,17 +64,33 @@ var _last_beep := -1
 
 ## Le niveau a-t-il un défi figures ? (chemin de scène)
 static func has_challenge(path: String) -> bool:
+	# [RÈGLES 1.90] niveau du créateur de type « Défi figures »
+	if _is_drawn(path.get_file().get_basename()):
+		return DrawnLevel.level_type() == "tricks"
 	return TIME_LIMITS.has(path.get_file().get_basename())
+
+
+## [RÈGLES 1.90] Niveau du créateur ? (chemin réel LevelDrawn ou virtuel LevelDrawn_<id>_<empreinte>)
+static func _is_drawn(key: String) -> bool:
+	return key.begins_with("LevelDrawn")
 
 
 ## Points minimum pour chaque médaille : [bronze, argent, or].
 static func medal_points(key: String) -> Array:
 	var gold: int = int(MEDAL_POINTS_GOLD.get(key, 4000))
+	if _is_drawn(key):
+		# [RÈGLES 1.90] or = points du créateur (« ✔ Valider ») ; pas encore
+		# validé : pas de médailles (liste vide)
+		gold = int(DrawnLevel.current_gold)
+		if gold <= 0:
+			return []
 	return [int(round(gold * BRONZE_SHARE / 100.0)) * 100, int(round(gold * SILVER_SHARE / 100.0)) * 100, gold]
 
 
 static func medal_for(key: String, points: int) -> int:
 	var t := medal_points(key)
+	if t.is_empty():
+		return 0   # [RÈGLES 1.90] niveau du créateur pas encore validé
 	var m := 0
 	for i in 3:
 		if points >= t[i]:
@@ -86,6 +102,8 @@ func setup(p, path: String) -> void:
 	player = p
 	level_key = path.get_file().get_basename()
 	time_left = float(TIME_LIMITS.get(level_key, 240.0))
+	if _is_drawn(level_key):
+		time_left = DrawnLevel.tricks_time()   # [RÈGLES 1.90] durée choisie par le créateur
 
 
 func _ready() -> void:
@@ -147,7 +165,10 @@ func _update_labels() -> void:
 	var text := ("Record  %d pts" % best) if best >= 0 else "Premier essai !"
 	# prochaine médaille à décrocher
 	var have := medal_for(level_key, pts)
-	if have < 3:
+	if medal_points(level_key).is_empty():
+		# [RÈGLES 1.90] défi du créateur pas encore validé
+		text += "   ·   Validation : tes points deviendront l'or" if DrawnLevel.validating else ""
+	elif have < 3:
 		text += "   ·   %s à %d pts" % [MEDAL_NAMES[have + 1].capitalize(), medal_points(level_key)[have]]
 	else:
 		text += "   ·   OR !"
@@ -162,10 +183,17 @@ func _finish() -> void:
 		ts.bank()
 	var pts := _points()
 	var medal := medal_for(level_key, pts)
-	var record := pts > best
+	# [RÈGLES 1.90] défi d'un niveau du créateur : la course « ✔ Valider »
+	# fixe l'or (les points du créateur) ; « Tester d'ici » (chemin réel
+	# LevelDrawn) n'enregistre rien
+	var counts: bool = level_key != "LevelDrawn"
+	if _is_drawn(level_key) and DrawnLevel.validating and counts and pts > 0:
+		DrawnLevel.record_validation(float(pts))
+		medal = medal_for(level_key, pts)
+	var record := pts > best and counts
 	if record:
 		RaceManager._save_best_score(RaceManager.level_path, pts)
-	if medal > RaceManager.get_best_medal(RaceManager.level_path):
+	if medal > RaceManager.get_best_medal(RaceManager.level_path) and counts:
 		RaceManager._save_best_medal(RaceManager.level_path, medal)
 	# plus de figures comptées : le juge ne regarde que si l'on « ride »
 	RaceManager.free_ride = false
@@ -204,7 +232,7 @@ func _show_over_panel(pts: int, medal: int, record: bool) -> void:
 		text.text += "\nRecord : %d pts" % best
 	if medal > 0:
 		text.text += "\nMédaille %s" % MEDAL_NAMES[medal]
-	else:
+	elif not medal_points(level_key).is_empty():
 		text.text += "\nBronze à %d pts" % medal_points(level_key)[0]
 	for l in [title, text]:
 		l.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
@@ -214,7 +242,7 @@ func _show_over_panel(pts: int, medal: int, record: bool) -> void:
 	buttons.add_theme_constant_override("separation", 16)
 	box.add_child(buttons)
 	for b in [["Rejouer", func(): get_tree().reload_current_scene()],
-			["Menu", func(): get_tree().change_scene_to_file("res://src/screens/LevelSelectionScreen.tscn")]]:
+			["Menu", func(): get_tree().change_scene_to_file(DrawnLevel.return_scene if _is_drawn(level_key) else "res://src/screens/LevelSelectionScreen.tscn")]]:
 		var btn := Button.new()
 		btn.theme = load("res://src/theme_main.tres")   # même style que les menus
 		btn.text = b[0]

@@ -366,6 +366,11 @@ func _build_tabs() -> void:
 		Settings.BG_GLACIER_THEMES, Settings.bg_glacier_theme, "bg_glacier_theme")
 	_add_theme_choice(_pages["affichage"], game_box, "BgSky", "Fond : ciel lointain (au-dessus des nuages)",
 		Settings.BG_SKY_THEMES, Settings.bg_sky_theme, "bg_sky_theme")
+	# [RÈGLES 1.90] les niveaux du créateur peuvent imposer leur fond et leur
+	# ciel (choix de l'équipe) : ce réglage garde toujours ceux du joueur
+	_pages["affichage"].add_child(_new_switch("KeepMyBg", "Toujours mon fond", Settings.keep_my_bg,
+		func(v): Settings.set_option("keep_my_bg", v),
+		"Les niveaux du créateur peuvent choisir leur fond et l'heure du ciel.\nActivé : tu gardes toujours tes thèmes ci-dessus et le ciel de jour."))
 	_move(["MusicTitle", "MusicSlider", "SfxTitle", "SfxSlider"], game_box, _pages["son"])
 	_move(["GhostHelp", "GhostList", "PasteButton", "FolderButton"], ghost_box, _pages["fantomes"])
 	_pages["dev"].add_child(_hint("Pour régler et tester le jeu. Tout est coupé par défaut."))

@@ -65,3 +65,30 @@ func _on_AudioStreamPlayer_finished():
 	# quand son finit, lance une chanson au hasard 	
 	if !play_stopped: # hormis si son arrete manuelement
 		play()
+
+
+# --- [RÈGLES 1.90] Musique choisie par un niveau du créateur -------------------
+# Un niveau du créateur peut imposer sa musique (fenêtre « Niveau » de
+# l'éditeur) : « surf » (la musique des niveaux, par défaut), « hope » (le
+# thème du menu) ou « none » (sans musique). En sortant du niveau, RaceManager
+# appelle end_level_music() : on reprend la musique habituelle.
+var level_override := false
+
+
+func play_level(id: String) -> void:
+	match id:
+		"hope":
+			if not (_music_player.playing and track_path == main_theme):
+				play(main_theme)
+			level_override = true
+		"none":
+			stop()
+			level_override = true
+		_:
+			end_level_music()
+
+
+func end_level_music() -> void:
+	if level_override:
+		level_override = false
+		play(tracks[0])

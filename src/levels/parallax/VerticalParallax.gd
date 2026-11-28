@@ -563,7 +563,7 @@ func _setup_alto() -> void:
 			# lignes de la couleur du haut des nuages) passe DERRIÈRE les nuages :
 			# quand les deux plans glissent l'un par rapport à l'autre (dézoom,
 			# sauts), c'est lui qui apparaît, jamais un vide.
-			var sky_tex := _theme_texture(Settings.BG_SKY_THEMES, Settings.bg_sky_theme)
+			var sky_tex := _theme_texture(Settings.BG_SKY_THEMES, Settings.sky_theme())   # [RÈGLES 1.90] thème imposé par le niveau ?
 			if sky_tex == null:
 				_add_extension(spr, reg, used.position.y, rect.position.y + used.position.y, false, rect, img)
 			# brume de profondeur : le plan le plus lointain tire vers le ciel
@@ -573,7 +573,7 @@ func _setup_alto() -> void:
 		elif key == "glacier":
 			# [FOND 1.75] bas du glacier dessiné (thème choisi dans les options)
 			# au lieu de l'aplat ; l'aplat continue ensuite sous la nouvelle image
-			var low_tex := _theme_texture(Settings.BG_GLACIER_THEMES, Settings.bg_glacier_theme)
+			var low_tex := _theme_texture(Settings.BG_GLACIER_THEMES, Settings.glacier_theme())   # [RÈGLES 1.90]
 			if low_tex != null:
 				_add_glacier_bottom(spr, reg, rect.position.y + used.end.y, low_tex)
 			else:

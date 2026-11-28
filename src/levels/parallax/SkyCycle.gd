@@ -24,6 +24,10 @@ extends Node
 @export var fixed_at: float = -1.0
 ## Longueur d'un cycle complet aube -> aube (m).
 @export var cycle_length: float = 8000.0
+## [RÈGLES 1.90] px par « mètre » du cycle (0 = ceux du Sans fin). Les
+## niveaux du créateur (« Le temps passe ») le règlent pour passer de l'aube
+## à la nuit sur la longueur du niveau.
+@export var px_per_meter: float = 0.0
 
 # palette : [mètres, teinte du fond, teinte du premier plan, couleur du ciel, nuit 0..1]
 const KEYS := [
@@ -75,7 +79,7 @@ func _process(delta: float) -> void:
 			if _player != null:
 				_start_x = _player.global_position.x
 			return
-		var px_per_m: float = preload("res://src/levels/endless/EndlessScore.gd").PX_PER_METER
+		var px_per_m: float = px_per_meter if px_per_meter > 0.0 else preload("res://src/levels/endless/EndlessScore.gd").PX_PER_METER
 		# point le plus loin atteint : une chute ne fait pas revenir le jour
 		target = maxf(_current, (_player.global_position.x - _start_x) / px_per_m)
 	# changement doux (pas de saut de couleur à la réapparition)

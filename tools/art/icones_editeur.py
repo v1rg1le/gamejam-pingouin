@@ -471,6 +471,82 @@ ICONS.update({
 })
 
 
+# --- [RÈGLES 1.90] Fenêtre « Niveau » : type, ciel, musique ; pont magique ------
+def i_niveau():
+    # petit paysage (montagne + soleil) dans un cadre : les réglages du niveau
+    im, d = new()
+    d.rectangle([1, 2, 14, 13], fill=MID)
+    d.ellipse([9, 3, 12, 6], fill=YEL)
+    d.polygon([(1, 13), (6, 6), (9, 10), (11, 8), (14, 12), (14, 13)], fill=SNOW)
+    return im
+
+
+def i_type(k):
+    im, d = new()
+    if k == 0:   # course : drapeau à damier
+        d.rectangle([2, 1, 3, 15], fill=GREY)
+        for y in range(2, 9, 2):
+            for x in range(4, 14, 2):
+                d.rectangle([x, y, x, y], fill=WHITE if (x + y) % 4 == 0 else INK)
+                d.rectangle([x + 1, y, x + 1, y], fill=INK if (x + y) % 4 == 0 else WHITE)
+                d.rectangle([x, y + 1, x, y + 1], fill=INK if (x + y) % 4 == 0 else WHITE)
+                d.rectangle([x + 1, y + 1, x + 1, y + 1], fill=WHITE if (x + y) % 4 == 0 else INK)
+    elif k == 1:   # glisse libre : vague de neige sans fin
+        d.line([(0, 10), (3, 7), (6, 9), (9, 6), (12, 8), (15, 5)], fill=SNOW, width=3)
+        d.polygon([(0, 15), (0, 12), (3, 9), (6, 11), (9, 8), (12, 10), (15, 7), (15, 15)], fill=ICE)
+    else:   # défi figures : étoile qui tourne
+        d.polygon([(8, 1), (10, 6), (15, 6), (11, 9), (13, 14), (8, 11), (3, 14), (5, 9), (1, 6), (6, 6)], fill=YEL)
+        d.arc([0, 0, 15, 15], 200, 320, fill=WHITE, width=1)
+    return im
+
+
+def i_ciel(k):
+    im, d = new()
+    cols = {"jour": (0x66, 0xa8, 0xe0, 255), "aube": (0xee, 0xb0, 0xbc, 255), "couchant": (0xf2, 0x84, 0x52, 255),
+            "nuit": (0x1a, 0x22, 0x55, 255)}
+    if k == "cycle":
+        # quatre quarts : le temps passe
+        d.pieslice([1, 1, 14, 14], 180, 270, fill=cols["aube"])
+        d.pieslice([1, 1, 14, 14], 270, 360, fill=cols["jour"])
+        d.pieslice([1, 1, 14, 14], 0, 90, fill=cols["couchant"])
+        d.pieslice([1, 1, 14, 14], 90, 180, fill=cols["nuit"])
+        d.line([(8, 8), (8, 3)], fill=WHITE)
+        d.line([(8, 8), (11, 9)], fill=WHITE)
+        return im
+    d.rectangle([1, 1, 14, 14], fill=cols[k])
+    if k == "nuit":
+        d.ellipse([8, 3, 12, 7], fill=WHITE)
+        d.ellipse([9, 2, 12, 6], fill=cols["nuit"])
+        d.point([(3, 4), (5, 9), (11, 11), (4, 12)], fill=WHITE)
+    else:
+        y = {"jour": 3, "aube": 9, "couchant": 9}[k]
+        d.ellipse([5, y, 10, y + 5], fill=YEL if k != "couchant" else (0xff, 0xe0, 0x80, 255))
+    d.rectangle([1, 12, 14, 14], fill=SNOW)
+    return im
+
+
+def i_musique(k):
+    im, d = new()
+    col = YEL if k == 0 else PINK if k == 1 else GREY
+    d.line([(6, 3), (6, 12)], fill=col, width=2)
+    d.line([(12, 1), (12, 10)], fill=col, width=2)
+    d.polygon([(6, 3), (13, 1), (13, 3), (6, 5)], fill=col)
+    d.ellipse([2, 10, 6, 14], fill=col)
+    d.ellipse([8, 8, 12, 12], fill=col)
+    if k == 2:
+        d.line([(1, 14), (14, 1)], fill=RED, width=2)
+    return im
+
+
+ICONS.update({
+    "niveau": i_niveau,
+    "type_course": lambda: i_type(0), "type_libre": lambda: i_type(1), "type_figures": lambda: i_type(2),
+    "ciel_jour": lambda: i_ciel("jour"), "ciel_aube": lambda: i_ciel("aube"), "ciel_couchant": lambda: i_ciel("couchant"),
+    "ciel_nuit": lambda: i_ciel("nuit"), "ciel_cycle": lambda: i_ciel("cycle"),
+    "musique_glisse": lambda: i_musique(0), "musique_espoir": lambda: i_musique(1), "musique_aucune": lambda: i_musique(2),
+})
+
+
 # --- Vignettes de la palette (24 x 24) ----------------------------------------
 # Glace + neige du jeu : remplissage ICE, dessus SNOW, contour sombre.
 def ground(d, pts, bottom=22):
@@ -677,12 +753,25 @@ def v_hook():
     return im
 
 
+
+def v_bridge():
+    # [RÈGLES 1.90] pont magique : arc-en-ciel au-dessus d'un trou, étoile
+    im, d = v_new()
+    ground(d, [(0, 17), (5, 17)], bottom=22)
+    ground(d, [(18, 17), (23, 17)], bottom=22)
+    for k, col in enumerate((RED, ORANGE, YEL, GREEN, MID)):
+        d.arc([3 + k, 5 + k, 20 - k, 26 - k], 180, 360, fill=col, width=1)
+    d.polygon([(11, 1), (12, 3), (14, 3), (12, 4), (13, 6), (11, 5), (9, 6), (10, 4), (8, 3), (10, 3)], fill=WHITE)
+    return im
+
+
 THUMBS = {
     "draw": v_draw, "ramp": v_ramp, "halfpipe": v_halfpipe, "bowl": v_bowl, "slope": v_slope,
     "bend": v_bend, "upipe": v_upipe, "ceiling": v_ceiling, "floating": v_floating, "wall": v_wall,
     "pillar": v_pillar, "balcony": v_balcony, "stal": v_stal, "cliff": v_cliff,
     "cave": v_cave, "carved": v_carved, "void": v_void, "pillars": v_pillars, "bigegg": v_bigegg, "endless": v_endless,
     "camera": v_camera, "checkpoint": v_checkpoint, "hook": v_hook,
+    "bridge": v_bridge,   # [RÈGLES 1.90]
 }
 
 

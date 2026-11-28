@@ -219,9 +219,19 @@ func _fill_list() -> void:
 		var text: String = "▶  " + str(e.name)
 		if str(e.get("author", "")) != "":
 			text += "  ·  par " + str(e.author)   # [PARTAGE 1.47] niveau reçu ou de la communauté
-		var best: float = RaceManager.get_best_time(path)
-		if best >= 0.0:
-			text += "  ·  " + RaceManager.format_time(best)
+		# [RÈGLES 1.90] défi figures : meilleur score en points ; glisse libre : pas de record
+		var kind := str(e.get("type", "course"))
+		if kind == "tricks":
+			text += "  ·  ✦ défi"
+			var pts: int = RaceManager.get_best_score(path)
+			if pts > 0:
+				text += "  ·  %d pts" % pts
+		elif kind == "free":
+			text += "  ·  glisse libre"
+		else:
+			var best: float = RaceManager.get_best_time(path)
+			if best >= 0.0:
+				text += "  ·  " + RaceManager.format_time(best)
 		var play := _button(text, row, 0)
 		play.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		play.alignment = HORIZONTAL_ALIGNMENT_LEFT
@@ -383,7 +393,8 @@ func _open_share(entry: Dictionary) -> void:
 	# [VALIDATION 1.81] un niveau à toi se partage une fois VALIDÉ (fini du
 	# départ à l'arrivée avec « ✔ Valider » dans l'éditeur) : décision de l'équipe
 	if own and not DrawnLevel.entry_validated(entry):
-		_label(col, "Pour partager ce niveau, finis-le d'abord avec « ✔ Valider » dans l'éditeur : ton temps deviendra l'or du niveau.")
+		_label(col, "Pour partager ce défi, fais-le d'abord avec « ✔ Valider » dans l'éditeur : tes points deviendront l'or du niveau." if str(entry.get("type", "course")) == "tricks"
+			else "Pour partager ce niveau, finis-le d'abord avec « ✔ Valider » dans l'éditeur : ton temps deviendra l'or du niveau.")
 		_button("Fermer", col, 0).pressed.connect(_close_popup)
 		return
 	var b1 := _button("Copier le code du niveau", col, 0)

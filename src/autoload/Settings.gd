@@ -139,6 +139,27 @@ const BG_SKY_THEMES := [
 var bg_glacier_theme: int = 1
 ## [FOND 1.75] Thème choisi pour le ciel lointain (indice dans BG_SKY_THEMES).
 var bg_sky_theme: int = 1
+## [RÈGLES 1.90] « Toujours mon fond » : le joueur garde SES thèmes du fond
+## (et le ciel d'origine) même dans un niveau du créateur qui en impose
+## d'autres (choix de l'équipe : ambiance imposée, sauf ce réglage).
+var keep_my_bg: bool = false
+## [RÈGLES 1.90] Thèmes imposés par le niveau en cours (-1 = aucun : ceux du
+## joueur). Posés par RaceManager._prepare_level AVANT la construction du
+## niveau (VerticalParallax les lit dans son _ready).
+var level_glacier_theme: int = -1
+var level_sky_theme: int = -1
+
+
+## [RÈGLES 1.90] Thème du bas du glacier à utiliser maintenant
+func glacier_theme() -> int:
+	return level_glacier_theme if level_glacier_theme >= 0 and not keep_my_bg else bg_glacier_theme
+
+
+## [RÈGLES 1.90] Thème du ciel lointain à utiliser maintenant
+func sky_theme() -> int:
+	return level_sky_theme if level_sky_theme >= 0 and not keep_my_bg else bg_sky_theme
+
+
 ## [FOND 1.76] Le fond glisse pendant les grands sauts (on voit le ciel) et
 ## les chutes (on voit le bas du glacier). Coupé = composition fixe (1.26-1.75).
 var bg_follow_jumps: bool = true
@@ -213,6 +234,7 @@ func _load_options() -> void:
 		bg_sky_theme = clampi(int(cfg.get_value("options", "bg_sky_theme", 1)), 0, BG_SKY_THEMES.size() - 1)
 		bg_follow_jumps = bool(cfg.get_value("options", "bg_follow_jumps", true))   # [FOND 1.76]
 		ground_style = clampi(int(cfg.get_value("options", "ground_style", 1)), 0, 1)   # [GLACE 1.77]
+		keep_my_bg = bool(cfg.get_value("options", "keep_my_bg", false))   # [RÈGLES 1.90]
 	apply_music_volume()
 	# [OPTIONS 1.72] plein écran retrouvé au lancement (pas dans le navigateur :
 	# il n'y est permis qu'après un clic du joueur)

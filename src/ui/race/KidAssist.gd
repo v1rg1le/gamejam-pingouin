@@ -55,7 +55,17 @@ var _gap_x := -INF                # x du bord du trou de la dernière chute
 var _gap_y := 0.0                 # hauteur de la piste au bord de ce trou
 var _bridge_pending := false      # téléporter après la prochaine réapparition
 var _toast: Label                 # message « Coup de pouce ! »
+var _fall_from_x := -INF          # [RÈGLES 1.90] x du dernier endroit sûr avant la chute
 var _toast_time := 0.0
+
+
+## [RÈGLES 1.90] Le niveau a-t-il des ponts magiques posés à la main ?
+## (le générateur des niveaux du créateur, s'il en a au moins un ; sinon null)
+func _bridges():
+	var g = get_tree().get_first_node_in_group("kid_bridges")
+	if g == null or not g.has_method("kid_bridge_after") or DrawnLevel.bridge_points().is_empty():
+		return null
+	return g
 
 
 func setup(p) -> void:
@@ -71,7 +81,11 @@ func _on_player_died() -> void:
 	# [ŒUF 1.59] niveau à points de passage : deux chutes de suite depuis le
 	# même point = on passe au point suivant (le « pont magique » de ce niveau)
 	var course = get_tree().get_first_node_in_group("course_checkpoints")
-	if course != null:
+	# [RÈGLES 1.90] correctif : les niveaux du créateur sont aussi dans ce
+	# groupe (points de passage) mais n'ont pas de « point suivant » à la
+	# L'Œuf (pas de kid_skip) : avant, le mode enfant y plantait à la 1re
+	# chute. Ils passent par la règle des trous ci-dessous.
+	if course != null and course.has_method("kid_skip"):
 		var cp: int = course.current_checkpoint()
 		_gap_deaths = _gap_deaths + 1 if is_equal_approx(_gap_x, float(cp)) else 1
 		_gap_x = float(cp)
@@ -87,6 +101,12 @@ func _on_player_died() -> void:
 	# trou, lui, est toujours le même.
 	var space: PhysicsDirectSpaceState2D = player.get_world_2d().direct_space_state
 	var x = _gap_start(space, player.last_safe_position.x, player.last_safe_position.y)
+	_fall_from_x = player.last_safe_position.x
+	if x == null and _bridges() != null:
+		# [RÈGLES 1.90] pas de trou repéré (chute d'une galerie, d'un œuf…)
+		# mais le créateur a posé des ponts magiques : on compte les chutes
+		# au même endroit d'où l'on est tombé
+		x = player.last_safe_position.x
 	if x == null:
 		_gap_deaths = 0   # pas de trou devant (chute en arrière, bout du niveau…)
 		return
@@ -106,7 +126,15 @@ func _on_player_respawned() -> void:
 	if not _bridge_pending:
 		return
 	_bridge_pending = false
-	var landing = _find_landing(_gap_x, _gap_y)
+	var landing = null
+	# [RÈGLES 1.90] niveau du créateur avec des ponts magiques posés : le
+	# premier pont après l'endroit d'où l'on est tombé ; sinon on cherche l'île
+	# suivante comme avant
+	var provider = _bridges()
+	if provider != null:
+		landing = provider.kid_bridge_after(_fall_from_x)
+	if landing == null:
+		landing = _find_landing(_gap_x, _gap_y)
 	if landing == null:
 		print("[MODE ENFANT] pont magique : pas de sol trouvé après x=%d" % _gap_x)
 		return   # rien trouvé devant (fin de niveau…) : réapparition normale

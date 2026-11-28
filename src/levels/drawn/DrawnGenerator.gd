@@ -41,6 +41,8 @@ var _bottom: float = INF   # [FORMES 1.83] fond commun des îlots (y du monde)
 func _ready() -> void:
 	DrawnLevel.load_once()
 	_islands = DrawnLevel.islands()
+	_setup_ambiance()   # [RÈGLES 1.90] ciel choisi par le créateur
+	add_to_group("kid_bridges")   # [RÈGLES 1.90] KidAssist nous demande les ponts magiques
 	# [GROTTE 1.87] niveau tout en grotte : aucun sol dessiné, seulement une
 	# (ou des) caverne(s) taillée(s) — demande de l'équipe : « faire un niveau
 	# uniquement dedans ». Pas d'îlots, pas de piste de freinage ni de murs :
@@ -106,12 +108,16 @@ func _ready() -> void:
 	# 5. Arrivée au bout du trait ; après la course, retour dans l'éditeur
 	#    (après TESTER) ou dans « Mes niveaux » (après JOUER) [MES NIVEAUX 1.46]
 	#    [OBJETS 1.81] ou là où l'objet « Arrivée » a été posé
-	var gate = finish_gate_res.instantiate()
-	gate.next_scene_path = DrawnLevel.return_scene
-	var fin_obj := DrawnLevel.first_object("finish")
-	# [FORMES 1.83] sans objet Arrivée : au bout des formes collées au dernier sol
-	gate.position = fin_obj.pos if not fin_obj.is_empty() else DrawnLevel.chain_end(finish_pos)
-	add_child(gate)
+	# [RÈGLES 1.90] glisse libre et défi figures : pas d'arrivée (comme 704,
+	# 917 et le Half-pipe) ; RaceManager passe alors en glisse libre, avec le
+	# chrono du défi en mode Score (TrickAttack)
+	if DrawnLevel.level_type() == "course":
+		var gate = finish_gate_res.instantiate()
+		gate.next_scene_path = DrawnLevel.return_scene
+		var fin_obj := DrawnLevel.first_object("finish")
+		# [FORMES 1.83] sans objet Arrivée : au bout des formes collées au dernier sol
+		gate.position = fin_obj.pos if not fin_obj.is_empty() else DrawnLevel.chain_end(finish_pos)
+		add_child(gate)
 
 	# 6. Départ : un peu après le début du premier trait
 	var sx: float = minf(first[0].x + 150.0, first[first.size() - 1].x)
@@ -138,6 +144,37 @@ func _ready() -> void:
 		_add_edit_button()
 
 
+# --- [RÈGLES 1.90] Ambiance et ponts magiques ------------------------------------
+
+## Ciel choisi dans la fenêtre « Niveau » de l'éditeur : le même SkyCycle que
+## les niveaux du jeu (teinte des plans du fond et du premier plan, couleur du
+## ciel, étoiles et lune la nuit). « Jour » = couleurs d'origine (rien à
+## ajouter). « Le temps passe » : de l'aube à la nuit du départ au bout du
+## niveau (cycle mis à l'échelle de la longueur du niveau). Le joueur qui a
+## coché « Toujours mon fond » garde le jour.
+func _setup_ambiance() -> void:
+	var at := DrawnLevel.sky_position()
+	if DrawnLevel.amb("sky") == "day" or Settings.keep_my_bg:
+		return
+	var sky = preload("res://src/levels/parallax/SkyCycle.gd").new()
+	sky.name = "SkyCycle"
+	sky.fixed_at = at
+	if at < 0.0:
+		var b: Rect2 = DrawnLevel.level_bounds()
+		# nuit (5 000 m du cycle) atteinte au bout du niveau
+		sky.px_per_meter = maxf(1.0, b.size.x / 5200.0) if b.size.x > 0.0 else 4.0
+	get_parent().add_child.call_deferred(sky)
+
+
+## Pont magique le plus proche APRÈS l'abscisse `x` (null s'il n'y en a pas) :
+## KidAssist y pose Pinpouin après 2 chutes au même trou (mode enfant)
+func kid_bridge_after(x: float):
+	for p in DrawnLevel.bridge_points():
+		if (p as Vector2).x > x + 100.0:
+			return p
+	return null
+
+
 ## [GROTTE 1.87] Construction d'un niveau sans sol dessiné (tout en grotte)
 func _ready_cave_only() -> void:
 	# prises posées à la main et prises automatiques des falaises
@@ -149,11 +186,12 @@ func _ready_cave_only() -> void:
 		add_child(fish)
 	_build_objects()
 	var ends := DrawnLevel.carved_default_ends()   # [départ, arrivée] dans les galeries
-	var gate = finish_gate_res.instantiate()
-	gate.next_scene_path = DrawnLevel.return_scene
-	var fin_obj := DrawnLevel.first_object("finish")
-	gate.position = fin_obj.pos if not fin_obj.is_empty() else ends[1]
-	add_child(gate)
+	if DrawnLevel.level_type() == "course":   # [RÈGLES 1.90] pas d'arrivée sinon
+		var gate = finish_gate_res.instantiate()
+		gate.next_scene_path = DrawnLevel.return_scene
+		var fin_obj := DrawnLevel.first_object("finish")
+		gate.position = fin_obj.pos if not fin_obj.is_empty() else ends[1]
+		add_child(gate)
 	if DrawnLevel.testing_from_here():
 		var from := DrawnLevel.test_from
 		DrawnLevel.test_from = Vector2.INF
@@ -214,6 +252,8 @@ func _build_objects() -> void:
 				spr.rotation = o.rot
 				spr.z_index = 1
 				add_child(spr)
+			"bridge":
+				pass   # [RÈGLES 1.90] pont magique : un repère pour le mode enfant (kid_bridge_after), rien à construire
 			"camera":
 				var h := DrawnLevel.object_half(o)
 				_cameras.append({"rect": Rect2(o.pos - h, h * 2.0), "zoom": clampf(float(o.props.get("zoom", 0.25)), 0.1, 1.0)})
@@ -590,6 +630,11 @@ func _add_edit_button() -> void:
 	btn.offset_right = 80
 	btn.offset_top = 10
 	btn.offset_bottom = 54
+	# [RÈGLES 1.90] défi figures (mode Score) : le chrono et les points du défi
+	# (TrickAttack) sont au milieu en haut ; le bouton se range à leur droite
+	if DrawnLevel.level_type() == "tricks" and not Settings.is_chill():
+		btn.offset_left = 280
+		btn.offset_right = 440
 	btn.pressed.connect(func():
 		get_tree().paused = false
 		Engine.time_scale = 1.0

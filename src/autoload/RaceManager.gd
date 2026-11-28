@@ -232,6 +232,10 @@ func _on_node_added(node: Node) -> void:
 	else:
 		_reset_race()
 		level_path = ""   # menus : pas de course
+		# [RÈGLES 1.90] plus de fond ni de musique imposés par un niveau du créateur
+		Settings.level_glacier_theme = -1
+		Settings.level_sky_theme = -1
+		MusicController.end_level_music()
 		# [VALIDATION 1.81] après une course « ✔ Valider » (courue en mode
 		# Score), on remet le mode de jeu du joueur
 		if DrawnLevel.validation_prev_mode >= 0:
@@ -241,6 +245,18 @@ func _on_node_added(node: Node) -> void:
 
 func _prepare_level(path: String) -> void:
 	_reset_race()
+	# [RÈGLES 1.90] fond et musique imposés par un niveau du créateur : posés
+	# ICI, avant la construction du niveau (le fond lit Settings.glacier_theme()
+	# dans son _ready). Les autres niveaux remettent tout comme le joueur l'a choisi.
+	if path.ends_with(DRAWN_LEVEL + ".tscn") and not NetSession.in_race:
+		DrawnLevel.load_once()
+		Settings.level_glacier_theme = int(DrawnLevel.amb("glacier"))
+		Settings.level_sky_theme = int(DrawnLevel.amb("far"))
+		MusicController.play_level(str(DrawnLevel.amb("music")))
+	else:
+		Settings.level_glacier_theme = -1
+		Settings.level_sky_theme = -1
+		MusicController.end_level_music()
 	# [MES NIVEAUX 1.46] niveau dessiné : chemin virtuel propre au dessin
 	# [CRÉATEUR v2 1.80] « Tester d'ici » : on garde le chemin réel
 	# LevelDrawn.tscn, qui n'enregistre rien (ni record, ni fantôme, ni

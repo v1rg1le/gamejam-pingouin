@@ -164,7 +164,12 @@ func _ready() -> void:
 	else:
 		_frame_content()
 	_refresh_ui()
-	if DrawnLevel.last_validation_time > 0.0:
+	if DrawnLevel.last_validation_time > 0.0 and DrawnLevel.level_type() == "tricks":
+		# [RÈGLES 1.90] défi figures : des points (plus c'est haut, mieux c'est)
+		_flash("✔ Défi validé ! Tes points : %d. Or du niveau : %d pts. Tu peux le partager." % [
+			int(DrawnLevel.last_validation_time), int(DrawnLevel.validated_gold())])
+		DrawnLevel.last_validation_time = 0.0
+	elif DrawnLevel.last_validation_time > 0.0:
 		_flash("✔ Niveau validé ! Ton temps : %s. Or du niveau : %s. Tu peux le partager." % [
 			RaceManager.format_time(DrawnLevel.last_validation_time), RaceManager.format_time(DrawnLevel.validated_gold())])
 		DrawnLevel.last_validation_time = 0.0
@@ -411,6 +416,8 @@ func _draw_ghost(z: float) -> void:
 		"camera":
 			var h := DrawnLevel.object_half(o)
 			draw_rect(Rect2(o.pos - h, h * 2.0), Color(0.6, 0.4, 1.0, 0.25))
+		"bridge":
+			_draw_bridge(o.pos, a, z)   # [RÈGLES 1.90]
 		_:
 			if DrawnLevel.DECOR_SCENES.has(o.type):
 				for spr in _decor_sprites(o.type):
@@ -1437,6 +1444,8 @@ const TIPS := {
 	"dici": ["Tester d'ici", "Lance Pinpouin depuis le milieu de l'écran. Ne compte pas pour les records.", "", "D'ici"],
 	"tester": ["Tester", "Joue ton niveau depuis le départ.", "", ""],
 	"aide": ["Aide", "Relance la visite du créateur avec Pinpouin.", "", "Aide"],
+	# [RÈGLES 1.90]
+	"niveau": ["Niveau", "Règles et ambiance : course, glisse libre ou défi figures ; ciel, fond, musique ; mode enfant.", "", "Niveau"],
 }
 
 var _top_bar_h: float = TOP_BAR_H        # hauteur réelle de la barre du haut (unités de l'interface)
@@ -1833,6 +1842,8 @@ func _hover_info(h: Dictionary) -> Array:
 					lines.append("Ligne d'arrivée (une seule par niveau)")
 				"checkpoint":
 					lines.append("Après une chute, on repart d'ici")
+				"bridge":
+					lines.append("Mode enfant : après 2 chutes au même trou, on repart d'ici")   # [RÈGLES 1.90]
 				"sign":
 					lines.append("Direction : %s   ·   taille ×%.2f" % [str(o.props.get("dir", "droite")), float(o.scale)])
 				"camera":
@@ -1951,6 +1962,8 @@ func _build_ui() -> void:
 	_name_button.set_meta("tip", "nom")
 	_register_tip(_name_button)
 	_name_button.pressed.connect(_open_rename)
+	# [RÈGLES 1.90] fenêtre « Niveau » : règles et ambiance (choix de l'équipe)
+	_ibutton("niveau", row).pressed.connect(_open_level_window)
 	# [CRÉATEUR v2 1.80] Annuler / Refaire
 	_undo_button = _ibutton("annuler", row)
 	_undo_button.pressed.connect(_on_undo)
@@ -2174,7 +2187,8 @@ func _refresh_ui() -> void:
 const PALETTE := [
 	["Objets", [["hook", "Prise de grappin", ""], ["egg", "Œuf à grappiner", ""], ["boost", "Boost", ""],
 		["start", "Départ", ""], ["finish", "Arrivée", ""], ["checkpoint", "Point de passage", ""],
-		["sign", "Panneau flèche", ""], ["camera", "Zone de caméra", ""]]],
+		["sign", "Panneau flèche", ""], ["camera", "Zone de caméra", ""],
+		["bridge", "Pont magique", ""]]],   # [RÈGLES 1.90] mode enfant
 	# [ICÔNES 1.82] plan décalé d'une version (la 1.82 est consacrée à
 	# l'ergonomie) ; [FORMES 1.83] les formes du terrain arrivent en deux fois
 	# (choix de l'équipe) : 10 formes en 1.83, balcon / plateforme-stalactite /
@@ -2190,7 +2204,7 @@ const PALETTE := [
 	# générée (sinueuse) en 1.84, caverne taillée à la main en 1.85 ; le reste
 	# est décalé (balcon, stalactite, falaise 1.86 ; autres gros blocs 1.87)
 	["Gros blocs", [["cave", "Caverne", ""], ["carved", "Caverne taillée", ""], ["void", "Zone de vide", ""],
-		["pillars", "Motif piliers", ""], ["bigegg", "Grand œuf", ""], ["endless", "Tronçon du Sans fin", ""]]],   # [GROS BLOCS 1.89] tous prêts
+		["pillars", "Motif piliers", ""], ["bigegg", "Grand œuf", ""], ["endless", "Île + trou", ""]]],   # [GROS BLOCS 1.89] tous prêts
 ]
 
 ## [ICÔNES PARTOUT 1.87] Icône et bulle de chaque onglet de la palette
@@ -2212,6 +2226,7 @@ const PALETTE_TIPS := {
 	"checkpoint": "Après une chute, Pinpouin repart du dernier point de passage atteint.",
 	"sign": "Un panneau pour montrer le chemin (8 directions).",
 	"camera": "Tant que Pinpouin est dans cette zone, la caméra recule pour montrer la suite.",
+	"bridge": "Pont magique (mode enfant) : après 2 chutes au même trou, Pinpouin repart d'ici (le pont suivant).",
 	"draw": "Le sol se trace avec l'outil Dessiner.",
 	"ramp": "Un tremplin : pose-le au bout d'un sol, il s'y colle. Étire-le avec les losanges.",
 	"halfpipe": "Un half-pipe creusé pour les figures : pose-le entre deux sols (il se colle aux bouts).",
@@ -2230,7 +2245,7 @@ const PALETTE_TIPS := {
 	"void": "Une zone de vide comme dans le Gruyère : tremplin, grand trou, rampe d'accueil plus bas, et une échelle d'œufs pour monter au balcon d'en face.",
 	"pillars": "Le motif piliers du Gruyère : des piliers en vague séparés par des trous, avec des plafonds-guides lisses au-dessus.",
 	"bigegg": "Le grand œuf complet de L'Œuf : coquille de glace, fente sur le dessus, half-pipe dedans. Le grappin s'accroche partout.",
-	"endless": "Un tronçon du Sans fin : île en pente, puis un trou du type choisi (saut, grappin, plafond…) ou au hasard (🎲).",
+	"endless": "Île + trou : une île en pente, puis un trou du type choisi (saut, grappin, plafond…) ou au hasard (🎲). Les mêmes trous que le mode Sans fin.",
 }
 
 
@@ -2425,7 +2440,8 @@ const OBJ_NAMES := {"egg": "Œuf à grappiner", "boost": "Boost", "start": "Dép
 	"cave": "Caverne",   # [CAVERNE 1.84]
 	"carved": "Caverne taillée",   # [TAILLÉE 1.85]
 	"balcony": "Balcon de glace", "stal": "Plateforme-stalactite", "cliff": "Falaise",   # [FORMES 2 1.86]
-	"void": "Zone de vide", "pillars": "Motif piliers", "bigegg": "Grand œuf", "endless": "Tronçon du Sans fin"}   # [GROS BLOCS 1.89]
+	"void": "Zone de vide", "pillars": "Motif piliers", "bigegg": "Grand œuf", "endless": "Île + trou",   # [GROS BLOCS 1.89] (renommé en 1.90)
+	"bridge": "Pont magique"}   # [RÈGLES 1.90]
 const EGG_STYLE_NAMES := ["", "glace", "tacheté", "craquelé", "bonnet de neige", "bébé Pinpouin"]
 ## Types qu'on peut tourner (les autres restent droits)
 const ROTATABLE := ["egg", "boost", "arch", "podium", "bush", "igloo", "colisee", "ice1", "ice2", "ice3",
@@ -2474,9 +2490,10 @@ func _object_settings(col: VBoxContainer, title: Label) -> void:
 			_slider_row(col, "Hauteur", 600.0, 6000.0, 100.0, float(o.props.get("h", 1400.0)), func(v): _set_obj("h", v, true), func(v): return "%d px" % int(v))
 			if expert:
 				_slider_row(col, "Dézoom max", 0.1, 1.0, 0.05, float(o.props.get("zoom", 0.25)), func(v): _set_obj("zoom", v, true))
-		"checkpoint", "finish":
+		"checkpoint", "finish", "bridge":
 			var info := Label.new()
-			info.text = "Après une chute, on repart du dernier point atteint." if t == "checkpoint" else "La ligne d'arrivée (une seule par niveau)."
+			info.text = "Après une chute, on repart du dernier point atteint." if t == "checkpoint" else \
+				("Mode enfant : après 2 chutes au même trou, Pinpouin repart du premier pont magique devant lui. Pose-le sur le sol, là où il doit réapparaître." if t == "bridge" else "La ligne d'arrivée (une seule par niveau).")
 			info.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 			info.custom_minimum_size = Vector2(220, 0)
 			info.add_theme_color_override("font_color", Color.WHITE)
@@ -2559,6 +2576,8 @@ func _draw_objects(z: float, font: Font, fs: int) -> void:
 				draw_rect(r, Color(0.6, 0.4, 1.0, 0.10))
 				draw_rect(r, Color(0.6, 0.4, 1.0, 0.85), false, 4.0 / z)
 				draw_string(font, r.position + Vector2(12.0 / z, fs * 1.2), "Zone de caméra (dézoom %.2f)" % float(o.props.get("zoom", 0.25)), HORIZONTAL_ALIGNMENT_LEFT, -1, int(fs * 0.85), Color(0.85, 0.75, 1.0))
+			"bridge":
+				_draw_bridge(o.pos, 1.0, z)   # [RÈGLES 1.90]
 			"start", "finish":
 				pass   # dessinés avec le départ et l'arrivée (voir _draw)
 			_:
@@ -2799,7 +2818,7 @@ func _shape_stats(o: Dictionary) -> Array:
 			lines.append("Fente sur le dessus, half-pipe dedans, accrochable partout")
 		"endless":
 			var ty := int(DrawnLevel.shape_prop(o, "type"))
-			var name: String = DrawnLevel.ENDLESS_TYPES[DrawnLevel.endless_type(o)]
+			var name: String = DrawnLevel.ENDLESS_TYPES[DrawnLevel.endless_type(o)]   # (bloc « Île + trou »)
 			lines.append(("Au hasard (graine %d) : %s" % [int(DrawnLevel.shape_prop(o, "seed")), name.to_lower()]) if ty < 0 else "Type : %s (graine %d)" % [name.to_lower(), int(DrawnLevel.shape_prop(o, "seed"))])
 			lines.append("Île de %d px" % int(DrawnLevel.shape_prop(o, "island")))
 	if absf(float(o.rot)) > 0.01:
@@ -3458,6 +3477,11 @@ func _on_validate() -> void:
 	if not DrawnLevel.is_playable():
 		_flash("Dessine d'abord un sol (ou creuse une caverne taillée) !")
 		return
+	if DrawnLevel.level_type() == "free":
+		# [RÈGLES 1.90] glisse libre : pas d'arrivée, pas de chrono, rien à finir
+		_refresh_steps()
+		_flash("✔ Glisse libre : rien à finir, ton niveau se partage tel quel (Mes niveaux → Partager).")
+		return
 	DrawnLevel.save()
 	DrawnLevel.validating = true
 	DrawnLevel.last_validation_time = 0.0
@@ -3537,11 +3561,16 @@ func _steps() -> Array:
 		["Départ", start_ok, "posé" if not st.is_empty() else "automatique",
 			"Sans objet Départ, Pinpouin part au début du premier sol. Pour choisir : palette Objets, Départ."],
 		["Arrivée", finish_ok, "posée" if not fi.is_empty() else "automatique",
-			"Sans objet Arrivée, elle est au bout du dernier sol. Pour choisir : palette Objets, Arrivée."],
+			"Sans objet Arrivée, elle est au bout du dernier sol. Pour choisir : palette Objets, Arrivée."] if DrawnLevel.level_type() == "course" else
+		# [RÈGLES 1.90] glisse libre / défi figures : pas d'arrivée
+		["Arrivée", playable, "aucune (%s)" % DrawnLevel.LEVEL_TYPE_NAMES[DrawnLevel.level_type()].to_lower(),
+			"Ton niveau est en %s : il n'a pas d'arrivée. Pour en faire une course : bouton Niveau en haut." % DrawnLevel.LEVEL_TYPE_NAMES[DrawnLevel.level_type()].to_lower()],
 		["Tester", playable and DrawnLevel.tested_hash == DrawnLevel.content_hash(), "",
 			"Touche TESTER (en bas à droite) pour jouer ton niveau depuis le départ."],
 		["Valider", DrawnLevel.is_validated(), "",
-			"Touche Valider (la médaille) et finis ton niveau : ton temps devient l'or et tu peux le partager."],
+			{"course": "Touche Valider (la médaille) et finis ton niveau : ton temps devient l'or et tu peux le partager.",
+			"tricks": "Touche Valider (la médaille) et fais le défi : tes points deviennent l'or et tu peux le partager.",
+			"free": "Un niveau en glisse libre n'a rien à finir : il se partage tel quel."}[DrawnLevel.level_type()]],
 	]
 
 
@@ -3624,7 +3653,8 @@ func _pulse(c: Control) -> void:
 func _update_steps_visibility() -> void:
 	if _steps_panel == null or not is_instance_valid(_steps_panel):
 		return
-	_steps_panel.visible = (_settings == null or not is_instance_valid(_settings)) and (_start_screen == null or not is_instance_valid(_start_screen))
+	_steps_panel.visible = (_settings == null or not is_instance_valid(_settings)) and (_start_screen == null or not is_instance_valid(_start_screen)) \
+		and (_level_window == null or not is_instance_valid(_level_window) or _level_window.is_queued_for_deletion())   # [RÈGLES 1.90]
 
 
 # --- Écran de départ (niveau vide) ------------------------------------------------
@@ -3895,3 +3925,283 @@ func _end_tour() -> void:
 		_tour_frame.queue_free()
 	_tour = null
 	_tour_frame = null
+
+
+# =============================================================================
+#  [RÈGLES 1.90] Fenêtre « Niveau » : règles et ambiance
+# =============================================================================
+# Étape 1.90 du plan du créateur. Choix de l'équipe (28/11) :
+#  - une fenêtre « Niveau » (bouton de la barre du haut) avec tous les
+#    réglages et un aperçu du ciel ;
+#  - les 3 types du jeu : Course, Glisse libre, Défi figures (durée réglable) ;
+#  - ciel (Jour, Aube, Couchant, Nuit, Le temps passe), fond (bas du glacier,
+#    ciel lointain : « au choix du joueur » ou un thème imposé) et musique,
+#    imposés au joueur sauf s'il coche « Toujours mon fond » (Options) ;
+#  - mode enfant : des ponts magiques à poser (palette Objets).
+# Le type change l'empreinte du niveau (records et validation repartent de
+# zéro) ; l'ambiance ne la change pas.
+
+var _level_window: Control = null
+var _preview_holder: VBoxContainer = null
+
+const TYPE_ICONS := {"course": "type_course", "free": "type_libre", "tricks": "type_figures"}
+const TYPE_WORDS := {"course": "Course", "free": "Libre", "tricks": "Figures"}
+const TYPE_TIPS := {"course": "Du départ à l'arrivée : chrono et médailles au temps.",
+	"free": "Pas d'arrivée : on glisse et on fait des figures aussi longtemps qu'on veut.",
+	"tricks": "Un chrono pour faire le plus de points de figures (en mode Chill : glisse libre)."}
+const SKY_ICONS := {"day": "ciel_jour", "dawn": "ciel_aube", "sunset": "ciel_couchant", "night": "ciel_nuit", "cycle": "ciel_cycle"}
+const SKY_WORDS := {"day": "Jour", "dawn": "Aube", "sunset": "Couchant", "night": "Nuit", "cycle": "Temps"}
+const MUSIC_ICONS := {"surf": "musique_glisse", "hope": "musique_espoir", "none": "musique_aucune"}
+const MUSIC_TIPS := {"surf": "La musique des niveaux (8 Bit Surf).", "hope": "Le thème du menu (A Bit Of Hope), plus doux.", "none": "Pas de musique : on n'entend que la glisse."}
+
+
+func _open_level_window() -> void:
+	_close_level_window()
+	_select({})
+	var ui: Control = _top_panel.get_parent()
+	_level_window = Control.new()
+	_level_window.name = "FenetreNiveau"
+	_level_window.set_anchors_preset(Control.PRESET_FULL_RECT)
+	_level_window.mouse_filter = Control.MOUSE_FILTER_STOP   # rien ne passe dessous
+	ui.add_child(_level_window)
+	var dim := ColorRect.new()
+	dim.color = Color(0.03, 0.06, 0.14, 0.55)
+	dim.set_anchors_preset(Control.PRESET_FULL_RECT)
+	dim.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_level_window.add_child(dim)
+	var center := CenterContainer.new()
+	center.set_anchors_preset(Control.PRESET_FULL_RECT)
+	center.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_level_window.add_child(center)
+	var panel := PanelContainer.new()
+	panel.add_theme_stylebox_override("panel", _panel_style())
+	center.add_child(panel)
+	var outer := VBoxContainer.new()
+	outer.add_theme_constant_override("separation", 8)
+	panel.add_child(outer)
+	var title := Label.new()
+	title.text = "Niveau : règles et ambiance"
+	title.add_theme_font_size_override("font_size", 22)
+	title.add_theme_color_override("font_color", SELECT_COLOR)
+	outer.add_child(title)
+	# deux colonnes qui défilent si l'écran est petit ; « Fini » toujours visible
+	var scroll := ScrollContainer.new()
+	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	var vis: Vector2 = ui.size if ui.size.y > 0.0 else get_viewport().get_visible_rect().size
+	scroll.custom_minimum_size = Vector2(620, minf(470.0, vis.y - 170.0))
+	outer.add_child(scroll)
+	var cols := HBoxContainer.new()
+	cols.add_theme_constant_override("separation", 22)
+	scroll.add_child(cols)
+	var left := VBoxContainer.new()
+	left.add_theme_constant_override("separation", 6)
+	cols.add_child(left)
+	var right := VBoxContainer.new()
+	right.add_theme_constant_override("separation", 6)
+	cols.add_child(right)
+	_build_rules_column(left)
+	_build_ambiance_column(right)
+	var foot := _icon_row(outer)
+	foot.alignment = BoxContainer.ALIGNMENT_END
+	_icon_choice("ok", foot, "Fini", "Fermer la fenêtre (tout est déjà enregistré).", false, "Fini").pressed.connect(_close_level_window)
+	_update_steps_visibility()
+
+
+func _close_level_window() -> void:
+	if _level_window != null and is_instance_valid(_level_window):
+		_level_window.queue_free()
+	_level_window = null
+	_update_steps_visibility.call_deferred()
+
+
+## Change une règle ou l'ambiance (une étape Annuler), puis redessine la fenêtre
+func _set_level_rule(kind: String, key: String, value, reopen := true) -> void:
+	if not reopen and _undo_for_setting_done and _undo_setting_key == key:
+		pass   # même curseur : une seule étape Annuler pour tout le glissé
+	else:
+		_push_undo()
+		_undo_for_setting_done = not reopen
+		_undo_setting_key = key
+	var old_hash := DrawnLevel.content_hash()
+	if kind == "rules":
+		DrawnLevel.set_rule(key, value)
+	else:
+		DrawnLevel.set_ambiance(key, value)
+	_changed()
+	if kind == "rules" and DrawnLevel.content_hash() != old_hash:
+		_flash("Type de niveau changé : records et validation repartent de zéro (Annuler pour revenir).")
+	if reopen:
+		_open_level_window.call_deferred()
+	elif _preview_holder != null and is_instance_valid(_preview_holder):
+		# curseur : on ne refait que l'aperçu (le curseur garde le doigt)
+		for c in _preview_holder.get_children():
+			c.queue_free()
+		_preview_holder.add_child(_sky_preview())
+
+
+func _build_rules_column(col: VBoxContainer) -> void:
+	var t := DrawnLevel.level_type()
+	_legend(col, "Type de niveau", DrawnLevel.LEVEL_TYPE_NAMES[t])
+	var row := _icon_row(col)
+	for id in DrawnLevel.LEVEL_TYPES:
+		var b := _icon_choice(TYPE_ICONS[id], row, DrawnLevel.LEVEL_TYPE_NAMES[id], TYPE_TIPS[id], true, TYPE_WORDS[id])
+		b.button_pressed = id == t
+		var which: String = id
+		b.pressed.connect(func(): _set_level_rule("rules", "type", which))
+	var info := Label.new()
+	info.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	info.custom_minimum_size = Vector2(290, 0)
+	info.add_theme_color_override("font_color", Color(0.8, 0.9, 1.0))
+	info.add_theme_font_size_override("font_size", 14)
+	info.text = TYPE_TIPS[t]
+	col.add_child(info)
+	if t == "tricks":
+		_slider_row(col, "Durée du défi", DrawnLevel.TRICKS_TIME_MIN, DrawnLevel.TRICKS_TIME_MAX, 15.0, DrawnLevel.tricks_time(),
+			func(v): _set_level_rule_quiet("time", v),
+			func(v): return "%d:%02d" % [int(v) / 60, int(v) % 60])
+	# --- mode enfant : ponts magiques
+	var n: int = DrawnLevel.bridge_points().size()
+	_legend(col, "Mode enfant", "%d pont%s magique%s" % [n, "s" if n > 1 else "", "s" if n > 1 else ""] if n > 0 else "automatique")
+	var kid := Label.new()
+	kid.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	kid.custom_minimum_size = Vector2(290, 0)
+	kid.add_theme_color_override("font_color", Color(0.8, 0.9, 1.0))
+	kid.add_theme_font_size_override("font_size", 14)
+	kid.text = "Après 2 chutes au même trou, un enfant repart plus loin : sur le pont magique suivant si tu en as posé (palette Objets → Pont magique), sinon sur le sol d'après."
+	col.add_child(kid)
+	var r2 := _icon_row(col)
+	var put := _icon_choice("palette_bridge", r2, "Poser un pont magique", "Ouvre la palette Objets avec le pont magique choisi : touche le niveau pour le poser.", false, "Poser")
+	put.pressed.connect(func():
+		_close_level_window()
+		_palette_tab = 0   # onglet Objets
+		palette_item = "bridge"
+		_set_tool(Tool.HOOK)
+		_build_palette()
+		_flash("Pont magique : touche le sol là où Pinpouin doit réapparaître."))
+
+
+## Durée du défi : réglée en glissant (pas de reconstruction de la fenêtre à
+## chaque cran, sinon le curseur lâcherait le doigt)
+func _set_level_rule_quiet(key: String, value) -> void:
+	if not _undo_for_setting_done or _undo_setting_key != key:
+		_push_undo()
+		_undo_for_setting_done = true
+		_undo_setting_key = key
+	DrawnLevel.set_rule(key, value)
+	_changed()
+
+var _undo_for_setting_done := false
+var _undo_setting_key := ""        # curseur en cours de glissé (une étape Annuler par curseur)
+
+
+func _build_ambiance_column(col: VBoxContainer) -> void:
+	_undo_for_setting_done = false
+	var sky: String = DrawnLevel.amb("sky")
+	_legend(col, "Ciel", DrawnLevel.sky_name(sky))
+	var row := _icon_row(col)
+	for st in DrawnLevel.SKY_TIMES:
+		var id: String = st[0]
+		var tip := "Le ciel de l'aube à la nuit, du départ jusqu'au bout du niveau." if id == "cycle" else "Ciel fixe : %s." % str(st[1]).to_lower()
+		var b := _icon_choice(SKY_ICONS[id], row, str(st[1]), tip, true, SKY_WORDS[id])
+		b.custom_minimum_size = Vector2(58, 58)
+		b.button_pressed = id == sky
+		b.pressed.connect(func(): _set_level_rule("ambiance", "sky", id))
+	# aperçu : couleur du ciel, teinte du fond, thèmes choisis
+	_preview_holder = VBoxContainer.new()
+	col.add_child(_preview_holder)
+	_preview_holder.add_child(_sky_preview())
+	# thèmes du fond : -1 = au choix du joueur
+	for k in [["glacier", "Bas du glacier", Settings.BG_GLACIER_THEMES], ["far", "Ciel lointain", Settings.BG_SKY_THEMES]]:
+		var themes: Array = k[2]
+		var key: String = k[0]
+		_slider_row(col, k[1], -1, themes.size() - 1, 1, float(DrawnLevel.amb(key)),
+			func(v): _set_level_rule("ambiance", key, int(v), false),
+			func(v): return "au choix du joueur" if int(v) < 0 else str(themes[int(v)][0]))
+	var mus: String = DrawnLevel.amb("music")
+	_legend(col, "Musique", DrawnLevel.music_name(mus))
+	var r3 := _icon_row(col)
+	for m in DrawnLevel.MUSICS:
+		var id: String = m[0]
+		var b := _icon_choice(MUSIC_ICONS[id], r3, str(m[1]), MUSIC_TIPS[id], true, str(m[1]).split(" ")[0])
+		b.button_pressed = id == mus
+		b.pressed.connect(func(): _set_level_rule("ambiance", "music", id))
+	var note := Label.new()
+	note.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	note.custom_minimum_size = Vector2(290, 0)
+	note.add_theme_color_override("font_color", Color(0.7, 0.8, 0.95))
+	note.add_theme_font_size_override("font_size", 13)
+	note.text = "Un joueur qui coche « Toujours mon fond » (Options) garde son fond et le ciel de jour."
+	col.add_child(note)
+
+
+## Petit aperçu de l'ambiance : ciel lointain en haut, nuages / montagnes
+## teintés comme en jeu (SkyCycle.KEYS), bas du glacier en dessous
+func _sky_preview() -> Control:
+	var box := Control.new()
+	box.custom_minimum_size = Vector2(290, 120)
+	box.clip_contents = true
+	var at := DrawnLevel.sky_position()
+	var keys: Array = preload("res://src/levels/parallax/SkyCycle.gd").KEYS
+	var k: Array = keys[1]
+	var best := INF
+	for kk in keys:
+		var d := absf(float(kk[0]) - (2500.0 if at < 0.0 else at))
+		if d < best:
+			best = d
+			k = kk
+	var bg := ColorRect.new()
+	bg.color = k[3]
+	bg.size = Vector2(290, 120)
+	bg.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	box.add_child(bg)
+	var far_i: int = DrawnLevel.amb("far")
+	var low_i: int = DrawnLevel.amb("glacier")
+	var far_tex = _theme_tex(Settings.BG_SKY_THEMES, far_i if far_i >= 0 else Settings.bg_sky_theme)
+	var low_tex = _theme_tex(Settings.BG_GLACIER_THEMES, low_i if low_i >= 0 else Settings.bg_glacier_theme)
+	for part in [[far_tex, Rect2(0, 0, 290, 56)], [load("res://sprites/levels/Background_mountains.png"), Rect2(0, 36, 290, 50)],
+			[low_tex, Rect2(0, 80, 290, 40)]]:
+		if part[0] == null:
+			continue
+		var tr := TextureRect.new()
+		tr.texture = part[0]
+		tr.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+		tr.stretch_mode = TextureRect.STRETCH_SCALE
+		tr.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+		tr.position = (part[1] as Rect2).position
+		tr.size = (part[1] as Rect2).size
+		tr.modulate = k[1]
+		tr.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		box.add_child(tr)
+	if at < 0.0:
+		var lab := Label.new()
+		lab.text = "aube → jour → couchant → nuit"
+		lab.position = Vector2(8, 98)
+		lab.add_theme_font_size_override("font_size", 13)
+		lab.add_theme_color_override("font_color", Color.WHITE)
+		lab.add_theme_color_override("font_outline_color", Color(0.05, 0.08, 0.2))
+		lab.add_theme_constant_override("outline_size", 5)
+		box.add_child(lab)
+	box.set_meta("tip", ["Aperçu", "Le fond du niveau avec ce ciel et ces thèmes (au choix du joueur : ceux de tes Options).", ""])
+	return box
+
+
+func _theme_tex(themes: Array, i: int):
+	if i < 0 or i >= themes.size() or str(themes[i][1]) == "":
+		return null
+	return _tex(str(themes[i][1]))
+
+
+## Pont magique dans l'éditeur : petit arc-en-ciel posé sur le sol, avec une
+## étoile (`a` = transparence, pour l'aperçu avant de poser)
+func _draw_bridge(p: Vector2, a: float, z: float) -> void:
+	var cols := [Color(0.91, 0.29, 0.23), Color(0.94, 0.6, 0.23), Color(1, 0.82, 0.25), Color(0.36, 0.81, 0.42), Color(0.4, 0.7, 0.82)]
+	# vu de loin, l'arc grandit (au moins ~40 px à l'écran) pour rester visible
+	var k_sc := maxf(1.0, 0.45 / z)
+	for k in cols.size():
+		draw_arc(p + Vector2(0, -10), (90.0 - k * 12.0) * k_sc, PI, TAU, 24, Color(cols[k], a), maxf(10.0 * k_sc, 2.0 / z))
+	var st := PackedVector2Array()
+	for i in 10:
+		var r := (26.0 if i % 2 == 0 else 11.0) * k_sc
+		var ang := -PI * 0.5 + TAU * i / 10.0
+		st.append(p + Vector2(0, -125) * k_sc + Vector2(cos(ang), sin(ang)) * r)
+	draw_colored_polygon(st, Color(1, 1, 1, a))
