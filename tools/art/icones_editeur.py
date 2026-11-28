@@ -433,6 +433,29 @@ def i_onglet(k):
     return im
 
 
+def i_aide():
+    # [UX 1.88] bulle de dialogue avec un point d'interrogation (visite)
+    im, d = new()
+    d.rounded_rectangle([1, 1, 14, 11], radius=3, fill=WHITE)
+    d.polygon([(4, 11), (8, 11), (4, 15)], fill=WHITE)
+    d.arc([5, 2, 10, 7], 180, 30, fill=DEEP, width=2)
+    d.line([(8, 6), (7, 8)], fill=DEEP, width=2)
+    d.point([(7, 10)], fill=DEEP)
+    return im
+
+
+def i_etapes():
+    # [UX 1.88] liste cochée (étapes du niveau)
+    im, d = new()
+    for k, y in enumerate((2, 7, 12)):
+        d.rectangle([1, y, 3, y + 2], fill=GREEN if k < 2 else WHITE)
+        d.line([(6, y + 1), (14, y + 1)], fill=WHITE, width=2)
+    return im
+
+
+ICONS.update({"aide": i_aide, "etapes": i_etapes})
+
+
 ICONS.update({
     "dupliquer": i_dupliquer, "supprimer": i_supprimer,
     "taille_petit": lambda: i_taille(0), "taille_moyen": lambda: i_taille(1), "taille_grand": lambda: i_taille(2),

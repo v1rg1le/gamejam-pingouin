@@ -255,12 +255,17 @@ func _unhandled_input(event: InputEvent) -> void:
 			queue_redraw()
 		elif _carving:
 			_carve_add(_to_world(mm.position))   # [TAILLÉE 1.85]
+		elif _placing:
+			_place_wp = _to_world(mm.position)   # [UX 1.88] l'aperçu suit le doigt
+			queue_redraw()
 		elif _drag != "":
 			_drag_update(_to_world(mm.position))   # [CRÉATEUR v2 1.80]
 		elif _drawing:
 			_add_point(_to_world(mm.position))
 		elif _erasing:
 			_erase_at(mm.position)
+		elif tool == Tool.HOOK and palette_item != "":
+			queue_redraw()   # [UX 1.88] l'aperçu suit la souris
 
 
 ## Appui (clic gauche ou un doigt) selon l'outil choisi
@@ -289,24 +294,12 @@ func _press(screen_pos: Vector2) -> void:
 			if not hit.is_empty() and hit.kind in ["hook", "obj"]:
 				_select(hit)
 				_begin_drag("move", wp)
-			elif palette_item == "hook":
-				_push_undo()
-				DrawnLevel.hooks.append(DrawnLevel.make_hook(_snap_pos(wp)))
-				_changed()
-				_select({"kind": "hook", "index": DrawnLevel.hooks.size() - 1})
-			elif palette_item in DrawnLevel.VALID_TYPES:
-				# [OBJETS 1.81] pose de l'objet choisi dans la palette
-				_push_undo()
-				var i := DrawnLevel.add_object(DrawnLevel.make_object(palette_item, _snap_pos(wp)))
-				if palette_item == "carved":
-					# [TAILLÉE 1.85] l'origin du bloc est son coin haut-gauche : on le
-					# remonte pour que le doigt tienne l'entrée (en bas à gauche,
-					# posée sur le sol) — sinon le bloc tombe trop bas pour se coller
-					DrawnLevel.objects[i].pos.y -= (DrawnLevel.carved_entry_exit(DrawnLevel.objects[i])[0] as Vector2).y
-				if DrawnLevel.is_shape(DrawnLevel.objects[i]):
-					_snap_flash(DrawnLevel.snap_shape(i))   # [FORMES 1.83] se colle au sol
-				_changed()
-				_select({"kind": "obj", "index": i})
+			elif palette_item == "hook" or palette_item in DrawnLevel.VALID_TYPES:
+				# [UX 1.88] aperçu avant de poser (choix de l'équipe) : l'objet
+				# suit le doigt en transparent pendant l'appui et se pose au
+				# LÂCHER (avant : posé dès l'appui, sans voir où il tomberait)
+				_placing = true
+				_place_wp = wp
 		Tool.SELECT:
 			_select_press(wp)
 		Tool.ERASE:
@@ -317,10 +310,121 @@ func _press(screen_pos: Vector2) -> void:
 	queue_redraw()
 
 
+# --- [UX 1.88] Aperçu avant de poser ---------------------------------------------
+var _placing := false             # appui en cours avec un élément de la palette
+var _place_wp := Vector2.ZERO     # où il sera posé (monde)
+var _place_snap := ""             # aimantation de la dernière forme essayée
+
+
+## Ce qui serait posé en `wp` : {"kind": "hook", "pos"} ou un objet
+## (Dictionary de DrawnLevel.objects), déjà collé au sol comme à la pose
+func _placement_at(wp: Vector2) -> Dictionary:
+	if palette_item == "hook":
+		return {"kind": "hook", "pos": _snap_pos(wp)}
+	if not (palette_item in DrawnLevel.VALID_TYPES):
+		return {}
+	var o: Dictionary = DrawnLevel.make_object(palette_item, _snap_pos(wp))
+	if palette_item == "carved":
+		# [TAILLÉE 1.85] l'origine du bloc est son coin haut-gauche : on le
+		# remonte pour que le doigt tienne l'entrée (en bas à gauche, posée
+		# sur le sol) — sinon le bloc tombe trop bas pour se coller
+		o.pos.y -= (DrawnLevel.carved_entry_exit(o)[0] as Vector2).y
+	if DrawnLevel.is_shape(o):
+		# même aimantation qu'à la pose (essai sur une copie, retirée aussitôt)
+		DrawnLevel.objects.append(o)
+		_place_snap = DrawnLevel.snap_shape(DrawnLevel.objects.size() - 1)
+		DrawnLevel.objects.pop_back()
+	return o
+
+
+## Pose l'élément de la palette en `wp` (au lâcher)
+func _place_at(wp: Vector2) -> void:
+	var o := _placement_at(wp)
+	if o.is_empty():
+		return
+	_push_undo()
+	if o.get("kind", "") == "hook":
+		DrawnLevel.hooks.append(DrawnLevel.make_hook(o.pos))
+		_changed()
+		_select({"kind": "hook", "index": DrawnLevel.hooks.size() - 1})
+		return
+	var snap := _place_snap
+	var i := DrawnLevel.add_object(o)   # [OBJETS 1.81] pose de l'objet choisi dans la palette
+	if DrawnLevel.is_shape(o):
+		_snap_flash(snap)   # [FORMES 1.83] se colle au sol
+	_changed()
+	_select({"kind": "obj", "index": i})
+
+
+## L'aperçu : pendant l'appui (doigt ou souris), ou au survol de la souris
+func _draw_ghost(z: float) -> void:
+	if tool != Tool.HOOK or palette_item == "" or palette_item == "draw":
+		return
+	var wp := Vector2.INF
+	if _placing:
+		wp = _place_wp
+	elif not _mouse_is_touch and not _over_ui(_last_screen) and _drag == "" and not _panning and not _two_finger:
+		wp = _to_world(_last_screen)
+		var over := DrawnLevel.pick_at(wp, TOUCH_RADIUS_SCREEN * 2.5 / z)
+		if not over.is_empty() and over.kind in ["hook", "obj"]:
+			return   # sur un bloc ou un objet : un toucher le choisirait, pas d'aperçu
+	if not wp.is_finite():
+		return
+	var o := _placement_at(wp)
+	if o.is_empty():
+		return
+	var a := 0.5
+	if o.get("kind", "") == "hook":
+		draw_colored_polygon(_ellipse(o.pos, HOOK_RX, HOOK_RY), Color(HOOK_COLOR, a))
+		return
+	var xf := Transform2D(float(o.rot), o.pos)
+	if DrawnLevel.is_shape(o):
+		var poly: PackedVector2Array = DrawnLevel.carved_base(o) if o.type == "carved" else DrawnLevel.shape_geometry(o).poly
+		if o.type == "carved":
+			poly = Transform2D(0.0, o.pos) * poly
+		if poly.size() >= 3 and not Geometry2D.triangulate_polygon(poly).is_empty():
+			draw_colored_polygon(poly, Color(ICE_COLOR, a))
+		var closed := PackedVector2Array(poly)
+		if poly.size() > 0:
+			closed.append(poly[0])
+		draw_polyline(closed, Color(SELECT_COLOR, 0.8), 4.0 / z, true)
+		return
+	match str(o.type):
+		"egg":
+			var tex: Texture2D = _tex("res://sprites/levels/gruyere/oeuf_%s.png" % Settings.EGG_STYLES[clampi(int(o.props.get("style", 1)), 1, 5)])
+			draw_set_transform_matrix(xf.scaled_local(Vector2.ONE * 4.0))
+			draw_texture_rect_region(tex, Rect2(-tex.get_size() * 0.5, tex.get_size()), Rect2(Vector2.ZERO, tex.get_size()), Color(1, 1, 1, a))
+		"sign":
+			var tex: Texture2D = _tex("res://sprites/levels/egg/panneau_droite.png")
+			draw_set_transform_matrix(xf.scaled_local(Vector2.ONE * 5.0))
+			draw_texture_rect_region(tex, Rect2(-tex.get_size() * 0.5, tex.get_size()), Rect2(Vector2.ZERO, tex.get_size()), Color(1, 1, 1, a))
+		"start":
+			var ps: float = maxf(120.0, 40.0 / z)
+			draw_texture_rect(_penguin_tex, Rect2(o.pos + Vector2(-ps * 0.5, 80.0 - ps * 1.05), Vector2(ps, ps)), false, Color(1, 1, 1, a))
+		"finish":
+			draw_rect(Rect2(o.pos + Vector2(-60, -1200), Vector2(120, 1200)), Color(1, 0.95, 0.4, 0.3))
+		"camera":
+			var h := DrawnLevel.object_half(o)
+			draw_rect(Rect2(o.pos - h, h * 2.0), Color(0.6, 0.4, 1.0, 0.25))
+		_:
+			if DrawnLevel.DECOR_SCENES.has(o.type):
+				for spr in _decor_sprites(o.type):
+					draw_set_transform_matrix(xf * spr[1])
+					draw_texture_rect_region(spr[0], spr[2], spr[3], Color(1, 1, 1, a))
+			else:
+				var h2 := DrawnLevel.object_half(o)
+				draw_rect(Rect2(o.pos - h2, h2 * 2.0), Color(SELECT_COLOR, 0.35))
+	draw_set_transform_matrix(Transform2D.IDENTITY)
+
+
 ## Relâchement : fin du trait, de la gomme ou du déplacement
 func _release() -> void:
 	_panning = false
 	_erasing = false
+	if _placing:
+		_placing = false
+		_place_at(_place_wp)   # [UX 1.88] pose au lâcher
+		return
 	if _carving:
 		_finish_carve()   # [TAILLÉE 1.85]
 		return
@@ -370,6 +474,7 @@ func _erase_at(screen_pos: Vector2) -> void:
 func _start_two_finger() -> void:
 	_drawing = false        # le 2e doigt annule le trait commencé par le 1er
 	_carving = false        # [TAILLÉE 1.85] (même chose pour un coup de pioche)
+	_placing = false        # [UX 1.88] (et pour un objet qu'on allait poser)
 	_carve_pts = PackedVector2Array()
 	_raw = PackedVector2Array()
 	_panning = false
@@ -492,6 +597,7 @@ func _on_test() -> void:
 	if not DrawnLevel.is_playable():
 		_flash("Dessine d'abord un sol (ou creuse une caverne taillée) !")
 		return
+	DrawnLevel.tested_hash = DrawnLevel.content_hash()   # [UX 1.88] étape « Tester » cochée
 	DrawnLevel.save()
 	DrawnLevel.return_scene = DrawnLevel.EDITOR_SCENE   # après la course : retour ici
 	DrawnLevel.test_from = Vector2.INF                  # [CRÉATEUR v2 1.80] vrai départ
@@ -735,6 +841,8 @@ func _draw() -> void:
 
 	# e2. [SURVOL 1.82] halo de l'élément survolé (par-dessus le reste)
 	_draw_hover(z)
+	# e3. [UX 1.88] aperçu de ce qu'on va poser
+	_draw_ghost(z)
 
 	# f. trait en cours (en rouge là où il passe au-dessus d'un sol existant)
 	if _drawing and _raw.size() > 1:
@@ -1055,13 +1163,14 @@ func _rebuild_settings() -> void:
 		_settings.visible = false   # (libéré à la fin de l'image : ne doit plus capter la souris)
 		_settings.queue_free()
 		_settings = null
+	_update_steps_visibility()
 	if _sel.is_empty() or _ui_root == null:
 		return
 	_settings = PanelContainer.new()
 	_settings.visible = _drag == ""   # caché pendant un geste (voir _begin_drag)
 	_settings.add_theme_stylebox_override("panel", _panel_style())
 	_settings.set_anchors_preset(Control.PRESET_TOP_RIGHT)
-	_settings.offset_left = -250
+	_settings.offset_left = -290   # [UX 1.88] plus large : boutons avec un mot
 	_settings.offset_right = -6
 	_settings.offset_top = _top_bar_h + 6
 	_settings.grow_horizontal = Control.GROW_DIRECTION_BEGIN
@@ -1119,9 +1228,10 @@ func _rebuild_settings() -> void:
 			_spin_row(col, "Début X", st[0].x, func(v): _move_sel_stroke_to(Vector2(v, DrawnLevel.strokes[_sel.index][0].y)))
 			_spin_row(col, "Début Y", st[0].y, func(v): _move_sel_stroke_to(Vector2(DrawnLevel.strokes[_sel.index][0].x, v)))
 	# [ICÔNES PARTOUT 1.87] actions fixes en icônes
-	_icon_choice("dupliquer", _settings_footer, "Dupliquer", "Fait une copie juste à côté (une forme se colle au bout de l'originale).").pressed.connect(_duplicate_sel)
-	_icon_choice("supprimer", _settings_footer, "Supprimer", "Enlève l'élément choisi (Annuler le fait revenir).").pressed.connect(_delete_sel)
+	_icon_choice("dupliquer", _settings_footer, "Dupliquer", "Fait une copie juste à côté (une forme se colle au bout de l'originale).", false, "Copier").pressed.connect(_duplicate_sel)
+	_icon_choice("supprimer", _settings_footer, "Supprimer", "Enlève l'élément choisi (Annuler le fait revenir).", false, "Enlever").pressed.connect(_delete_sel)
 	_ui_root.add_child(_settings)
+	_update_steps_visibility()   # [UX 1.88] les étapes laissent la place au panneau
 	_fit_settings.call_deferred()
 	if _tip != null and is_instance_valid(_tip):
 		_ui_root.move_child(_tip, -1)   # [ICÔNES 1.82] la bulle reste au-dessus
@@ -1317,6 +1427,7 @@ const TIPS := {
 	"valider": ["Valider", "Finis ton niveau depuis le départ : ton temps devient l'or et tu peux le partager.", "", "Valider"],
 	"dici": ["Tester d'ici", "Lance Pinpouin depuis le milieu de l'écran. Ne compte pas pour les records.", "", "D'ici"],
 	"tester": ["Tester", "Joue ton niveau depuis le départ.", "", ""],
+	"aide": ["Aide", "Relance la visite du créateur avec Pinpouin.", "", "Aide"],
 }
 
 var _top_bar_h: float = TOP_BAR_H        # hauteur réelle de la barre du haut (unités de l'interface)
@@ -1333,11 +1444,17 @@ func _ibutton(id: String, parent: Node, toggle := false) -> Button:
 	b.focus_mode = Control.FOCUS_NONE
 	b.toggle_mode = toggle
 	b.icon_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	# [ICÔNES PARTOUT 1.87] demande de l'équipe : plus aucun texte sur les
-	# boutons, dans les deux modes ; le nom et le rôle sont dans la bulle
-	# (survol de la souris ou appui long au doigt). Le 4e champ de TIPS (mot
-	# de la 1.82) n'est plus affiché.
-	b.custom_minimum_size = ICON_BUTTON_SIZE
+	# [ICÔNES PARTOUT 1.87] plus aucun texte sur les boutons...
+	# [UX 1.88] ... mais trop : retour de l'équipe « certaines choses devraient
+	# avoir du texte pour s'y retrouver ». Choix « hybride » : un mot sous
+	# l'icône (4e champ de TIPS) pour les boutons qu'on ne devine pas (outils,
+	# TESTER, Valider, D'ici, interrupteurs…) ; icône seule pour les gestes que
+	# tout le monde connaît (retour, annuler, refaire, corbeille, zoom).
+	var tip: Array = TIPS.get(id, [id, "", "", ""])
+	if id in ICON_ONLY or str(tip[3]) == "":
+		b.custom_minimum_size = ICON_BUTTON_SIZE
+	else:
+		_add_word(b, str(tip[3]))
 	b.set_meta("tip", id)
 	_register_tip(b)
 	parent.add_child(b)
@@ -1346,12 +1463,24 @@ func _ibutton(id: String, parent: Node, toggle := false) -> Button:
 
 ## [ICÔNES PARTOUT 1.87] Taille des boutons-icônes (assez grands pour le doigt)
 const ICON_BUTTON_SIZE := Vector2(50, 46)
+## [UX 1.88] Boutons des barres qui restent en icône seule (gestes connus)
+const ICON_ONLY := ["retour", "annuler", "refaire", "effacer", "zoom_moins", "zoom_plus"]
+## [UX 1.88] Taille d'un bouton icône + mot
+const WORD_BUTTON_SIZE := Vector2(62, 58)
+
+
+## [UX 1.88] Écrit un petit mot sous l'icône du bouton
+func _add_word(b: Button, word: String) -> void:
+	b.text = word
+	b.vertical_icon_alignment = VERTICAL_ALIGNMENT_TOP
+	b.add_theme_font_size_override("font_size", 12)
+	b.custom_minimum_size = WORD_BUTTON_SIZE
 
 
 ## [ICÔNES PARTOUT 1.87] Bouton-icône des panneaux (réglages, palette, fenêtre
 ## du nom) : icône `id` de sprites/ui/editor/, bulle = [nom, ce qu'il fait].
 ## `toggle` : bouton à bascule (choix parmi plusieurs, interrupteur).
-func _icon_choice(id: String, parent: Node, tip_name: String, tip_desc: String, toggle := false) -> Button:
+func _icon_choice(id: String, parent: Node, tip_name: String, tip_desc: String, toggle := false, word := "") -> Button:
 	var b := Button.new()
 	b.icon = _tex(ICON_DIR + id + ".png")
 	b.focus_mode = Control.FOCUS_NONE
@@ -1359,6 +1488,8 @@ func _icon_choice(id: String, parent: Node, tip_name: String, tip_desc: String, 
 	b.icon_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	b.expand_icon = false
 	b.custom_minimum_size = ICON_BUTTON_SIZE
+	if word != "":
+		_add_word(b, word)   # [UX 1.88] action qu'on ne devine pas : un mot dessous
 	b.set_meta("tip", [tip_name, tip_desc, ""])
 	_register_tip(b)
 	parent.add_child(b)
@@ -1368,13 +1499,31 @@ func _icon_choice(id: String, parent: Node, tip_name: String, tip_desc: String, 
 ## [ICÔNES PARTOUT 1.87] Interrupteur en icône (remplace les cases à cocher
 ## écrites) : icône pâle quand il est coupé, la bulle dit ce qu'il fait
 func _icon_toggle(id: String, parent: Node, tip_name: String, tip_desc: String, on: bool, cb: Callable) -> Button:
+	# [UX 1.88] légende au-dessus : « Nom : oui / non »
+	var leg := _legend(parent.get_parent() if parent is HBoxContainer else parent, tip_name, "oui" if on else "non")
+	if parent is HBoxContainer:
+		parent.get_parent().move_child(leg, parent.get_index())
 	var b := _icon_choice(id, parent, tip_name, tip_desc + " Icône pâle = coupé.", true)
 	b.button_pressed = on
 	_dim_if_off(b)
 	b.toggled.connect(func(v):
 		_dim_if_off(b)
+		leg.text = tip_name + " : " + ("oui" if v else "non")
 		cb.call(v))
 	return b
+
+
+## [UX 1.88] Légende d'un groupe de boutons : « Titre : choix actif »
+## (choix de l'équipe : on lit tout de suite ce qui est choisi)
+func _legend(col: Node, title: String, value: String) -> Label:
+	var l := Label.new()
+	l.text = title + (" : " + value if value != "" else "")
+	l.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	l.custom_minimum_size = Vector2(240, 0)
+	l.add_theme_color_override("font_color", Color.WHITE)
+	l.add_theme_font_size_override("font_size", 15)
+	col.add_child(l)
+	return l
 
 
 ## Ligne de boutons-icônes (panneaux)
@@ -1837,6 +1986,9 @@ func _build_ui() -> void:
 	_ibutton("tout_voir", row).pressed.connect(func():
 		_frame_content()
 		queue_redraw())
+	# [UX 1.88] « ? » : relancer la visite du créateur avec Pinpouin
+	_help_button = _ibutton("aide", row)
+	_help_button.pressed.connect(func(): _start_tour(0))
 
 	# Barre du bas : outils · infos · TESTER
 	var bottom := PanelContainer.new()
@@ -1891,7 +2043,12 @@ func _build_ui() -> void:
 	# autres (demande de l'équipe), mais plus large et teinté de vert pour
 	# qu'on le trouve tout de suite
 	_test_button = _ibutton("tester", brow)
-	_test_button.custom_minimum_size = Vector2(84, 46)
+	# [UX 1.88] l'action principale garde son mot, en grand, à côté de l'icône
+	_test_button.text = "TESTER"
+	_test_button.vertical_icon_alignment = VERTICAL_ALIGNMENT_CENTER
+	_test_button.icon_alignment = HORIZONTAL_ALIGNMENT_LEFT   # (icône à gauche du mot, pas dessus)
+	_test_button.add_theme_font_size_override("font_size", 20)
+	_test_button.custom_minimum_size = Vector2(130, 46)
 	_test_button.add_theme_color_override("icon_normal_color", Color(0.75, 1.0, 0.75))
 	_test_button.pressed.connect(_on_test)
 
@@ -1918,6 +2075,7 @@ func _build_ui() -> void:
 	# [SURVOL 1.82] fiche d'infos de l'élément survolé, et [ICÔNES 1.82] bulle
 	# d'aide des boutons : créées une fois, cachées, au-dessus de tout
 	_build_hover_card(root)
+	_build_guides(root)   # [UX 1.88] étapes, écran de départ, visite
 	_build_tip(root)
 
 	UiScaler.apply(_ui_layer, s)
@@ -1991,6 +2149,11 @@ func _refresh_ui() -> void:
 	_redo_button.disabled = _redo.is_empty()   # [CRÉATEUR v2 1.80]
 	_name_button.text = DrawnLevel.current_name   # [ICÔNES 1.82] le crayon est maintenant l'icône du bouton
 	_test_button.disabled = not DrawnLevel.is_playable()   # [GROTTE 1.87] tout en grotte aussi
+	_refresh_steps()   # [UX 1.88]
+	# [UX 1.88] le niveau n'est plus vide (Annuler, raccourci…) : l'écran de
+	# départ n'a plus lieu d'être
+	if _start_screen != null and is_instance_valid(_start_screen) and not _level_is_empty():
+		_start_with("_")
 	if _auto_check.button_pressed != DrawnLevel.auto_hooks:
 		_auto_check.set_pressed_no_signal(DrawnLevel.auto_hooks)
 
@@ -2017,12 +2180,13 @@ const PALETTE := [
 	# [CAVERNE 1.84] demande de l'équipe (28/11) : cavernes d'abord — caverne
 	# générée (sinueuse) en 1.84, caverne taillée à la main en 1.85 ; le reste
 	# est décalé (balcon, stalactite, falaise 1.86 ; autres gros blocs 1.87)
-	["Gros blocs", [["cave", "Caverne", ""], ["carved", "Caverne taillée", ""], ["void", "Zone de vide", "1.88"],
-		["pillars", "Motif piliers", "1.88"], ["bigegg", "Grand œuf", "1.88"], ["endless", "Tronçon du Sans fin", "1.88"]]],
+	["Gros blocs", [["cave", "Caverne", ""], ["carved", "Caverne taillée", ""], ["void", "Zone de vide", "1.89"],
+		["pillars", "Motif piliers", "1.89"], ["bigegg", "Grand œuf", "1.89"], ["endless", "Tronçon du Sans fin", "1.89"]]],
 ]
 
 ## [ICÔNES PARTOUT 1.87] Icône et bulle de chaque onglet de la palette
 const PALETTE_TAB_ICONS := ["onglet_objets", "onglet_terrain", "onglet_decor", "onglet_gros"]
+const PALETTE_TAB_WORDS := ["Objets", "Terrain", "Décor", "Blocs"]   # [UX 1.88]
 const PALETTE_TAB_TIPS := ["Prises, œufs, boosts, départ, arrivée, points de passage, panneaux, zones de caméra.",
 	"Sol et formes du terrain : tremplins, half-pipes, plafonds, balcons, falaises…",
 	"Décors : arche, podium, buisson, igloo, Colisée, blocs de glace.",
@@ -2136,7 +2300,7 @@ func _build_palette() -> void:
 	_palette.add_theme_stylebox_override("panel", pst)
 	_palette.set_anchors_preset(Control.PRESET_LEFT_WIDE)
 	_palette.offset_left = 6
-	_palette.offset_right = 236
+	_palette.offset_right = 266   # [UX 1.88] onglets avec un mot
 	_palette.offset_top = _top_bar_h + 6
 	_palette.offset_bottom = -_bottom_bar_h - 40
 	var col := VBoxContainer.new()
@@ -2147,7 +2311,7 @@ func _build_palette() -> void:
 	var tabs := _icon_row(col)
 	var tgroup := ButtonGroup.new()
 	for ti in PALETTE.size():
-		var tb := _icon_choice(PALETTE_TAB_ICONS[ti], tabs, PALETTE[ti][0], PALETTE_TAB_TIPS[ti], true)
+		var tb := _icon_choice(PALETTE_TAB_ICONS[ti], tabs, PALETTE[ti][0], PALETTE_TAB_TIPS[ti], true, PALETTE_TAB_WORDS[ti])   # [UX 1.88] + mot
 		tb.button_group = tgroup
 		tb.button_pressed = ti == _palette_tab
 		var which := ti
@@ -2170,7 +2334,7 @@ func _build_palette() -> void:
 		var soon: String = item[2]
 		var b := Button.new()
 		b.focus_mode = Control.FOCUS_NONE
-		b.custom_minimum_size = Vector2(98, 78)   # [ICÔNES PARTOUT 1.87] vignette seule
+		b.custom_minimum_size = Vector2(110, 100)   # [UX 1.88] vignette + nom (on cherche « Tremplin » en lisant)
 		b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		b.disabled = soon != ""
 		# vignette (en haut) et nom (en bas), posés sur le bouton ; ils
@@ -2191,8 +2355,16 @@ func _build_palette() -> void:
 		thumb.size_flags_vertical = Control.SIZE_EXPAND_FILL
 		thumb.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		inner.add_child(thumb)
-		# [ICÔNES PARTOUT 1.87] plus de nom sous la vignette : il est dans la
-		# bulle (avec la version pour les éléments à venir, grisés)
+		# [UX 1.88] le nom revient sous la vignette (retour de l'équipe : on
+		# s'y retrouve mieux en lisant) ; la version des éléments à venir aussi
+		var lbl := Label.new()
+		lbl.text = item[1] + ("  (" + soon + ")" if soon != "" else "")
+		lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		lbl.add_theme_font_size_override("font_size", 12)
+		lbl.add_theme_color_override("font_color", Color.WHITE)
+		lbl.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		inner.add_child(lbl)
 		if soon != "":
 			inner.modulate = Color(1, 1, 1, 0.45)   # à venir : grisé
 		b.toggle_mode = true
@@ -2592,6 +2764,7 @@ func _shape_settings(col: VBoxContainer, o: Dictionary) -> void:
 	var dims: Array = SHAPE_STRETCH.get(t, [])
 	# tailles toutes faites (choix de l'équipe : surtout pour le mode Simple ;
 	# gardées en Expert, elles servent aussi)
+	_legend(col, "Tailles toutes faites", "")
 	var row := _icon_row(col)
 	for preset in DrawnLevel.SHAPE_PRESETS:
 		var f: float = DrawnLevel.SHAPE_PRESETS[preset]
@@ -2653,7 +2826,7 @@ func _cliff_settings(col: VBoxContainer, o: Dictionary) -> void:
 	_icon_toggle("prise_auto", row, "Prise automatique", "Une prise de grappin au-dessus de la paroi pour grimper la falaise.",
 		on, func(v): _set_obj("holds", v, true); _rebuild_settings.call_deferred())
 	if on:
-		_icon_choice("detacher", row, "Détacher la prise", "La prise devient une prise normale : touche-la ensuite pour la déplacer, la tourner ou la supprimer.").pressed.connect(_detach_cliff_holds)
+		_icon_choice("detacher", row, "Détacher la prise", "La prise devient une prise normale : touche-la ensuite pour la déplacer, la tourner ou la supprimer.", false, "Détacher").pressed.connect(_detach_cliff_holds)
 
 
 func _detach_cliff_holds() -> void:
@@ -2682,7 +2855,7 @@ func _stal_settings(col: VBoxContainer, o: Dictionary) -> void:
 	if expert:
 		_slider_row(col, "Série : montée", 400.0, 1200.0, 20.0, stal_rise,
 			func(v): stal_rise = v, func(v): return "%d px" % int(v))
-	var b := _icon_choice("serie", _icon_row(col), "Série", "Ajoute un escalier de plateformes (une à droite, une à gauche, de plus en plus haut) avec une prise de grappin par marche.")
+	var b := _icon_choice("serie", _icon_row(col), "Série", "Ajoute un escalier de plateformes (une à droite, une à gauche, de plus en plus haut) avec une prise de grappin par marche.", false, "Série")
 	b.pressed.connect(func():
 		_push_undo()
 		var n := DrawnLevel.stal_series(_sel.index, stal_count, stal_rise)
@@ -2739,7 +2912,7 @@ func _set_cave(key: String, v) -> void:
 ## sortie, longueur des vagues, graine exacte, position.
 func _cave_settings(col: VBoxContainer, o: Dictionary) -> void:
 	var row := _icon_row(col)
-	var dice := _icon_choice("de", row, "Autre caverne", "Tire une autre graine : une nouvelle caverne de même taille.")
+	var dice := _icon_choice("de", row, "Autre caverne", "Tire une autre graine : une nouvelle caverne de même taille.", false, "Autre")
 	dice.pressed.connect(func():
 		_push_undo()
 		DrawnLevel.objects[_sel.index].props.seed = float(randi_range(1, 99999))
@@ -3070,10 +3243,9 @@ func _draw_mesh(mesh: Array, c: Color) -> void:
 func _carved_settings(col: VBoxContainer, o: Dictionary) -> void:
 	var cd := DrawnLevel.carved_data(o)
 	# bloc de départ
-	var lb := Label.new()
-	lb.text = "Bloc de départ"
-	lb.add_theme_color_override("font_color", Color.WHITE)
-	col.add_child(lb)
+	# [UX 1.88] légende : le choix actif est écrit
+	var bkey := "free" if str(o.props.get("base", "rect")) == "free" else str(o.props.get("base", "rect"))
+	_legend(col, "Bloc de départ", DrawnLevel.CARVED_BASE_NAMES.get(bkey, "Forme libre") if bkey != "free" else "Forme libre")
 	var grid := GridContainer.new()
 	grid.columns = 3
 	grid.add_theme_constant_override("h_separation", 4)
@@ -3091,23 +3263,27 @@ func _carved_settings(col: VBoxContainer, o: Dictionary) -> void:
 	fb.button_pressed = carve_tool == "outline" or str(o.props.get("base", "")) == "free"
 	fb.pressed.connect(func(): _set_carve_tool("outline"))
 	# outils de taille
-	var lt := Label.new()
-	lt.text = "Tailler"
-	lt.add_theme_color_override("font_color", Color.WHITE)
-	col.add_child(lt)
+	_legend(col, "Outil", {"": "aucun (le doigt déplace le bloc)", "tunnel": "Tracer une galerie", "dig": "Pioche (creuser)",
+		"fill": "Truelle (reboucher)", "outline": "Dessiner le contour"}.get(carve_tool, ""))
 	var row := _icon_row(col)
 	for tt in [["tunnel", "tracer", "Tracer", "La galerie suit ton doigt, avec un sol lisse."],
 			["dig", "pioche", "Pioche", "Frotte pour creuser la roche."],
 			["fill", "truelle", "Truelle", "Frotte pour reboucher (seulement dans le bloc)."]]:
-		var b := _icon_choice(tt[1], row, tt[2], tt[3] + " Deux doigts déplacent la vue.", true)
+		var b := _icon_choice(tt[1], row, tt[2], tt[3] + " Deux doigts déplacent la vue.", true, tt[2])
 		b.button_pressed = carve_tool == tt[0]
 		var which: String = tt[0]
 		b.pressed.connect(func(): _set_carve_tool("" if carve_tool == which else which))
 	if carve_tool != "":
-		_icon_choice("fini", row, "Fini", "Arrêter de tailler : le doigt déplace de nouveau le bloc.").pressed.connect(func(): _set_carve_tool(""))
+		_icon_choice("fini", _icon_row(col), "Fini", "Arrêter de tailler : le doigt déplace de nouveau le bloc.", false, "Fini").pressed.connect(func(): _set_carve_tool(""))
 	# largeur de la galerie / taille de la pioche
-	var row2 := _icon_row(col)
 	var sizes: Dictionary = DrawnLevel.CARVE_WIDTHS if carve_tool != "dig" and carve_tool != "fill" else DrawnLevel.CARVE_BRUSHES
+	var cur_size: float = carve_width if sizes == DrawnLevel.CARVE_WIDTHS else carve_brush
+	var cur_name := ""
+	for nm2 in sizes:
+		if is_equal_approx(float(sizes[nm2]), cur_size):
+			cur_name = nm2
+	_legend(col, "Galerie" if sizes == DrawnLevel.CARVE_WIDTHS else "Pioche / truelle", ("%s (%d px)" % [cur_name, int(cur_size)]) if cur_name != "" else "%d px" % int(cur_size))
+	var row2 := _icon_row(col)
 	for nm in sizes:
 		var v: float = sizes[nm]
 		var what: String = "Galerie %s (%d px)" % [nm.to_lower(), int(v)] if sizes == DrawnLevel.CARVE_WIDTHS else "Pioche / truelle %s (%d px)" % [nm.to_lower(), int(v)]
@@ -3130,9 +3306,9 @@ func _carved_settings(col: VBoxContainer, o: Dictionary) -> void:
 	warn.add_theme_color_override("font_color", Color(0.7, 1.0, 0.7) if cd.crosses else Color(1.0, 0.8, 0.4))
 	col.add_child(warn)
 	# [PANNEAU 1.87] actions principales du bloc dans les actions fixes du bas
-	_icon_choice("remplir", _settings_footer, "Remplir le niveau", "Le bloc grandit pour couvrir tout le niveau : on peut faire un niveau entier dans la roche.").pressed.connect(_fill_level_with_block)
+	_icon_choice("remplir", _settings_footer, "Remplir le niveau", "Le bloc grandit pour couvrir tout le niveau : on peut faire un niveau entier dans la roche.", false, "Remplir").pressed.connect(_fill_level_with_block)
 	if cd.ops > 0:
-		var clr := _icon_choice("reboucher", _settings_footer, "Tout reboucher", "Enlève toutes les galeries : le bloc redevient plein.")
+		var clr := _icon_choice("reboucher", _settings_footer, "Tout reboucher", "Enlève toutes les galeries : le bloc redevient plein.", false, "Reboucher")
 		clr.pressed.connect(func():
 			_push_undo()
 			DrawnLevel.objects[_sel.index].props.ops = []
@@ -3159,3 +3335,430 @@ func _on_validate() -> void:
 	DrawnLevel.test_from = Vector2.INF
 	_remember_view()
 	get_tree().change_scene_to_file(DrawnLevel.LEVEL_SCENE)
+
+
+# =============================================================================
+#  [UX 1.88] Créer plus facilement : étapes, écran de départ, visite guidée
+# =============================================================================
+# Retour de l'équipe (28/11) : « réfléchir comme un vrai UX designer pour
+# rendre la création de niveau plus intuitive ». Choix de l'équipe :
+#  - texte « hybride » (voir _ibutton / _icon_choice / _legend) ;
+#  - une checklist « Étapes » : on sait toujours ce qui reste à faire ;
+#  - un écran de départ sur un niveau vide (plus de page blanche) ;
+#  - un aperçu de l'objet avant de le poser (voir _draw_ghost) ;
+#  - des légendes au-dessus des groupes de choix (voir _legend) ;
+#  - une courte visite guidée par Pinpouin la première fois (bouton « ? »).
+
+var _help_button: Button
+var _steps_panel: PanelContainer = null
+var _steps_col: VBoxContainer = null
+var _steps_open := true
+var _start_screen: Control = null
+var _start_dismissed := false     # écran de départ fermé pendant cette séance
+var _tour: PanelContainer = null
+var _tour_frame: Panel = null     # cadre jaune autour de ce que montre la visite
+var _tour_step := -1              # étape de la visite (-1 = pas de visite)
+
+
+func _build_guides(root: Control) -> void:
+	# --- Étapes (en haut à droite, cachées quand le panneau de réglages est ouvert)
+	_steps_open = bool(DrawnLevel.pref("steps_open", true))
+	_steps_panel = PanelContainer.new()
+	_steps_panel.add_theme_stylebox_override("panel", _panel_style())
+	_steps_panel.set_anchors_preset(Control.PRESET_TOP_RIGHT)
+	_steps_panel.offset_left = -250
+	_steps_panel.offset_right = -6
+	_steps_panel.offset_top = _top_bar_h + 6
+	_steps_panel.grow_horizontal = Control.GROW_DIRECTION_BEGIN
+	root.add_child(_steps_panel)
+	_steps_col = VBoxContainer.new()
+	_steps_col.add_theme_constant_override("separation", 2)
+	_steps_panel.add_child(_steps_col)
+	_refresh_steps()
+	_update_steps_visibility()
+	# --- écran de départ, puis visite (la 1re fois)
+	if _level_is_empty() and not _start_dismissed:
+		_show_start_screen(root)
+	elif _tour_step >= 0:
+		_show_tour_step.call_deferred()
+	elif not bool(DrawnLevel.pref("tour_done", false)):
+		_start_tour.call_deferred(0)
+
+
+func _level_is_empty() -> bool:
+	return DrawnLevel.strokes.is_empty() and DrawnLevel.hooks.is_empty() and DrawnLevel.objects.is_empty()
+
+
+## Les 5 étapes d'un niveau : [nom, fait ?, détail, ce qu'il faut faire]
+func _steps() -> Array:
+	var playable := DrawnLevel.is_playable()
+	var cave_only := DrawnLevel.strokes.is_empty() and DrawnLevel.has_carved()
+	var st := DrawnLevel.first_object("start")
+	var fi := DrawnLevel.first_object("finish")
+	var ends: Array = DrawnLevel.carved_default_ends() if cave_only else []
+	var start_ok: bool = not st.is_empty() or (playable and (not cave_only or (ends[0] as Vector2).is_finite()))
+	var finish_ok: bool = not fi.is_empty() or (playable and (not cave_only or (ends[1] as Vector2).is_finite()))
+	return [
+		["Sol ou grotte", playable, "",
+			"Outil Dessiner : trace le sol avec le doigt. Ou onglet Blocs de la palette : Caverne taillée, puis « Remplir »."],
+		["Départ", start_ok, "posé" if not st.is_empty() else "automatique",
+			"Sans objet Départ, Pinpouin part au début du premier sol. Pour choisir : palette Objets, Départ."],
+		["Arrivée", finish_ok, "posée" if not fi.is_empty() else "automatique",
+			"Sans objet Arrivée, elle est au bout du dernier sol. Pour choisir : palette Objets, Arrivée."],
+		["Tester", playable and DrawnLevel.tested_hash == DrawnLevel.content_hash(), "",
+			"Touche TESTER (en bas à droite) pour jouer ton niveau depuis le départ."],
+		["Valider", DrawnLevel.is_validated(), "",
+			"Touche Valider (la médaille) et finis ton niveau : ton temps devient l'or et tu peux le partager."],
+	]
+
+
+func _refresh_steps() -> void:
+	if _steps_col == null or not is_instance_valid(_steps_col):
+		return
+	for c in _steps_col.get_children():
+		c.queue_free()
+	var steps := _steps()
+	var done := 0
+	for st in steps:
+		if st[1]:
+			done += 1
+	var head := Button.new()
+	head.flat = true
+	head.focus_mode = Control.FOCUS_NONE
+	head.icon = _tex(ICON_DIR + "etapes.png")
+	head.text = "Étapes  %d / %d  %s" % [done, steps.size(), "▾" if _steps_open else "▸"]
+	head.alignment = HORIZONTAL_ALIGNMENT_LEFT
+	head.add_theme_font_size_override("font_size", 16)
+	head.add_theme_color_override("font_color", SELECT_COLOR)
+	head.set_meta("tip", ["Étapes", "Ce qui reste à faire pour finir ton niveau. Toucher pour replier / déplier.", ""])
+	_register_tip(head)
+	head.pressed.connect(func():
+		_steps_open = not _steps_open
+		DrawnLevel.set_pref("steps_open", _steps_open)
+		_refresh_steps())
+	_steps_col.add_child(head)
+	if not _steps_open:
+		return
+	var first_todo := true
+	for st in steps:
+		var b := Button.new()
+		b.flat = true
+		b.focus_mode = Control.FOCUS_NONE
+		b.alignment = HORIZONTAL_ALIGNMENT_LEFT
+		b.text = ("✓ " if st[1] else "○ ") + st[0] + ("  (" + st[2] + ")" if st[2] != "" and st[1] else "")
+		b.add_theme_font_size_override("font_size", 15)
+		var col: Color = Color(0.6, 1.0, 0.6) if st[1] else (Color(1.0, 0.9, 0.4) if first_todo else Color(0.8, 0.85, 0.95))
+		for k in ["font_color", "font_hover_color", "font_pressed_color"]:
+			b.add_theme_color_override(k, col)
+		if not st[1]:
+			first_todo = false
+		b.set_meta("tip", [st[0], st[3], ""])
+		_register_tip(b)
+		var how: String = st[3]
+		var name_: String = st[0]
+		b.pressed.connect(func(): _on_step_pressed(name_, how))
+		_steps_col.add_child(b)
+
+
+## Une étape touchée : on dit quoi faire et on montre le bouton utile
+func _on_step_pressed(step_name: String, how: String) -> void:
+	_flash(how)
+	var target: Control = null
+	match step_name:
+		"Sol ou grotte":
+			target = _tool_buttons.get(Tool.DRAW)
+		"Départ", "Arrivée":
+			target = _tool_buttons.get(Tool.HOOK)
+		"Tester":
+			target = _test_button
+		"Valider":
+			for b in _bottom_panel.find_children("*", "Button", true, false):
+				if str(b.get_meta("tip", "")) == "valider":
+					target = b
+	if target != null:
+		_pulse(target)
+
+
+## Fait clignoter un bouton (il est là !)
+func _pulse(c: Control) -> void:
+	if c == null or not is_instance_valid(c):
+		return
+	var tw := create_tween().set_loops(3)
+	tw.tween_property(c, "modulate", Color(1.6, 1.5, 0.6), 0.2)
+	tw.tween_property(c, "modulate", Color.WHITE, 0.2)
+
+
+func _update_steps_visibility() -> void:
+	if _steps_panel == null or not is_instance_valid(_steps_panel):
+		return
+	_steps_panel.visible = (_settings == null or not is_instance_valid(_settings)) and (_start_screen == null or not is_instance_valid(_start_screen))
+
+
+# --- Écran de départ (niveau vide) ------------------------------------------------
+
+func _show_start_screen(root: Control) -> void:
+	_start_screen = Control.new()
+	_start_screen.set_anchors_preset(Control.PRESET_FULL_RECT)
+	_start_screen.mouse_filter = Control.MOUSE_FILTER_STOP   # rien ne passe dessous
+	root.add_child(_start_screen)
+	var dim := ColorRect.new()
+	dim.color = Color(0.03, 0.06, 0.14, 0.55)
+	dim.set_anchors_preset(Control.PRESET_FULL_RECT)
+	dim.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_start_screen.add_child(dim)
+	var center := CenterContainer.new()
+	center.set_anchors_preset(Control.PRESET_FULL_RECT)
+	center.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_start_screen.add_child(center)
+	var panel := PanelContainer.new()
+	panel.add_theme_stylebox_override("panel", _panel_style())
+	center.add_child(panel)
+	var col := VBoxContainer.new()
+	col.add_theme_constant_override("separation", 12)
+	panel.add_child(col)
+	var title := Label.new()
+	title.text = "Comment veux-tu commencer ton niveau ?"
+	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	title.add_theme_font_size_override("font_size", 24)
+	title.add_theme_color_override("font_color", SELECT_COLOR)
+	col.add_child(title)
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 12)
+	col.add_child(row)
+	for card in [["dessiner", "Dessiner un sol", "Trace le sol avec le doigt, puis ajoute tremplins, grappins, boosts…", "sol"],
+			["remplir", "Niveau en grotte", "Un grand bloc de glace à creuser : départ et arrivée déjà posés, trace les galeries entre les deux.", "grotte"],
+			["onglet_terrain", "Partir d'un exemple", "Un petit niveau tout prêt (sol, tremplin, trou, boost, arrivée) à modifier comme tu veux.", "exemple"]]:
+		var b := Button.new()
+		b.focus_mode = Control.FOCUS_NONE
+		b.custom_minimum_size = Vector2(220, 190)
+		b.icon = _tex(ICON_DIR + card[0] + ".png")
+		b.expand_icon = false
+		b.icon_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		b.vertical_icon_alignment = VERTICAL_ALIGNMENT_TOP
+		b.text = card[1] + "\n\n" + card[2]
+		b.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		b.add_theme_font_size_override("font_size", 15)
+		var which: String = card[3]
+		b.pressed.connect(func(): _start_with(which))
+		b.set_meta("tip", [card[1], card[2], ""])
+		_register_tip(b)
+		row.add_child(b)
+	var later := Button.new()
+	later.text = "Plus tard (page vierge)"
+	later.flat = true
+	later.focus_mode = Control.FOCUS_NONE
+	later.add_theme_color_override("font_color", Color(0.75, 0.85, 1.0))
+	later.pressed.connect(func(): _start_with(""))
+	later.set_meta("tip", ["Plus tard", "Fermer et partir d'une page vierge.", ""])
+	_register_tip(later)
+	col.add_child(later)
+	_update_steps_visibility()
+
+
+## Choix de l'écran de départ : "sol", "grotte", "exemple" ou "" (page vierge)
+func _start_with(which: String) -> void:
+	_start_dismissed = true
+	if _start_screen != null and is_instance_valid(_start_screen):
+		_start_screen.queue_free()
+	_start_screen = null
+	match which:
+		"sol":
+			_set_tool(Tool.DRAW)
+			_hint.text = "Glisse le doigt de gauche à droite pour tracer le sol. Lever le doigt fait un trou."
+		"grotte":
+			_push_undo()
+			var c := _to_world(get_viewport().get_visible_rect().size * 0.5)
+			var i := DrawnLevel.add_object(DrawnLevel.make_object("carved", c - Vector2(DrawnLevel.FILL_DEFAULT.x * 0.25, DrawnLevel.FILL_DEFAULT.y * 0.5)))
+			_set_tool(Tool.SELECT)
+			_select({"kind": "obj", "index": i})
+			_fill_level_with_block()
+		"exemple":
+			_push_undo()
+			_build_example_level()
+			_changed()
+			_frame_content()
+			_set_tool(Tool.SELECT)
+			_flash("Voici un petit niveau d'exemple : touche un élément pour le régler, ou TESTER pour le jouer.")
+	_update_steps_visibility()
+	queue_redraw()
+	if not bool(DrawnLevel.pref("tour_done", false)):
+		_start_tour.call_deferred(0)
+
+
+## Petit niveau d'exemple (tout ce qu'il contient est modifiable) : descente
+## d'élan, tremplin au bout, trou sauté, sol d'arrivée avec un boost, un
+## panneau et un point de passage ; départ et arrivée automatiques
+func _build_example_level() -> void:
+	var a := PackedVector2Array()
+	for i in 61:
+		var x := i * 40.0
+		a.append(Vector2(x, x * 0.22 + sin(x / 300.0) * 30.0))
+	DrawnLevel.add_raw_stroke(a)
+	var end_a: Vector2 = DrawnLevel.strokes[0][DrawnLevel.strokes[0].size() - 1]
+	var ramp := DrawnLevel.make_object("ramp", end_a)
+	DrawnLevel.objects.append(ramp)
+	DrawnLevel.snap_shape(DrawnLevel.objects.size() - 1)
+	var ramp_exit: Vector2 = DrawnLevel.shape_geometry(ramp).exit
+	var b := PackedVector2Array()
+	var x0: float = ramp_exit.x + 1100.0
+	var y0: float = ramp_exit.y + 450.0
+	for i in 81:
+		var x := i * 40.0
+		b.append(Vector2(x0 + x, y0 + x * 0.08))
+	DrawnLevel.add_raw_stroke(b)
+	var boost := DrawnLevel.make_object("boost", Vector2(x0 + 700.0, y0 + 700.0 * 0.08 - 40.0))
+	DrawnLevel.objects.append(boost)
+	DrawnLevel.objects.append(DrawnLevel.make_object("checkpoint", Vector2(x0 + 300.0, y0 + 300.0 * 0.08 - 130.0)))
+	DrawnLevel.objects.append(DrawnLevel.make_object("sign", Vector2(300.0, 300.0 * 0.22 - 160.0)))
+
+
+# --- Visite guidée par Pinpouin (5 bulles, une fois ; « ? » pour la revoir) ---------
+
+## [cible, texte] : cible = "outils", "palette", "selection", "etapes", "tester"
+const TOUR := [
+	["outils", "Salut, c'est Pinpouin ! En bas, tes outils : Dessiner le sol, poser des Objets, Choisir un élément pour le régler, la Gomme, et Bouger la vue."],
+	["objets", "Avec Objets, choisis dans la palette (tremplins, grappins, boosts, grottes…) : en touchant le niveau, tu vois l'objet avant de le lâcher."],
+	["selection", "Avec Choisir, touche un élément : son panneau s'ouvre à droite pour le régler, le copier ou l'enlever."],
+	["etapes", "Ici, les Étapes : ce qui reste à faire pour finir ton niveau. Touche une étape pour savoir comment faire."],
+	["tester", "Et TESTER pour jouer ton niveau ! Garde le doigt appuyé sur un bouton pour savoir à quoi il sert. Amuse-toi bien !"],
+]
+
+
+func _start_tour(step: int) -> void:
+	if _start_screen != null and is_instance_valid(_start_screen):
+		return   # (la visite vient après l'écran de départ)
+	_tour_step = step
+	_show_tour_step()
+
+
+func _tour_target() -> Control:
+	if _tour_step < 0 or _tour_step >= TOUR.size():
+		return null
+	match str(TOUR[_tour_step][0]):
+		"outils":
+			return _tool_buttons.get(Tool.DRAW)
+		"objets":
+			return _tool_buttons.get(Tool.HOOK)
+		"selection":
+			return _tool_buttons.get(Tool.SELECT)
+		"etapes":
+			return _steps_panel
+		"tester":
+			return _test_button
+	return null
+
+
+func _show_tour_step() -> void:
+	if _tour != null and is_instance_valid(_tour):
+		_tour.queue_free()
+	if _tour_frame != null and is_instance_valid(_tour_frame):
+		_tour_frame.queue_free()
+	_tour = null
+	_tour_frame = null
+	if _tour_step < 0 or _tour_step >= TOUR.size() or _ui_root == null:
+		_tour_step = -1
+		return
+	if TOUR[_tour_step][0] == "etapes":
+		_set_sel_for_tour()
+	_tour = PanelContainer.new()
+	var st := _panel_style()
+	st.bg_color = Color(0.06, 0.09, 0.18, 0.97)
+	st.border_color = SELECT_COLOR
+	st.set_border_width_all(3)
+	_tour.add_theme_stylebox_override("panel", st)
+	_tour.set_anchors_preset(Control.PRESET_CENTER)
+	_tour.grow_horizontal = Control.GROW_DIRECTION_BOTH
+	_tour.grow_vertical = Control.GROW_DIRECTION_BOTH
+	_ui_root.add_child(_tour)
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 12)
+	_tour.add_child(row)
+	var face := TextureRect.new()
+	face.texture = _penguin_tex
+	face.custom_minimum_size = Vector2(72, 72)
+	face.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	face.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	row.add_child(face)
+	var col := VBoxContainer.new()
+	col.add_theme_constant_override("separation", 8)
+	row.add_child(col)
+	var txt := Label.new()
+	txt.text = TOUR[_tour_step][1]
+	txt.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	txt.custom_minimum_size = Vector2(380, 0)
+	txt.add_theme_font_size_override("font_size", 17)
+	txt.add_theme_color_override("font_color", Color.WHITE)
+	col.add_child(txt)
+	var btns := HBoxContainer.new()
+	btns.alignment = BoxContainer.ALIGNMENT_END
+	btns.add_theme_constant_override("separation", 8)
+	col.add_child(btns)
+	var count := Label.new()
+	count.text = "%d / %d" % [_tour_step + 1, TOUR.size()]
+	count.add_theme_color_override("font_color", Color(0.7, 0.8, 1.0))
+	btns.add_child(count)
+	var skip := _button("Passer", btns, 100)
+	skip.pressed.connect(_end_tour)
+	var nxt := _button("Suivant" if _tour_step < TOUR.size() - 1 else "C'est parti !", btns, 140)
+	nxt.pressed.connect(func():
+		_tour_step += 1
+		if _tour_step >= TOUR.size():
+			_end_tour()
+		else:
+			_show_tour_step())
+	# cadre jaune autour de ce qu'on montre, et la bulle à côté
+	_place_tour.call_deferred()
+
+
+func _place_tour() -> void:
+	if _tour == null or not is_instance_valid(_tour):
+		return
+	var area: Vector2 = _ui_root.size
+	var sz: Vector2 = _tour.get_combined_minimum_size()
+	var target := _tour_target()
+	var pos := (area - sz) * 0.5
+	if _tour_frame != null and is_instance_valid(_tour_frame):
+		_tour_frame.queue_free()   # (étapes passées vite : un seul cadre)
+	_tour_frame = null
+	if target != null and is_instance_valid(target) and target.is_visible_in_tree():
+		var r: Rect2 = target.get_global_rect()
+		var s: float = _ui_layer.scale.x if _ui_layer != null else 1.0
+		r = Rect2(r.position / s, r.size / s)
+		_tour_frame = Panel.new()
+		var fs := StyleBoxFlat.new()
+		fs.bg_color = Color(0, 0, 0, 0)
+		fs.border_color = SELECT_COLOR
+		fs.set_border_width_all(4)
+		fs.set_corner_radius_all(8)
+		_tour_frame.add_theme_stylebox_override("panel", fs)
+		_tour_frame.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		_tour_frame.position = r.position - Vector2(6, 6)
+		_tour_frame.size = r.size + Vector2(12, 12)
+		_ui_root.add_child(_tour_frame)
+		_pulse(_tour_frame)
+		# la bulle au-dessus de la cible si elle est en bas, sinon en dessous
+		pos.x = clampf(r.get_center().x - sz.x * 0.5, 8.0, area.x - sz.x - 8.0)
+		pos.y = r.position.y - sz.y - 20.0 if r.get_center().y > area.y * 0.5 else r.end.y + 20.0
+		pos.y = clampf(pos.y, 8.0, area.y - sz.y - 8.0)
+	_tour.set_anchors_preset(Control.PRESET_TOP_LEFT)
+	_tour.position = pos
+	if _tip != null and is_instance_valid(_tip):
+		_ui_root.move_child(_tip, -1)
+
+
+## L'étape « Étapes » de la visite : la checklist doit être visible
+func _set_sel_for_tour() -> void:
+	if not _sel.is_empty():
+		_select({})
+	_update_steps_visibility()
+
+
+func _end_tour() -> void:
+	_tour_step = -1
+	DrawnLevel.set_pref("tour_done", true)
+	if _tour != null and is_instance_valid(_tour):
+		_tour.queue_free()
+	if _tour_frame != null and is_instance_valid(_tour_frame):
+		_tour_frame.queue_free()
+	_tour = null
+	_tour_frame = null

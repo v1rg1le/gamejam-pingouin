@@ -1309,6 +1309,9 @@ static func first_object(type: String) -> Dictionary:
 # or + 60 % (RaceManager, comme les autres niveaux).
 
 ## Course de validation en cours (lancée par « ✔ Valider »)
+## [UX 1.88] empreinte du niveau au dernier TESTER (étape « Tester » cochée
+## tant qu'on ne le modifie pas ; pour la séance)
+static var tested_hash := ""
 static var validating := false
 ## Mode de jeu à remettre après la validation (elle se court en mode Score)
 static var validation_prev_mode := -1
